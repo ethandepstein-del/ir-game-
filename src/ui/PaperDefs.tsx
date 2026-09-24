@@ -13,7 +13,7 @@ export function PaperDefs() {
         </filter>
         <filter id="boil" x="-10%" y="-10%" width="120%" height="120%">
           <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="1" result="n">
-            <animate attributeName="seed" values="1;7;13;21" dur="0.5s" calcMode="discrete" repeatCount="indefinite" />
+            <animate attributeName="seed" values="1;7;13;21" dur="0.333s" calcMode="discrete" repeatCount="indefinite" />
           </feTurbulence>
           <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G" />
         </filter>

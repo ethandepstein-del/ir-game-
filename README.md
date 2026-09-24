@@ -17,7 +17,7 @@ npm run map           # regenerate the hex map from Natural Earth data
 
 Your first game opens with a guided tutorial: sticky notes walk you through one full turn (deploy, attack, fortify), diplomacy and the Doomsday Clock, with a pencil circling what to click next. Replay it at any time with the **?** button in the top bar, or tick *Show me how to play* on the start screen.
 
-The table is styled as paper: cut-card panels, an index-card territory dossier, sticky-note theory notes, a typewritten dispatch strip, newspaper-clipping bulletins, and hand-inked map borders with colored-pencil hatching. The attack arrow and tutorial marks are redrawn a few times a second so they wobble like hand-drawn animation.
+The table is styled as paper: cut-card panels, an index-card territory dossier, sticky-note theory notes, a typewritten dispatch strip, newspaper-clipping bulletins, and hand-inked map borders with colored-pencil hatching. Animation is cut-paper stop-motion, written in plain canvas JS (`src/ui/fx/particles.ts`). Attacks are paper arrows that hop across the board and burst into cartoon cut-outs and scraps; conquests plant a flapping paper flag; reinforcements fall in as paper chits; pacts and alliances are stamped with a wax seal; nuclear war builds a paper mushroom cloud. Everything runs on a 12 fps clock, and each piece is re-cut slightly every frame so its edges boil. The page overlays (banners, clippings, dice, notes) use the same held-frame timing.
 
 ## Rules in brief
 

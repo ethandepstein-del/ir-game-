@@ -123,8 +123,8 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd, tutorial,
   }, []);
   useEffect(() => () => fxEngine.clear(), [fxEngine]);
   useEffect(() => {
-    (window as unknown as { __anarchy?: unknown }).__anarchy = { state: game, speed };
-  }, [game, speed]);
+    (window as unknown as { __anarchy?: unknown }).__anarchy = { state: game, speed, fx: fxEngine };
+  }, [game, speed, fxEngine]);
 
   // Drive AI turns, paced by the choreography of the previous action.
   useEffect(() => {

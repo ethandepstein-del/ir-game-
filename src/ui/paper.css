@@ -1152,3 +1152,50 @@ body {
     animation: none !important;
   }
 }
+
+/* =====================================================================
+   Stop-motion timing. Overlays move in held frames (roughly 8–12 fps)
+   instead of smooth tweens, like cut paper nudged between exposures.
+   The map effects run on the same clock in fx/particles.ts.
+   ===================================================================== */
+
+.turn-banner,
+.event-banner {
+  animation-timing-function: steps(3, jump-end);
+}
+.g-roster.panel,
+.g-dossier.panel,
+.theory.panel,
+.wire.panel,
+.g-dock.panel,
+.modal.panel,
+.tut-note {
+  animation-timing-function: steps(4, jump-end);
+}
+.die3d-wrap,
+.die3d {
+  animation-timing-function: steps(9, jump-end);
+}
+.token-num {
+  animation-timing-function: steps(3, jump-end);
+}
+.tut-loop,
+.tut-arrow {
+  animation-timing-function: steps(7, jump-end);
+}
+.aim-line:not(.aim-head) {
+  animation-timing-function: steps(4, jump-end);
+}
+.tut-waiting {
+  animation-timing-function: steps(2, jump-none);
+}
+/* Buttons snap between two poses rather than gliding. */
+.btn,
+.icon-btn,
+.sound-btn,
+.chip-btn,
+.plaque-action,
+.tut-next,
+.power-card {
+  transition-timing-function: steps(2, jump-end);
+}

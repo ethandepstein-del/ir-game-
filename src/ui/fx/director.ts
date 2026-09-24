@@ -1,5 +1,5 @@
 import { CARDS } from '../../data/cards';
-import { POWER, TERRITORIES, type PowerId } from '../../data/world';
+import { POWER, T, TERRITORIES, type PowerId } from '../../data/world';
 import type { CardId, Era, FxEvent } from '../../engine/types';
 import { sfx } from '../audio/sfx';
 import { GEO, MAP_W } from '../geometry';
@@ -46,6 +46,14 @@ const WORLD_TITLE = {
   talks: ['Arms Talks Succeed', 'The Doomsday Clock moves back a minute.'],
 } as const;
 
+/** Stamp a wax seal halfway between two powers' capitals (or on the first, if the map wraps). */
+function sealBetween(fx: FxEngine, a: PowerId, b: PowerId, label: string, color: string, delay: number) {
+  const [x1, y1] = pos(T(POWER[a].capital));
+  const [x2, y2] = pos(T(POWER[b].capital));
+  if (Math.abs(x1 - x2) < MAP_W / 2) fx.seal((x1 + x2) / 2, (y1 + y2) / 2, label, color, delay);
+  else fx.seal(x1, y1, label, color, delay);
+}
+
 /** Returns how long (ms) the choreography needs before the next action should run. */
 export function direct(events: FxEvent[], stage: Stage, opts: DirectOpts): number {
   const { fx } = stage;
@@ -66,15 +74,14 @@ export function direct(events: FxEvent[], stage: Stage, opts: DirectOpts): numbe
       const [x2, y2] = pos(r.to);
       const color = POWER[r.attacker].color;
       if (Math.abs(x1 - x2) < MAP_W / 2) {
-        r.aDice.forEach((_, j) => {
-          fx.muzzle(x1, y1, color, base + j * 70);
-          fx.projectile(x1, y1, x2, y2, color, base + j * 70, 360, j === 0 ? () => fx.explosion(x2, y2, 0.55 + r.dLoss * 0.35, '#ffb547') : undefined);
-        });
+        // One cut-paper arrow per roll; the burst on arrival grows with the defender's losses.
+        fx.muzzle(x1, y1, color, base);
+        fx.projectile(x1, y1, x2, y2, color, base, 330, r.dLoss > 0 ? () => fx.explosion(x2, y2, 0.55 + r.dLoss * 0.3, '#ec8a2f') : () => fx.puff(x2, y2, 0.7));
         if (r.aLoss > 0) {
-          fx.projectile(x2, y2, x1, y1, '#ff7a5c', base + 180, 320, () => fx.explosion(x1, y1, 0.45 + r.aLoss * 0.3, '#ff7a5c'));
+          fx.projectile(x2, y2, x1, y1, '#f3efe4', base + 170, 300, () => fx.explosion(x1, y1, 0.45 + r.aLoss * 0.25, '#c9483b'));
         }
       } else {
-        fx.explosion(x2, y2, 0.8, '#ffb547', base + 300);
+        fx.explosion(x2, y2, 0.8, '#ec8a2f', base + 300);
       }
       setTimeout(() => sfx.cannon(panOf(r.to), involvesPlayer ? 1 : 0.7), base + 360);
       if (r.aLoss > 0) setTimeout(() => sfx.volley(panOf(r.from), 2 + r.aLoss), base + 520);
@@ -190,12 +197,14 @@ export function direct(events: FxEvent[], stage: Stage, opts: DirectOpts): numbe
       }
       case 'pact':
         if (e.a === opts.player || e.b === opts.player || !quiet) {
+          sealBetween(fx, e.a, e.b, 'PACT', '#2f5d8a', t);
           sfx.pact();
           if (e.a === opts.player || e.b === opts.player)
             stage.banner({ title: 'Pact signed', sub: `${POWER[e.a].name} and ${POWER[e.b].name}: 5 rounds of non-aggression.`, tone: 'good' });
         }
         break;
       case 'alliance':
+        sealBetween(fx, e.a, e.b, 'ALLY', '#a8322a', t);
         sfx.pact();
         stage.banner({ title: 'Alliance formed', sub: `${POWER[e.a].name} and ${POWER[e.b].name} pledge mutual defense.`, tone: 'good' });
         break;
