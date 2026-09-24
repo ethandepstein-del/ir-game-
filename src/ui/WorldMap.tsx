@@ -308,10 +308,10 @@ const StaticDefs = memo(function StaticDefs() {
         <circle cx={w / 4} cy={w / 4} r={0.75} fill="#c9c3b1" />
       </pattern>
       <marker id="arrow-attack" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="#111" />
+        <path d="M0,0 L10,5 L0,10 z" fill="#2b2925" />
       </marker>
       <marker id="arrow-fortify" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="#111" />
+        <path d="M0,0 L10,5 L0,10 z" fill="#2b2925" />
       </marker>
     </defs>
   );
@@ -396,7 +396,7 @@ const Token = memo(function Token({
   return (
     <g className={`token ${dim ? 'dim' : ''}`} data-t={i} onClick={() => onPick(i)}>
       {/* A wooden disc: edge, face, printed number. */}
-      <ellipse cx={x} cy={y + depth} rx={r} ry={r * 0.82} fill={owner ? shade(color, 0.6) : '#b9b4a6'} stroke="#111" strokeWidth={r * 0.1} />
+      <ellipse cx={x} cy={y + depth} rx={r} ry={r * 0.82} fill={owner ? shade(color, 0.62) : '#c9c4b8'} stroke="#4a463f" strokeWidth={r * 0.06} />
       <ellipse
         key={`f${owner}`}
         cx={x}
@@ -404,11 +404,11 @@ const Token = memo(function Token({
         rx={r}
         ry={r * 0.82}
         fill={color}
-        stroke="#111"
-        strokeWidth={r * 0.1}
+        stroke="#4a463f"
+        strokeWidth={r * 0.06}
         className="token-face"
       />
-      {mine && <ellipse cx={x} cy={y} rx={r * 0.78} ry={r * 0.62} fill="none" stroke={light ? '#111' : '#fff'} strokeWidth={r * 0.07} strokeDasharray={`${r * 0.18} ${r * 0.14}`} />}
+      {mine && <ellipse cx={x} cy={y} rx={r * 0.78} ry={r * 0.62} fill="none" stroke={light ? '#4a463f' : '#fff'} strokeWidth={r * 0.07} strokeDasharray={`${r * 0.18} ${r * 0.14}`} />}
       <text key={`n${armies}`} x={x} y={y + r * 0.34} textAnchor="middle" className={`token-num ${light ? 'dark' : ''}`} style={{ fontSize: r * 0.98 }}>
         {armies}
       </text>
