@@ -66,7 +66,7 @@ function DiceTray({ rolls, id }: { rolls: RollEvent[]; id: number }) {
         <span className="tray-vs">vs</span>
         <div className="tray-side">
           {last.dDice.map((d, i) => (
-            <Die3D key={i} value={d} color="#d9dee6" delay={i * 60 + 40} seed={id * 13 + i} lost={i < pairs && beats(last, i)} />
+            <Die3D key={i} value={d} color="#ffffff" delay={i * 60 + 40} seed={id * 13 + i} lost={i < pairs && beats(last, i)} />
           ))}
         </div>
       </div>

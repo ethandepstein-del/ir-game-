@@ -132,7 +132,7 @@ export function direct(events: FxEvent[], stage: Stage, opts: DirectOpts): numbe
       case 'capital': {
         const [x, y] = pos(e.at);
         fx.explosion(x, y, 2, '#ff5b4f', t + 150);
-        fx.ring(x, y, 10, 120, '#ff5b4f', 1200, 3, t + 150);
+        fx.ring(x, y, 10, 120, '#111111', 1200, 3, t + 150);
         setTimeout(() => sfx.capitalFalls(panOf(e.at)), t + 150);
         stage.shake(2);
         stage.banner({ title: `${POWER[e.power].short} capital falls`, sub: `${TERRITORIES[e.at].name} is occupied.`, tone: 'alert', color: POWER[e.power].color });
@@ -183,8 +183,8 @@ export function direct(events: FxEvent[], stage: Stage, opts: DirectOpts): numbe
         sfx.card();
         if (typeof e.target === 'number') {
           const [x, y] = pos(e.target);
-          fx.ring(x, y, 4, 50, '#9fd3ff', 900, 2.5, 350);
-          fx.ring(x, y, 4, 30, '#ffffff', 700, 1.5, 500);
+          fx.ring(x, y, 4, 50, '#111111', 900, 2.5, 350);
+          fx.ring(x, y, 4, 30, '#c42e2e', 700, 1.5, 500);
         }
         break;
       }

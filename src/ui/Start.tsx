@@ -3,8 +3,7 @@ import { CONCEPT_ORDER } from '../data/concepts';
 import { HEGEMONY, MAX_ROUNDS, POWER, POWERS, T, TERRITORIES, type PowerId } from '../data/world';
 import type { Progress } from '../storage';
 import { sfx } from './audio/sfx';
-import { GEO, TERRITORY_LONLAT } from './geometry';
-import { Globe } from './Globe';
+import { GEO, MAP_H, MAP_W } from './geometry';
 
 const OWNER: Record<number, PowerId> = Object.fromEntries(POWERS.flatMap((p) => p.core.map((c) => [T(c), p.id]))) as Record<number, PowerId>;
 
@@ -21,10 +20,10 @@ function Homeland({ id }: { id: PowerId }) {
   return (
     <svg className="homeland" viewBox={`${cx - w / 2} ${cy - w / 4} ${w} ${w / 2}`} aria-hidden="true">
       {GEO.paths.map((d, i) => (
-        <path key={i} d={d} fill={core.has(i) ? POWER[id].color : '#1f2e40'} />
+        <path key={i} d={d} fill={core.has(i) ? POWER[id].color : '#dcd8cc'} />
       ))}
       {TERRITORIES.filter((t) => core.has(t.index)).map((t) => (
-        <path key={t.id} d={GEO.outlines[t.index]} fill="none" stroke="#08111b" strokeWidth={1.6} />
+        <path key={t.id} d={GEO.outlines[t.index]} fill="none" stroke="#111" strokeWidth={2} />
       ))}
     </svg>
   );
@@ -74,19 +73,20 @@ const RULES: { title: string; body: React.ReactNode; icon: string }[] = [
 
 export function Start({ progress, onStart, onCodex }: { progress: Progress; onStart: (p: PowerId) => void; onCodex: () => void }) {
   const [pick, setPick] = useState<PowerId>('usa');
-  const colors = useMemo(
-    () => TERRITORIES.map((_, i) => (OWNER[i] ? (OWNER[i] === pick ? '#ffffff' : POWER[OWNER[i]].color) : '#5b7896')),
-    [pick],
+  const poster = useMemo(
+    () =>
+      GEO.paths.map((d, i) => (
+        <path key={i} d={d} fill={OWNER[i] ? POWER[OWNER[i]].color : '#f3f0e6'} className={OWNER[i] ? `own own-${OWNER[i]}` : 'free'} />
+      )),
+    [],
   );
-  const focus = TERRITORY_LONLAT[T(POWER[pick].capital)];
 
   return (
     <main className="start" style={{ '--pc': POWER[pick].color } as CSSProperties}>
-      <div className="start-sky" aria-hidden="true" />
       <section className="start-hero">
         <div className="start-copy">
-          <p className="kicker rise" style={{ '--d': '0ms' } as CSSProperties}>
-            A game of great-power politics
+          <p className="stamp rise" style={{ '--d': '0ms' } as CSSProperties}>
+            A game of great-power politics · 1 player · 20 rounds
           </p>
           <h1 className="logo" aria-label="Anarchy">
             {'ANARCHY'.split('').map((ch, i) => (
@@ -117,13 +117,19 @@ export function Start({ progress, onStart, onCodex }: { progress: Progress; onSt
             </button>
           </div>
         </div>
-        <div className="start-globe rise" style={{ '--d': '300ms' } as CSSProperties}>
-          <Globe colors={colors} focus={focus} className="globe" />
-          <div className="globe-label" key={pick}>
-            <span className="gl-short">{POWER[pick].short}</span>
-            <span className="gl-doc">{POWER[pick].doctrine}</span>
-          </div>
-        </div>
+        <figure className={`poster rise pick-${pick}`} style={{ '--d': '300ms' } as CSSProperties}>
+          <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} aria-hidden="true">
+            <rect width={MAP_W} height={MAP_H} className="poster-sea" />
+            {poster}
+            <path d={GEO.coast} className="poster-coast" />
+            <path d={GEO.borders} className="poster-borders" />
+            <path d={GEO.lanes} className="poster-lanes" />
+          </svg>
+          <figcaption>
+            <span className="poster-short">{POWER[pick].short}</span>
+            <span>{POWER[pick].doctrine}</span>
+          </figcaption>
+        </figure>
       </section>
 
       <section className="start-powers" aria-label="Choose your power">
@@ -154,9 +160,9 @@ export function Start({ progress, onStart, onCodex }: { progress: Progress; onSt
 
       <section className="start-rules">
         {RULES.map((r) => (
-          <div key={r.title} className="rule glass">
-            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
-              <path d={r.icon} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          <div key={r.title} className="rule">
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+              <path d={r.icon} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter" />
             </svg>
             <h2>{r.title}</h2>
             <p>{r.body}</p>

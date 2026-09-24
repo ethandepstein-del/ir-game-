@@ -5,7 +5,7 @@ import type { GameState } from '../engine/types';
 import type { FxEngine } from './fx/particles';
 import { GEO, MAP_H, MAP_W, S } from './geometry';
 
-export const NEUTRAL = '#4a5868';
+export const NEUTRAL = '#f3f0e6';
 const SQ3 = Math.sqrt(3);
 
 export interface Highlight {
@@ -32,7 +32,6 @@ interface Props {
 
 type Box = { x: number; y: number; w: number };
 
-const ALL_LAND = GEO.paths.join('');
 
 export function WorldMap({ game, highlight, onPick, fx, odds, overlay, shakeKey = 0, shakeLevel = 1, insets }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
@@ -209,7 +208,7 @@ export function WorldMap({ game, highlight, onPick, fx, odds, overlay, shakeKey 
 
   // ---------- derived visuals ----------
 
-  const tokenPx = px < 760 ? 24 : k > 1.3 ? 26 : 28;
+  const tokenPx = px < 760 ? 26 : k > 1.3 ? 26 : 30;
   const aimTo =
     highlight.aimTo ??
     (hoverT !== null && highlight.targets.has(hoverT) && (highlight.mode === 'attack' || highlight.mode === 'fortify') ? hoverT : null);
@@ -235,8 +234,8 @@ export function WorldMap({ game, highlight, onPick, fx, odds, overlay, shakeKey 
         aria-label="World map"
       >
         <StaticDefs />
-        <rect x={-MAP_W} y={-MAP_H} width={MAP_W * 3} height={MAP_H * 3} fill="url(#ocean)" />
-        <rect x={-MAP_W} y={-MAP_H} width={MAP_W * 3} height={MAP_H * 3} fill="url(#sonar)" />
+        <rect x={-MAP_W} y={-MAP_H} width={MAP_W * 3} height={MAP_H * 3} className="ocean" />
+        <rect x={-MAP_W} y={-MAP_H} width={MAP_W * 3} height={MAP_H * 3} fill="url(#waves)" />
         <StaticUnderlay k={k} />
         <Territories game={game} highlight={highlight} onPick={pick} />
         <StaticOverlay k={k} />
@@ -298,33 +297,21 @@ export function WorldMap({ game, highlight, onPick, fx, odds, overlay, shakeKey 
 
 const StaticDefs = memo(function StaticDefs() {
   const w = SQ3 * S;
-  const hh = 3 * S;
   return (
     <defs>
-      <radialGradient id="ocean" cx="50%" cy="40%" r="75%">
-        <stop offset="0%" stopColor="#0f2a42" />
-        <stop offset="60%" stopColor="#0a1c2e" />
-        <stop offset="100%" stopColor="#050e18" />
-      </radialGradient>
-      <pattern id="sonar" width={w} height={hh} patternUnits="userSpaceOnUse">
-        <circle cx={w / 2} cy={S} r={0.9} fill="#2a4a68" opacity="0.55" />
-        <circle cx={0} cy={S * 2.5} r={0.9} fill="#2a4a68" opacity="0.55" />
-        <circle cx={w} cy={S * 2.5} r={0.9} fill="#2a4a68" opacity="0.55" />
+      {/* Ocean: flat printed blue with engraved wave hatching. */}
+      <pattern id="waves" width={24} height={10} patternUnits="userSpaceOnUse">
+        <path d="M0 6 Q6 3 12 6 T24 6" fill="none" stroke="#a9c3d3" strokeWidth="0.7" />
       </pattern>
-      <linearGradient id="light" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#fff" stopOpacity="0.22" />
-        <stop offset="45%" stopColor="#fff" stopOpacity="0.02" />
-        <stop offset="100%" stopColor="#000" stopOpacity="0.3" />
-      </linearGradient>
-      <linearGradient id="tokenShine" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#fff" stopOpacity="0.45" />
-        <stop offset="55%" stopColor="#fff" stopOpacity="0" />
-      </linearGradient>
-      <marker id="arrow-attack" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="#ff5b4f" />
+      {/* Neutral land: halftone dots on paper. */}
+      <pattern id="halftone" width={w / 2} height={w / 2} patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
+        <circle cx={w / 4} cy={w / 4} r={0.75} fill="#c9c3b1" />
+      </pattern>
+      <marker id="arrow-attack" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111" />
       </marker>
-      <marker id="arrow-fortify" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="#5fd39b" />
+      <marker id="arrow-fortify" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111" />
       </marker>
     </defs>
   );
@@ -333,10 +320,8 @@ const StaticDefs = memo(function StaticDefs() {
 const StaticUnderlay = memo(function StaticUnderlay({ k }: { k: number }) {
   return (
     <g pointerEvents="none">
-      <path d={GEO.coast} className="coast-glow-2" style={{ strokeWidth: Math.max(10, 14 * k) }} />
-      <path d={GEO.coast} className="coast-glow" style={{ strokeWidth: Math.max(4, 5 * k) }} />
-      <path d={GEO.lanes} className="lanes" style={{ strokeWidth: 1.5 * k }} />
-      <path d={ALL_LAND} className="land-side" transform="translate(0 2.4)" />
+      <path d={GEO.coast} className="coast-halo" style={{ strokeWidth: Math.max(6, 8 * k) }} />
+      <path d={GEO.lanes} className="lanes" style={{ strokeWidth: 1.4 * k }} />
     </g>
   );
 });
@@ -344,7 +329,6 @@ const StaticUnderlay = memo(function StaticUnderlay({ k }: { k: number }) {
 const StaticOverlay = memo(function StaticOverlay({ k }: { k: number }) {
   return (
     <g pointerEvents="none">
-      <path d={ALL_LAND} fill="url(#light)" className="land-light" />
       <path d={GEO.borders} className="borders" style={{ strokeWidth: Math.max(1.1, 1.5 * k) }} />
       <path d={GEO.regionBorders} className="region-borders" style={{ strokeWidth: Math.max(1.8, 2.6 * k) }} />
       <path d={GEO.coast} className="coast" />
@@ -367,22 +351,18 @@ const Territories = memo(function Territories({
         const o = game.territories[i].owner;
         const target = highlight.targets.has(i);
         const cls = `terr ${target ? `target t-${highlight.mode}` : ''} ${highlight.selected === i ? 'selected' : ''}`;
-        return <path key={i} d={d} data-t={i} fill={o ? POWER[o].color : NEUTRAL} className={cls} onClick={() => onPick(i)} />;
+        return (
+          <g key={i}>
+            <path d={d} data-t={i} fill={o ? POWER[o].color : NEUTRAL} className={cls} onClick={() => onPick(i)} />
+            {!o && <path d={d} fill="url(#halftone)" pointerEvents="none" />}
+          </g>
+        );
       })}
     </g>
   );
 });
 
 // ---------- tokens ----------
-
-function hexPoints(cx: number, cy: number, r: number, squash = 1): string {
-  const pts: string[] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (Math.PI / 3) * i;
-    pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a) * squash).toFixed(2)}`);
-  }
-  return pts.join(' ');
-}
 
 function shade(hex: string, f: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -408,30 +388,31 @@ const Token = memo(function Token({
   onPick: (t: number) => void;
 }) {
   const [x, y] = GEO.labels[i];
-  const color = owner ? POWER[owner].color : NEUTRAL;
+  const color = owner ? POWER[owner].color : '#ffffff';
   const r = size / 2;
-  const depth = r * 0.34;
-  const layers = armies >= 12 ? 3 : armies >= 5 ? 2 : 1;
+  const depth = r * 0.28;
   const cap = capitalOf(i);
-  const top = y - (layers - 1) * depth * 0.9;
+  const light = !owner || owner === 'eu';
   return (
     <g className={`token ${dim ? 'dim' : ''}`} data-t={i} onClick={() => onPick(i)}>
-      <ellipse cx={x} cy={y + depth + r * 0.55} rx={r * 1.05} ry={r * 0.38} className="token-shadow" />
-      {Array.from({ length: layers }, (_, l) => {
-        const cy = y - l * depth * 0.9;
-        return (
-          <g key={`${l}-${owner}`} className={l === layers - 1 ? 'token-top' : undefined}>
-            <polygon points={hexPoints(x, cy + depth, r, 0.9)} fill={shade(color, 0.45)} />
-            <polygon points={hexPoints(x, cy, r, 0.9)} fill={shade(color, l === layers - 1 ? 1 : 0.8)} stroke={shade(color, 0.35)} strokeWidth={r * 0.07} />
-          </g>
-        );
-      })}
-      <polygon points={hexPoints(x, top, r * 0.92, 0.9)} fill="url(#tokenShine)" className="token-shine" />
-      {mine && <polygon points={hexPoints(x, top, r * 1.14, 0.9)} fill="none" className="token-mine" style={{ strokeWidth: r * 0.1 }} />}
-      <text key={`n${armies}`} x={x} y={top + r * 0.42} textAnchor="middle" className="token-num" style={{ fontSize: r * 1.2, strokeWidth: r * 0.22 }}>
+      {/* A wooden disc: edge, face, printed number. */}
+      <ellipse cx={x} cy={y + depth} rx={r} ry={r * 0.82} fill={owner ? shade(color, 0.6) : '#b9b4a6'} stroke="#111" strokeWidth={r * 0.1} />
+      <ellipse
+        key={`f${owner}`}
+        cx={x}
+        cy={y}
+        rx={r}
+        ry={r * 0.82}
+        fill={color}
+        stroke="#111"
+        strokeWidth={r * 0.1}
+        className="token-face"
+      />
+      {mine && <ellipse cx={x} cy={y} rx={r * 0.78} ry={r * 0.62} fill="none" stroke={light ? '#111' : '#fff'} strokeWidth={r * 0.07} strokeDasharray={`${r * 0.18} ${r * 0.14}`} />}
+      <text key={`n${armies}`} x={x} y={y + r * 0.34} textAnchor="middle" className={`token-num ${light ? 'dark' : ''}`} style={{ fontSize: r * 0.98 }}>
         {armies}
       </text>
-      {cap && <path d={star(x, top - r * 1.28, r * 0.55)} fill={POWER[cap].color} className="token-star" style={{ strokeWidth: r * 0.09 }} />}
+      {cap && <path d={star(x + r * 0.95, y - r * 0.75, r * 0.5)} className="token-star" style={{ strokeWidth: r * 0.08 }} />}
     </g>
   );
 });
@@ -458,12 +439,12 @@ function AimArrow({ from, to, k, mode, odds }: { from: number; to: number; k: nu
   const d = `M${sx},${sy} Q${mx},${my} ${ex},${ey}`;
   return (
     <g className={`aim ${attack ? 'aim-attack' : 'aim-fortify'}`} pointerEvents="none">
-      <path d={d} className="aim-under" style={{ strokeWidth: 7 * k }} />
-      <path d={d} className="aim-line" style={{ strokeWidth: 3.2 * k, strokeDasharray: `${9 * k} ${6 * k}` }} markerEnd={`url(#arrow-${attack ? 'attack' : 'fortify'})`} />
+      <path d={d} className="aim-under" style={{ strokeWidth: 9 * k }} />
+      <path d={d} className="aim-line" style={{ strokeWidth: 4.5 * k }} markerEnd={`url(#arrow-${attack ? 'attack' : 'fortify'})`} />
       {pct !== null && (
         <g transform={`translate(${lx} ${ly})`}>
-          <rect x={-25 * k} y={-12 * k} width={50 * k} height={23 * k} rx={11.5 * k} className={`aim-chip ${tone}`} style={{ strokeWidth: 1.5 * k }} />
-          <text y={5 * k} textAnchor="middle" className="aim-text" style={{ fontSize: 14 * k }}>
+          <rect x={-27 * k} y={-13 * k} width={54 * k} height={25 * k} className={`aim-chip ${tone}`} style={{ strokeWidth: 2 * k }} />
+          <text y={5.5 * k} textAnchor="middle" className="aim-text" style={{ fontSize: 16 * k }}>
             {pct}%
           </text>
         </g>

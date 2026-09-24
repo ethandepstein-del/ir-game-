@@ -49,26 +49,16 @@ export function DiceRow({ battle }: { battle: BattleReport }) {
   );
 }
 
-/** Donut showing a power's share of world strength. */
-export function ShareRing({ share, color, size = 38 }: { share: number; color: string; size?: number }) {
-  const r = 15;
-  const c = 2 * Math.PI * r;
+/** Printed bar showing a power's share of world strength. */
+export function ShareRing({ share, color }: { share: number; color: string; size?: number }) {
   return (
-    <svg className="share-ring" width={size} height={size} viewBox="0 0 38 38" aria-label={`${Math.round(share * 100)}% of world strength`}>
-      <circle cx="19" cy="19" r={r} className="ring-track" />
-      <circle
-        cx="19"
-        cy="19"
-        r={r}
-        className="ring-fill"
-        stroke={color}
-        strokeDasharray={`${c * share} ${c}`}
-        transform="rotate(-90 19 19)"
-      />
-      <text x="19" y="23" textAnchor="middle" className="ring-text">
-        {Math.round(share * 100)}
-      </text>
-    </svg>
+    <span className="share" aria-label={`${Math.round(share * 100)}% of world strength`}>
+      <span className="share-track">
+        <i style={{ width: `${Math.min(100, share * 100 * 2)}%`, background: color }} />
+        <b className="share-third" />
+      </span>
+      <span className="share-num">{Math.round(share * 100)}%</span>
+    </span>
   );
 }
 

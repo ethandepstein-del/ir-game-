@@ -89,19 +89,17 @@ export class FxEngine {
       const p = t / d;
       const r = (10 + 26 * ease.out(p)) * s;
       const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-      g.addColorStop(0, `rgba(255,255,240,${1 - p})`);
+      g.addColorStop(0, `rgba(255,236,160,${1 - p})`);
       g.addColorStop(0.35, rgba(color, 0.9 * (1 - p)));
       g.addColorStop(1, rgba(color, 0));
-      ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalCompositeOperation = 'source-over';
       return true;
     });
     // Shockwave ring.
-    this.ring(x, y, 4 * s, 40 * s, 'rgba(255,240,220,1)', 420, 2, delay);
+    this.ring(x, y, 4 * s, 40 * s, 'rgba(17,17,17,1)', 420, 2, delay);
     if (this.reduced) return;
     // Sparks.
     const n = Math.round(14 * s);
@@ -135,7 +133,7 @@ export class FxEngine {
         const p = t / life;
         const [sx, sy] = P(x, y);
         const r = (6 + 18 * ease.out(p)) * s;
-        ctx.fillStyle = `rgba(70,78,90,${0.45 * (1 - p)})`;
+        ctx.fillStyle = `rgba(40,38,34,${0.35 * (1 - p)})`;
         ctx.beginPath();
         ctx.arc(sx + ox, sy + oy - 16 * p, r, 0, Math.PI * 2);
         ctx.fill();
@@ -189,11 +187,12 @@ export class FxEngine {
       }
       const [hx, hy] = at(e);
       const g = ctx.createRadialGradient(hx, hy, 0, hx, hy, 7);
-      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0, 'rgba(17,17,17,1)');
+      g.addColorStop(0.5, rgba(color, 0.9));
       g.addColorStop(1, rgba(color, 0));
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(hx, hy, 7, 0, Math.PI * 2);
+      ctx.arc(hx, hy, 6, 0, Math.PI * 2);
       ctx.fill();
       if (p >= 1 && !hit) {
         hit = true;
@@ -232,7 +231,7 @@ export class FxEngine {
         const x = ax + (bx - ax) * p;
         const y = ay + (by - ay) * p;
         ctx.fillStyle = rgba(color, 1 - Math.pow(t / dur, 4));
-        ctx.strokeStyle = 'rgba(8,17,27,0.9)';
+        ctx.strokeStyle = 'rgba(17,17,17,0.9)';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.arc(x, y, 3.2, 0, Math.PI * 2);
@@ -249,11 +248,11 @@ export class FxEngine {
       if (t > dur) return false;
       const p = t / dur;
       const [sx, sy] = P(x, y);
-      ctx.font = `600 ${big ? 17 : 14}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+      ctx.font = `800 condensed ${big ? 16 : 14}px Archivo, "Arial Narrow", sans-serif`;
       ctx.textAlign = 'center';
       const yy = sy - 18 - 26 * ease.out(p);
       ctx.lineWidth = 3;
-      ctx.strokeStyle = `rgba(8,17,27,${0.85 * (1 - p)})`;
+      ctx.strokeStyle = `rgba(255,255,255,${0.95 * (1 - p)})`;
       ctx.strokeText(text, sx, yy);
       ctx.fillStyle = rgba(color, 1 - Math.pow(p, 3));
       ctx.fillText(text, sx, yy);
@@ -264,7 +263,7 @@ export class FxEngine {
   /** Territory changes hands: shockwave rings and a burst of hex shards in the new colour. */
   capture(x: number, y: number, color: string, delay = 0) {
     this.ring(x, y, 6, 70, color, 800, 3, delay);
-    this.ring(x, y, 4, 40, '#ffffff', 500, 1.5, delay + 60);
+    this.ring(x, y, 4, 40, '#111111', 500, 1.5, delay + 60);
     if (this.reduced) return;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;

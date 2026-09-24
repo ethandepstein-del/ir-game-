@@ -277,7 +277,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
   const sh = shares(game);
   const pol = polarity(game);
   const myTerr = ownedBy(game, me).length;
-  const insets = phone ? { top: 56, right: 0, bottom: 150, left: 0 } : { top: 92, right: 60, bottom: 130, left: 270 };
+  const insets = phone ? { top: 56, right: 0, bottom: 160, left: 0 } : { top: 64, right: 60, bottom: 140, left: 262 };
 
   return (
     <div
@@ -304,7 +304,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
               <path d="M12 4l-6 6 6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <span className="wordmark">ANARCHY</span>
+          <span className="wordmark">Anarchy</span>
           {phone && (
             <button type="button" className="chip-btn" onClick={() => setDrawer(drawer === 'powers' ? null : 'powers')} aria-expanded={drawer === 'powers'}>
               Powers
@@ -312,16 +312,22 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
           )}
         </div>
 
-        <div className="g-top-center glass">
-          <Stat label="Round" value={`${Math.min(game.round, MAX_ROUNDS)}`} sub={`/${MAX_ROUNDS}`} hideOnPhone />
-          <Stat label="System" value={pol} onClick={() => onCodex('polarity')} hideOnPhone />
+        <ol className="track hide-phone" aria-label={`Round ${game.round} of ${MAX_ROUNDS}`}>
+          {Array.from({ length: MAX_ROUNDS }, (_, i) => (
+            <li key={i} className={i + 1 < game.round ? 'past' : i + 1 === game.round ? 'now' : ''}>
+              {i + 1}
+            </li>
+          ))}
+        </ol>
+
+        <div className="g-top-stats">
           <button
             type="button"
             className={`doom ${game.clock <= 3 ? 'hot' : ''}`}
             onClick={() => onCodex('mad')}
             title="Doomsday Clock: attacks on great-power homelands move it toward midnight."
           >
-            <Clock minutes={game.clock} size={phone ? 34 : 46} />
+            <Clock minutes={game.clock} size={34} />
             <span className="doom-text">
               <b key={game.clock} className="doom-num">
                 {game.clock}
@@ -330,14 +336,12 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
             </span>
           </button>
           <Stat label="Era" value={ERA_LABEL[game.era]} onClick={() => onCodex('offense-defense')} hideOnPhone />
+          <Stat label="System" value={pol} onClick={() => onCodex('polarity')} hideOnPhone />
           <div className="stat heg" title={`Hold ${HEGEMONY} territories for hegemony`}>
             <span className="stat-label">Hegemony</span>
             <span className="stat-value">
               {myTerr}
               <small>/{HEGEMONY}</small>
-            </span>
-            <span className="heg-bar">
-              <i style={{ width: `${Math.min(100, (myTerr / HEGEMONY) * 100)}%` }} />
             </span>
           </div>
         </div>
@@ -386,8 +390,8 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       )}
 
       {/* ---------- Great powers roster ---------- */}
-      <aside className={`g-roster glass ${phone ? (drawer === 'powers' ? 'drawer open' : 'drawer') : ''}`} aria-label="Great powers">
-        <h2 className="panel-title">Great powers</h2>
+      <aside className={`g-roster panel ${phone ? (drawer === 'powers' ? 'drawer open' : 'drawer') : ''}`} aria-label="Great powers">
+        <h2 className="panel-head">Great powers</h2>
         <ul className="plaques">
           {POWERS.map((p) => {
             const ps = game.powers[p.id];
@@ -400,7 +404,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
                 className={`plaque ${ps.alive ? '' : 'dead'} ${p.id === turnOf ? 'active' : ''} ${p.id === me ? 'me' : ''}`}
                 style={{ '--c': p.color } as CSSProperties}
               >
-                <ShareRing share={sh[p.id]} color={p.color} size={34} />
+                <span className="plaque-chip" />
                 <div className="plaque-body">
                   <div className="plaque-row">
                     <span className="plaque-name">{p.short}</span>
@@ -412,6 +416,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
                       {ownedBy(game, p.id).length}
                     </span>
                   </div>
+                  <ShareRing share={sh[p.id]} color={p.color} />
                   <div className="plaque-tags">
                     {!ps.alive && <span className="tag">Eliminated</span>}
                     {game.coalition === p.id && <span className="tag hot">Coalition target</span>}
@@ -473,8 +478,8 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       {/* ---------- Dispatch wire ---------- */}
       <div className="g-wire">
         {toast && !(phone && (sel !== null || drawer)) && (
-          <div className="theory glass" key={toast.key}>
-            <span className="theory-kicker">Theory in play</span>
+          <div className="theory panel" key={toast.key}>
+            <span className="panel-head">Theory in play</span>
             <span className="theory-title">{CONCEPTS[toast.id].name}</span>
             <span className="theory-text">{CONCEPTS[toast.id].dispatch}</span>
             <span className="theory-actions">
@@ -488,7 +493,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
           </div>
         )}
         {!phone && (
-          <div className={`wire glass ${logOpen ? 'open' : ''}`}>
+          <div className={`wire panel ${logOpen ? 'open' : ''}`}>
             <button type="button" className="wire-head" onClick={() => setLogOpen((o) => !o)} aria-expanded={logOpen}>
               <span className="wire-led" />
               Dispatches
@@ -523,7 +528,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       />
 
       {/* ---------- Phase dock ---------- */}
-      <section className={`g-dock glass ${myTurn ? 'mine' : ''}`} aria-label="Your move">
+      <section className={`g-dock panel ${myTurn ? 'mine' : ''}`} aria-label="Your move">
         <div className="phases" aria-hidden={!myTurn}>
           {(['deploy', 'attack', 'fortify'] as const).map((ph, i) => (
             <span
@@ -774,14 +779,16 @@ function Dossier({ game, t, tgt, odds, onClose }: { game: GameState; t: number; 
   const members = REGION_MEMBERS[region.id];
   const color = st.owner ? POWER[st.owner].color : NEUTRAL;
   return (
-    <aside className="g-dossier glass" style={{ '--c': color } as CSSProperties} aria-label="Territory intelligence" key={focus}>
-      <button type="button" className="dossier-close" onClick={onClose} aria-label="Close">
-        ×
-      </button>
-      <span className="dossier-kicker">
-        {region.name} · +{region.bonus}
-      </span>
-      <h2 className="dossier-name">{def.name}</h2>
+    <aside className={`g-dossier panel ${st.owner === 'eu' || !st.owner ? 'light-deed' : ''}`} style={{ '--c': color } as CSSProperties} aria-label="Territory intelligence" key={focus}>
+      <div className="deed">
+        <span className="dossier-kicker">
+          {region.name} · region bonus +{region.bonus}
+        </span>
+        <h2 className="dossier-name">{def.name}</h2>
+        <button type="button" className="dossier-close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+      </div>
       <div className="dossier-owner">
         <i className="pdot" style={{ background: color }} />
         {st.owner ? POWER[st.owner].name : 'Minor state'}
@@ -856,12 +863,12 @@ function Hand({
   const usable = (c: CardId) => myTurn && !game.pendingMove && (game.phase === 'deploy' || (game.phase === 'attack' && c !== 'arms-race'));
   if (phone && !open)
     return (
-      <button type="button" className="hand-toggle glass" onClick={() => setOpen(true)} disabled={!cards.length}>
+      <button type="button" className="hand-toggle panel" onClick={() => setOpen(true)} disabled={!cards.length}>
         Cards <b>{cards.length}</b>
       </button>
     );
   return (
-    <div className={`g-hand ${phone ? 'sheet glass' : ''}`} aria-label="Crisis cards">
+    <div className={`g-hand ${phone ? 'sheet panel' : ''}`} aria-label="Crisis cards">
       {phone && (
         <button type="button" className="sheet-close link" onClick={() => setOpen(false)}>
           Close
@@ -889,7 +896,7 @@ function Hand({
               <span className="crisis-text">{def.text}</span>
             </button>
             {cardMode === i && def.target === 'power' && (
-              <div className="power-pick glass">
+              <div className="power-pick panel">
                 {POWERS.filter((p) => p.id !== me && game.powers[p.id].alive && !(c === 'detente' && hasPact(game, me, p.id))).map((p) => (
                   <button
                     key={p.id}
@@ -916,7 +923,7 @@ function Hand({
 function Modal({ children }: { children: React.ReactNode }) {
   return (
     <div className="overlay" role="dialog" aria-modal="true">
-      <div className="modal glass">{children}</div>
+      <div className="modal panel">{children}</div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { ALPHA, COLS, DRAWN_LANES, GRID, LAT_BOTTOM, LAT_TOP, LON0, ROWS } from '../data/map.generated';
+import { ALPHA, COLS, DRAWN_LANES, GRID, ROWS } from '../data/map.generated';
 import { TERRITORIES } from '../data/world';
 
 /** Hex size in SVG units (centre to corner). */
@@ -83,27 +83,3 @@ function build() {
 
 export const GEO = build();
 
-/** Every land hex with its territory and real-world coordinates (for the globe). */
-export const LAND_HEXES: { t: number; lon: number; lat: number }[] = (() => {
-  const out: { t: number; lon: number; lat: number }[] = [];
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++) {
-      const t = cell(c, r);
-      if (t < 0) continue;
-      const [x, y] = center(c, r);
-      let lon = LON0 + (x / MAP_W) * 360;
-      if (lon > 180) lon -= 360;
-      const lat = LAT_TOP - (y / MAP_H) * (LAT_TOP - LAT_BOTTOM);
-      out.push({ t, lon, lat });
-    }
-  return out;
-})();
-
-/** Mean coordinates of each territory, for flying the globe to it. */
-export const TERRITORY_LONLAT: [number, number][] = TERRITORIES.map((_, i) => {
-  const hs = LAND_HEXES.filter((h) => h.t === i);
-  const lat = hs.reduce((a, h) => a + h.lat, 0) / hs.length;
-  const x = hs.reduce((a, h) => a + Math.cos((h.lon * Math.PI) / 180), 0);
-  const y = hs.reduce((a, h) => a + Math.sin((h.lon * Math.PI) / 180), 0);
-  return [(Math.atan2(y, x) * 180) / Math.PI, lat];
-});
