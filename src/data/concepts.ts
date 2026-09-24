@@ -1,177 +1,146 @@
 export type ConceptId =
-  | 'bargaining-war'
-  | 'batna'
-  | 'zopa'
-  | 'logrolling'
-  | 'costly-signal'
-  | 'cheap-talk'
-  | 'audience-costs'
-  | 'two-level-game'
-  | 'spiral-model'
-  | 'deterrence-model'
-  | 'private-information'
-  | 'commitment-problem'
-  | 'mediation'
-  | 'brinkmanship'
-  | 'rally-effect'
-  | 'pareto';
+  | 'anarchy'
+  | 'balancing'
+  | 'bandwagoning'
+  | 'security-dilemma'
+  | 'offense-defense'
+  | 'mad'
+  | 'stability-instability'
+  | 'heartland'
+  | 'sea-power'
+  | 'reputation'
+  | 'power-transition'
+  | 'polarity'
+  | 'economic-statecraft'
+  | 'covert-action'
+  | 'proxy-war'
+  | 'arms-control'
+  | 'detente'
+  | 'institutions'
+  | 'hegemony';
 
 export interface Concept {
-  id: ConceptId;
   name: string;
-  short: string;
+  /** One line shown in the in-game dispatch. */
+  dispatch: string;
   body: string;
-  inGame: string;
   reading: string;
 }
 
 export const CONCEPTS: Record<ConceptId, Concept> = {
-  'bargaining-war': {
-    id: 'bargaining-war',
-    name: 'The Bargaining Model of War',
-    short: 'War is costly, so some deal should always beat fighting.',
-    body:
-      'Fighting destroys value both sides could have kept. So for rational states there is almost always a range of deals both prefer to war. Wars still happen for three reasons: the two sides hold private information and have incentives to misrepresent it, they cannot credibly commit to keep a deal, or the stakes are hard to divide.',
-    inGame:
-      'Breakdown is almost always worse for you than a mediocre deal. When talks collapse, ask which of the three causes got you there.',
-    reading: 'James Fearon, "Rationalist Explanations for War," International Organization 49:3 (1995).',
+  anarchy: {
+    name: 'Anarchy',
+    dispatch: 'There is no world government. Nobody will save you but you.',
+    body: 'In IR, "anarchy" does not mean chaos. It means there is no authority above states to enforce rules or protect the weak. Realists argue this forces states into self-help: each must look after its own security, which is why power matters so much.',
+    reading: 'Kenneth Waltz, Theory of International Politics (1979), ch. 6.',
   },
-  batna: {
-    id: 'batna',
-    name: 'BATNA',
-    short: 'Your Best Alternative To a Negotiated Agreement.',
-    body:
-      'What each side gets if talks fail sets the floor for any deal it will accept. You gain leverage when your alternative improves, or when the other side comes to believe it has.',
-    inGame:
-      'Their minimum depends on how they rate their chances if talks fail, and that depends on how resolved they think you are.',
-    reading: 'Roger Fisher & William Ury, Getting to Yes (1981).',
+  balancing: {
+    name: 'Balance of Power',
+    dispatch: 'When one power grows too strong, the others band together against it.',
+    body: 'Neorealists predict that states balance against concentrations of power. They do it by arming themselves (internal balancing) or by allying with others (external balancing). This is why would-be hegemons, from Napoleon to Hitler, have repeatedly faced grand coalitions.',
+    reading: 'Kenneth Waltz, Theory of International Politics (1979); Stephen Walt, The Origins of Alliances (1987).',
   },
-  zopa: {
-    id: 'zopa',
-    name: 'Zone of Possible Agreement',
-    short: 'The set of deals both sides prefer to walking away.',
-    body:
-      'The overlap between each side\'s reservation point is the bargaining range. Neither side can see the other\'s edge of it, so each probes and signals to find where it lies.',
-    inGame: 'The debrief chart shades the real ZOPA, which you could not see during play.',
-    reading: 'Howard Raiffa, The Art and Science of Negotiation (1982).',
+  bandwagoning: {
+    name: 'Bandwagoning',
+    dispatch: 'Weak states sometimes side with the strongest power instead of opposing it.',
+    body: 'Instead of balancing, a small or exposed state may join the rising power, either to avoid being attacked or to share in the spoils. Walt argues this is rarer than balancing and more common among weak states that have no allies to turn to.',
+    reading: 'Stephen Walt, The Origins of Alliances (1987); Randall Schweller, "Bandwagoning for Profit" (1994).',
   },
-  logrolling: {
-    id: 'logrolling',
-    name: 'Logrolling & Integrative Bargaining',
-    short: 'Trade what you value less for what you value more.',
-    body:
-      'When sides weigh issues differently, each can concede on what matters little to it and win on what matters most. That creates value instead of just dividing it. Linking issues together turns a zero-sum haggle into a positive-sum package.',
-    inGame:
-      'Their counteroffers give away the issues they care least about first. Read those moves to work out their priorities.',
-    reading: 'Richard Walton & Robert McKersie, A Behavioral Theory of Labor Negotiations (1965); Robert Keohane on issue linkage.',
+  'security-dilemma': {
+    name: 'The Security Dilemma',
+    dispatch: 'Your defensive build-up looks like a threat to your neighbors, and they arm in response.',
+    body: 'Measures a state takes to make itself secure often make others less secure, and their responses leave everyone worse off. The dilemma is sharpest when offensive and defensive weapons look alike.',
+    reading: 'John Herz, "Idealist Internationalism and the Security Dilemma" (1950); Robert Jervis, "Cooperation Under the Security Dilemma" (1978).',
   },
-  'costly-signal': {
-    id: 'costly-signal',
-    name: 'Costly Signaling',
-    short: 'Actions that bluffers could not afford are believed.',
-    body:
-      'A signal is credible when a weaker or less committed actor would not be willing to pay for it. Mobilizing troops costs money and risks escalation, so it says more than words do.',
-    inGame: 'Mobilizing moves their estimate of your resolve far more than a speech does, and it costs you in both money and danger.',
-    reading: 'James Fearon, "Signaling Foreign Policy Interests," Journal of Conflict Resolution 41:1 (1997).',
+  'offense-defense': {
+    name: 'Offense–Defense Balance',
+    dispatch: 'Military technology decides whether attacking or defending is easier, and that changes everything.',
+    body: 'When defense has the advantage, as with trenches and machine guns, conquest is costly and the world is more stable. When offense has the advantage, as with blitzkrieg, states are tempted to strike first. Leaders who misjudge the balance, like the "cult of the offensive" in 1914, can walk into catastrophe.',
+    reading: 'Robert Jervis (1978); Stephen Van Evera, "The Cult of the Offensive and the Origins of the First World War" (1984).',
   },
-  'cheap-talk': {
-    id: 'cheap-talk',
-    name: 'Cheap Talk',
-    short: 'Costless statements carry little information.',
-    body:
-      'Anyone can say they will not back down, including those who would. Statements matter mainly when there is already some trust, or when they create costs later on, as audience costs do.',
-    inGame: 'A public warning barely moves a counterpart who does not trust you.',
-    reading: 'Vincent Crawford & Joel Sobel, "Strategic Information Transmission," Econometrica (1982).',
+  mad: {
+    name: 'Mutually Assured Destruction',
+    dispatch: 'Attacking a great power\'s homeland moves the Doomsday Clock. At midnight, everyone loses.',
+    body: 'Nuclear weapons make total war between great powers suicidal, because each side can destroy the other even after being struck first. The result is a peace built on shared vulnerability. The danger lies in crises that escalate beyond anyone\'s control.',
+    reading: 'Bernard Brodie, The Absolute Weapon (1946); Thomas Schelling, Arms and Influence (1966).',
   },
-  'audience-costs': {
-    id: 'audience-costs',
-    name: 'Audience Costs',
-    short: 'Public commitments are credible because backing down hurts at home.',
-    body:
-      'A leader who publicly draws a line and then retreats pays a domestic price. Making that price visible ties the leader\'s hands, which makes the commitment believable.',
-    inGame: 'Drawing a red line strengthens your hand. Sign a deal that crosses it and your legislature will reject it.',
-    reading: 'James Fearon, "Domestic Political Audiences and the Escalation of International Disputes," APSR 88:3 (1994).',
+  'stability-instability': {
+    name: 'Stability–Instability Paradox',
+    dispatch: 'Nuclear stability between the great powers makes smaller wars on the periphery more likely.',
+    body: 'Because all-out war is unthinkable, great powers feel freer to fight limited and proxy wars in the periphery, confident that neither side will escalate. The Cold War\'s "long peace" in Europe coexisted with wars in Korea, Vietnam, Angola and Afghanistan.',
+    reading: 'Glenn Snyder, "The Balance of Power and the Balance of Terror" (1965).',
   },
-  'two-level-game': {
-    id: 'two-level-game',
-    name: 'Two-Level Games',
-    short: 'Every deal must win at the table and at home.',
-    body:
-      'Negotiators bargain with foreign counterparts (Level I) while also needing ratification from domestic constituencies (Level II). A narrow domestic win-set weakens you at home but can strengthen you abroad: "I can\'t sell that at home."',
-    inGame: 'Your deal must clear the ratification line, which rises when your domestic support falls.',
-    reading: 'Robert Putnam, "Diplomacy and Domestic Politics: The Logic of Two-Level Games," International Organization 42:3 (1988).',
+  heartland: {
+    name: 'The Heartland Theory',
+    dispatch: '"Who rules the Heartland commands the World-Island." (Mackinder)',
+    body: 'Halford Mackinder argued in 1904 that the vast, sea-inaccessible interior of Eurasia was the pivot of world politics. A land power that controlled it could not be reached by sea power and could dominate Eurasia. The theory shaped a century of containment strategy.',
+    reading: 'Halford Mackinder, "The Geographical Pivot of History" (1904); Nicholas Spykman, The Geography of the Peace (1944).',
   },
-  'spiral-model': {
-    id: 'spiral-model',
-    name: 'The Spiral Model',
-    short: 'Threats can provoke the insecurity they were meant to deter.',
-    body:
-      'When the other side is driven by fear, not greed, shows of strength confirm its fears and set off counter-escalation. Reassurance and reciprocity work better than threats. This is the security dilemma played out in a crisis.',
-    inGame: 'An insecure leader answers mobilization with mobilization. Goodwill gestures soften them.',
-    reading: 'Robert Jervis, Perception and Misperception in International Politics (1976), ch. 3.',
+  'sea-power': {
+    name: 'Sea Power',
+    dispatch: 'Amphibious assaults are hard. Command of the sea lanes changes that.',
+    body: 'Alfred Thayer Mahan argued that control of the seas, meaning trade routes, chokepoints and naval bases, was the foundation of great power. Barry Posen later described US "command of the commons" (sea, air and space) as the military basis of its hegemony.',
+    reading: 'A. T. Mahan, The Influence of Sea Power upon History (1890); Barry Posen, "Command of the Commons" (2003).',
   },
-  'deterrence-model': {
-    id: 'deterrence-model',
-    name: 'The Deterrence Model',
-    short: 'Concessions to a greedy adversary invite more demands.',
-    body:
-      'When the other side is opportunistic, it reads accommodation as weakness and probes further. Firmness and credible threats hold it back. The Munich analogy draws on this model, sometimes wrongly.',
-    inGame: 'An opportunist raises their demands after your goodwill gestures and backs down when you show strength.',
-    reading: 'Robert Jervis, Perception and Misperception in International Politics (1976), ch. 3.',
+  reputation: {
+    name: 'Reputation & Credibility',
+    dispatch: 'You broke a pact. Everyone saw it, and your word is now worth less.',
+    body: 'Can states build a reputation for keeping or breaking commitments? Some scholars argue that past behavior shapes how others judge a state\'s promises and threats. Others, like Press, find that leaders judge credibility mostly by current power and interests. In this game, reputation matters.',
+    reading: 'Jonathan Mercer, Reputation and International Politics (1996); Daryl Press, Calculating Credibility (2005).',
   },
-  'private-information': {
-    id: 'private-information',
-    name: 'Private Information',
-    short: 'Each side knows things the other cannot see.',
-    body:
-      'Resolve, capabilities and priorities are hidden, and each side has reasons to exaggerate. Intelligence and back channels narrow the gap, which makes a deal more likely.',
-    inGame: 'Back channels reveal what they care about. Everything else you infer from their behavior.',
-    reading: 'James Fearon (1995); Robert Jervis, The Logic of Images in International Relations (1970).',
+  'power-transition': {
+    name: 'Power Transition',
+    dispatch: 'The top power has changed. Transitions are the most dangerous moments in world politics.',
+    body: 'Power transition theory holds that war is most likely when a dissatisfied rising power catches up to the dominant one. The "Thucydides Trap" debate applies this to US–China relations.',
+    reading: 'A. F. K. Organski, World Politics (1958); Graham Allison, Destined for War (2017).',
   },
-  'commitment-problem': {
-    id: 'commitment-problem',
-    name: 'The Commitment Problem',
-    short: 'A deal is worthless if one side expects the other to renege.',
-    body:
-      'Without a world government to enforce agreements, a state may refuse a good deal because it fears the other side will break it later. Verification, phased implementation and trust-building address this.',
-    inGame: 'In arms talks they will not sign anything, however generous, until trust clears a threshold.',
-    reading: 'James Fearon (1995); Robert Powell, "War as a Commitment Problem," International Organization 60:1 (2006).',
+  polarity: {
+    name: 'Polarity',
+    dispatch: 'The distribution of power, whether unipolar, bipolar or multipolar, shapes how the system behaves.',
+    body: 'Waltz argued that bipolar systems are the most stable, because the two superpowers watch each other closely and responsibility is clear. Multipolar systems breed miscalculation and chain-ganging alliances. Others argue that unipolarity is the most peaceful of all.',
+    reading: 'Kenneth Waltz, "The Stability of a Bipolar World" (1964); William Wohlforth, "The Stability of a Unipolar World" (1999).',
   },
-  mediation: {
-    id: 'mediation',
-    name: 'Third-Party Mediation',
-    short: 'Outsiders can surface solutions and cool tempers.',
-    body:
-      'Mediators pass information between the parties, suggest focal-point solutions and give leaders political cover to concede. How well it works depends on the mediator\'s leverage and on whether the parties see it as impartial.',
-    inGame: 'The mediator proposes a package close to the efficient split, based on information you do not have.',
-    reading: 'Andrew Kydd, "Which Side Are You On? Bias, Credibility, and Mediation," AJPS 47:4 (2003).',
+  'economic-statecraft': {
+    name: 'Economic Statecraft',
+    dispatch: 'Sanctions trade your economic weight for political leverage, and rarely achieve as much as hoped.',
+    body: 'States use trade, finance and aid as instruments of power. Sanctions can impose real costs, but studies find they rarely force a target to change major policies, especially when the target is a great power.',
+    reading: 'David Baldwin, Economic Statecraft (1985); Robert Pape, "Why Economic Sanctions Do Not Work" (1997).',
   },
-  brinkmanship: {
-    id: 'brinkmanship',
-    name: 'Brinkmanship',
-    short: 'The threat that leaves something to chance.',
-    body:
-      'Raising a shared risk of disaster that neither side fully controls can force the other to yield. It can also go over the edge by accident.',
-    inGame: 'Above the danger line on the escalation ladder, each round carries a chance of an incident neither side intended.',
-    reading: 'Thomas Schelling, The Strategy of Conflict (1960) and Arms and Influence (1966).',
+  'covert-action': {
+    name: 'Covert Action',
+    dispatch: 'Regime change on the cheap, until it is exposed.',
+    body: 'States often intervene secretly to topple foreign governments, from Iran in 1953 to Guatemala in 1954 and beyond. Covert action lets leaders act while avoiding escalation and domestic scrutiny. The long-run consequences are often poor.',
+    reading: 'Lindsey O\'Rourke, Covert Regime Change (2018); Austin Carson, Secret Wars (2018).',
   },
-  'rally-effect': {
-    id: 'rally-effect',
-    name: 'Rally-Round-the-Flag',
-    short: 'External threats briefly boost domestic support.',
-    body:
-      'Crises and shows of strength often lift a leader\'s approval for a while, which can tempt leaders to escalate. The effect usually fades quickly.',
-    inGame: 'Mobilizing lifts your support at home. Conciliatory moves can make you look weak to hardliners.',
-    reading: 'John Mueller, War, Presidents and Public Opinion (1973).',
+  'proxy-war': {
+    name: 'Proxy War',
+    dispatch: 'Arm a minor state to bleed your rival without fighting it yourself.',
+    body: 'Great powers often back local actors instead of fighting directly. This lets them contest influence while keeping the risk of direct great-power war low. Proxy wars were the main battleground of the Cold War.',
+    reading: 'Andrew Mumford, Proxy Warfare (2013).',
   },
-  pareto: {
-    id: 'pareto',
-    name: 'Pareto Efficiency',
-    short: 'A deal is efficient if no one can gain without someone losing.',
-    body:
-      'Many agreements leave joint gains unclaimed. A different package could have made both sides better off. The Pareto frontier marks the set of deals that leave nothing on the table.',
-    inGame: 'The debrief shows how far your deal was from the frontier: value you could have claimed without costing them anything.',
-    reading: 'Howard Raiffa, The Art and Science of Negotiation (1982).',
+  'arms-control': {
+    name: 'Arms Control',
+    dispatch: 'Even rivals can agree to limit the most dangerous weapons.',
+    body: 'Arms control treaties reduce the risk and cost of competition without ending the rivalry. SALT, the INF Treaty and New START made the balance of terror more predictable, and verification made the agreements credible.',
+    reading: 'Thomas Schelling & Morton Halperin, Strategy and Arms Control (1961).',
+  },
+  detente: {
+    name: 'Détente',
+    dispatch: 'A deliberate easing of tensions between rivals.',
+    body: 'In the 1970s, the US and the Soviet Union pursued détente: summits, arms control and trade, without giving up their rivalry. Critics said it rewarded the other side. Supporters said it made the Cold War safer.',
+    reading: 'Raymond Garthoff, Détente and Confrontation (1985).',
+  },
+  institutions: {
+    name: 'Neoliberal Institutionalism',
+    dispatch: 'Institutions make cooperation pay by lowering costs and making promises credible.',
+    body: 'Liberal institutionalists argue that even under anarchy, states cooperate when institutions reduce transaction costs, share information and extend "the shadow of the future". Cooperation is hard but not impossible.',
+    reading: 'Robert Keohane, After Hegemony (1984); Robert Axelrod, The Evolution of Cooperation (1984).',
+  },
+  hegemony: {
+    name: 'Hegemony',
+    dispatch: 'One power now dominates the system.',
+    body: 'Hegemonic stability theory argues that a single dominant power can provide order: open trade, a reserve currency, security guarantees. Realists warn that hegemons provoke balancing and overextend themselves.',
+    reading: 'Robert Gilpin, War and Change in World Politics (1981); Paul Kennedy, The Rise and Fall of the Great Powers (1987).',
   },
 };
 

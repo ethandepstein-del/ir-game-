@@ -1,65 +1,46 @@
-import { CONCEPTS, type ConceptId } from '../data/concepts';
+import { POWER, type PowerId } from '../data/world';
+import type { BattleReport } from '../engine/types';
 
-/** Priority shown as 1–4 filled pips. */
-export function Pips({ weight, tone = 'brass', label }: { weight: number | null; tone?: 'brass' | 'steel'; label: string }) {
-  const filled = weight === null ? 0 : Math.max(1, Math.min(4, Math.round(weight * 10)));
-  return (
-    <span className={`pips pips-${tone}`} aria-label={weight === null ? `${label}: unknown` : `${label}: ${filled} of 4`}>
-      {weight === null ? (
-        <span className="pips-unknown">?</span>
-      ) : (
-        [0, 1, 2, 3].map((i) => <i key={i} className={i < filled ? 'on' : ''} />)
-      )}
-    </span>
-  );
+export function PowerDot({ p }: { p: PowerId }) {
+  return <i className="pdot" style={{ background: POWER[p].color }} aria-hidden="true" />;
 }
 
-/** Round diplomatic seal with the country's initials. */
-export function Seal({ name, tone, size = 56 }: { name: string; tone: 'brass' | 'steel'; size?: number }) {
-  const initials = name
-    .replace(/^The /, '')
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-  const ticks = Array.from({ length: 24 }, (_, i) => i * 15);
+/** Doomsday Clock face: the minute hand sits `minutes` before twelve. */
+export function Clock({ minutes, size = 30 }: { minutes: number; size?: number }) {
+  const a = ((60 - minutes) / 60) * 2 * Math.PI - Math.PI / 2;
+  const hot = minutes <= 3;
   return (
-    <svg className={`seal seal-${tone}`} width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-      <circle cx="32" cy="32" r="30" className="seal-ring" />
-      <circle cx="32" cy="32" r="24" className="seal-inner" />
-      {ticks.map((a) => (
-        <line key={a} x1="32" y1="4" x2="32" y2="7.5" className="seal-tick" transform={`rotate(${a} 32 32)`} />
-      ))}
-      <text x="32" y="38.5" textAnchor="middle" className="seal-text">
-        {initials}
-      </text>
+    <svg width={size} height={size} viewBox="0 0 32 32" className={`clock ${hot ? 'clock-hot' : ''}`} aria-hidden="true">
+      <circle cx="16" cy="16" r="14" className="clock-face" />
+      <path d={`M16,16 L16,2 A14,14 0 0,0 ${16 + 14 * Math.cos(a)},${16 + 14 * Math.sin(a)} Z`} className="clock-wedge" />
+      <line x1="16" y1="16" x2="16" y2="5" className="clock-hand" />
+      <line x1="16" y1="16" x2={16 + 11 * Math.cos(a)} y2={16 + 11 * Math.sin(a)} className="clock-hand" />
+      <circle cx="16" cy="16" r="1.6" className="clock-pin" />
     </svg>
   );
 }
 
-export function ConceptChip({ id, onClick }: { id: ConceptId; onClick?: (id: ConceptId) => void }) {
-  const c = CONCEPTS[id];
-  if (onClick) {
-    return (
-      <button type="button" className="chip chip-button" onClick={() => onClick(id)} title={c.short}>
-        {c.name}
-      </button>
-    );
-  }
+export function DiceRow({ battle }: { battle: BattleReport }) {
   return (
-    <span className="chip" title={c.short}>
-      {c.name}
-    </span>
-  );
-}
-
-export function Stars({ n }: { n: number }) {
-  return (
-    <span className="difficulty" aria-label={`Difficulty ${n} of 3`}>
-      {[1, 2, 3].map((i) => (
-        <i key={i} className={i <= n ? 'on' : ''} />
-      ))}
-    </span>
+    <div className="dice" aria-label={`Attacker rolled ${battle.aDice.join(', ')}; defender rolled ${battle.dDice.join(', ')}`}>
+      <span className="dice-set">
+        {battle.aDice.map((d, i) => (
+          <i key={i} className="die die-a">
+            {d}
+          </i>
+        ))}
+      </span>
+      <span className="dice-vs">vs</span>
+      <span className="dice-set">
+        {battle.dDice.map((d, i) => (
+          <i key={i} className="die die-d">
+            {d}
+          </i>
+        ))}
+      </span>
+      <span className="dice-res">
+        {battle.conquered ? 'Taken' : `−${battle.aLoss} / −${battle.dLoss}`}
+      </span>
+    </div>
   );
 }

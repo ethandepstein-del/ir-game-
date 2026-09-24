@@ -1,147 +1,110 @@
 import type { ConceptId } from '../data/concepts';
+import type { PowerId } from '../data/world';
 
-/** Hidden leader temperament. Maps onto Jervis's deterrence vs. spiral models. */
-export type LeaderType = 'opportunist' | 'insecure' | 'pragmatist';
+export type { PowerId };
+export type Owner = PowerId | null;
 
-export interface Issue {
-  id: string;
+export type CardId = 'arms-race' | 'sanctions' | 'coup' | 'proxy-war' | 'summit' | 'carrier' | 'blitzkrieg' | 'detente';
+export type CardTarget = 'none' | 'power' | 'neutral-adjacent' | 'neutral';
+
+export interface CardDef {
+  id: CardId;
   name: string;
-  /** One-line explanation shown under the slider. */
-  blurb: string;
-  /** Label for value 0 (their ideal) and 100 (your ideal). */
-  theirEnd: string;
-  yourEnd: string;
-  /** Human-readable description of a position on this issue. */
-  format: (v: number) => string;
+  text: string;
+  target: CardTarget;
+  concept: ConceptId;
 }
 
-export interface GameEventOption {
-  label: string;
-  detail: string;
-  effects: Partial<Record<'tension' | 'support' | 'trust' | 'resolve' | 'fear' | 'aspiration', number>>;
-  concept?: ConceptId;
-  outcome: string;
+export type Era = 'balanced' | 'defense' | 'offense';
+export type Phase = 'deploy' | 'attack' | 'fortify';
+
+export interface TerritoryState {
+  owner: Owner;
+  armies: number;
 }
 
-export interface GameEvent {
-  id: string;
-  title: string;
-  body: string;
-  options: GameEventOption[];
+export interface PowerState {
+  id: PowerId;
+  alive: boolean;
+  cards: CardId[];
+  reputation: number;
+  /** One-off modifier to next income (sanctions, events). */
+  incomeMod: number;
+  conquered: number;
 }
 
-export interface Scenario {
-  id: string;
-  title: string;
-  tagline: string;
-  kind: 'territorial' | 'trade' | 'arms';
-  difficulty: 1 | 2 | 3;
-  briefing: string[];
-  you: { country: string; role: string };
-  them: { country: string; leader: string; title: string; dossier: string };
-  issues: Issue[];
-  /** Your priorities (sum to 1). */
-  playerWeights: number[];
-  /** Baseline hidden priorities for the other side (sum to 1); perturbed per game. */
-  oppWeightsBase: number[];
-  leaderTypes: LeaderType[];
-  rounds: number;
-  start: { tension: number; support: number; trust: number };
-  /** Utility a deal must reach to pass your legislature when support is 50. */
-  ratificationBase: number;
-  /** Other side's baseline reservation utility. */
-  oppReservationBase: number;
-  /** Your value if talks end with no deal. */
-  noDealValue: number;
-  /** Escalation ladder rungs, low to high. The last rung is the breakdown. */
-  ladder: string[];
-  breakdown: {
-    name: string; // e.g. "War", "Trade War"
-    /** Outcome values to you for victory/stalemate/defeat. */
-    values: [number, number, number];
-    text: [string, string, string];
-  };
-  /** Does the other side need trust to sign? (commitment problem) */
-  trustFloor: number;
-  events: GameEvent[];
+export interface Pact {
+  a: PowerId;
+  b: PowerId;
+  until: number;
 }
 
-export type Speaker = 'you' | 'them' | 'desk' | 'event';
+export interface BattleReport {
+  from: number;
+  to: number;
+  attacker: PowerId;
+  defender: Owner;
+  aDice: number[];
+  dDice: number[];
+  aLoss: number;
+  dLoss: number;
+  conquered: boolean;
+}
 
+export type LogKind = 'info' | 'war' | 'diplo' | 'alert' | 'card';
 export interface LogEntry {
   round: number;
-  speaker: Speaker;
+  power: PowerId | null;
+  kind: LogKind;
   text: string;
-  concepts?: ConceptId[];
 }
 
 export interface Offer {
-  from: 'you' | 'them' | 'mediator';
-  round: number;
-  values: number[];
-}
-
-export interface Moment {
-  round: number;
-  text: string;
-  concept: ConceptId;
-  tone: 'good' | 'bad' | 'neutral';
-}
-
-export interface RedLine {
-  issue: number;
-  min: number;
-}
-
-export type Status = 'playing' | 'deal' | 'breakdown' | 'nodeal' | 'walkout';
-
-export interface OpponentState {
-  type: LeaderType;
-  weights: number[];
-  /** Their belief that you'd really fight / hold out (0–1). */
-  perceivedResolve: number;
-  /** How threatened they feel (0–1). */
-  fear: number;
-  /** Additive adjustment to their demands built up by events and actions. */
-  demandShift: number;
-  standingOffer: number[];
+  from: PowerId;
+  to: PowerId;
 }
 
 export interface GameState {
-  scenarioId: string;
   seed: number;
   rng: number;
   round: number;
-  tension: number;
-  support: number;
-  trust: number;
-  opp: OpponentState;
-  revealed: boolean[];
-  typeHinted: boolean;
-  redLines: RedLine[];
-  mediatorUsed: boolean;
-  mobilizations: number;
-  offers: Offer[];
+  order: PowerId[];
+  turn: number;
+  player: PowerId;
+  phase: Phase;
+  reinforcements: number;
+  territories: TerritoryState[];
+  powers: Record<PowerId, PowerState>;
+  pacts: Pact[];
+  clock: number;
+  quietRound: boolean;
+  era: Era;
+  coalition: PowerId | null;
+  leader: PowerId | null;
   log: LogEntry[];
-  moments: Moment[];
-  concepts: ConceptId[];
-  usedEvents: string[];
-  pendingEvent: GameEvent | null;
-  status: Status;
-  finalDeal: number[] | null;
-  breakdownResult: 0 | 1 | 2 | null;
-  ratificationFailures: number;
-  lastProposalRound: number;
+  lastBattle: BattleReport | null;
+  pendingMove: { from: number; to: number; min: number; max: number } | null;
+  fortified: boolean;
+  coreStrikes: string[];
+  blitz: boolean;
+  carrier: boolean;
+  proposedThisRound: PowerId[];
+  offer: Offer | null;
+  winner: PowerId | null;
+  endReason: 'hegemony' | 'score' | 'nuclear' | 'eliminated' | 'last-standing' | null;
+  learned: ConceptId[];
+  /** Concepts triggered but not yet shown as dispatches. */
+  dispatches: ConceptId[];
+  history: { round: number; share: Record<PowerId, number> }[];
 }
 
 export type Action =
-  | { kind: 'propose'; values: number[] }
-  | { kind: 'ultimatum'; values: number[] }
-  | { kind: 'acceptTheirs' }
-  | { kind: 'mobilize' }
-  | { kind: 'warning' }
-  | { kind: 'tieHands'; issue: number; min: number }
-  | { kind: 'goodwill' }
-  | { kind: 'backchannel' }
-  | { kind: 'mediator' }
-  | { kind: 'walkout' };
+  | { kind: 'deploy'; t: number; n: number }
+  | { kind: 'attack'; from: number; to: number; blitz: boolean; stopAt?: number }
+  | { kind: 'move'; n: number }
+  | { kind: 'endAttack' }
+  | { kind: 'fortify'; from: number; to: number; n: number }
+  | { kind: 'endTurn' }
+  | { kind: 'play'; card: number; target?: number | PowerId }
+  | { kind: 'propose'; to: PowerId }
+  | { kind: 'answerOffer'; accept: boolean };

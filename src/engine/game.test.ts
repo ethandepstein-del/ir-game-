@@ -1,112 +1,84 @@
 import { describe, expect, it } from 'vitest';
-import { SCENARIOS, getScenario } from '../data/scenarios';
-import { act, adjustToward, aspiration, newGame, previewDeal, reservation, resolveEvent, result } from './game';
-import { maxYouGivenThem, paretoFrontier, theirValue, yourValue } from './math';
-import type { Action, GameState } from './types';
+import { TERRITORIES, T } from '../data/world';
+import { aiStep } from './ai';
+import { apply, attackDice, current, income, isOver, newGame, ownedBy } from './game';
+import type { GameState } from './types';
 
-function play(s: GameState, a: Action): GameState {
-  let next = act(s, a);
-  while (next.pendingEvent) next = resolveEvent(next, 0);
-  return next;
+export function autoplay(s: GameState, maxSteps = 20000): GameState {
+  let steps = 0;
+  while (!isOver(s) && steps++ < maxSteps) {
+    if (s.offer) {
+      s = apply(s, { kind: 'answerOffer', accept: true });
+      continue;
+    }
+    const next = apply(s, aiStep(s));
+    s = next === s ? apply(s, s.phase === 'attack' ? { kind: 'endAttack' } : { kind: 'endTurn' }) : next;
+  }
+  return s;
 }
 
-describe('utilities', () => {
-  it('scores your ideal as 1 and theirs as 0', () => {
-    expect(yourValue([0.5, 0.5], [100, 100])).toBeCloseTo(1);
-    expect(theirValue([0.5, 0.5], [100, 100])).toBeCloseTo(0);
-  });
-
-  it('builds a monotone Pareto frontier', () => {
-    const f = paretoFrontier([0.6, 0.4], [0.2, 0.8]);
-    for (let k = 1; k < f.length; k++) {
-      expect(f[k].you).toBeGreaterThanOrEqual(f[k - 1].you);
-      expect(f[k].them).toBeLessThanOrEqual(f[k - 1].them);
+describe('map', () => {
+  it('has symmetric adjacency and every territory connected', () => {
+    for (const t of TERRITORIES) {
+      expect(t.adj.length).toBeGreaterThan(0);
+      for (const u of t.adj) expect(TERRITORIES[u].adj).toContain(t.index);
     }
-    // Giving you issue 0 (you value it 3x more) costs them only 0.2.
-    expect(maxYouGivenThem(f, 0.8)).toBeCloseTo(0.6);
+    const seen = new Set([0]);
+    const q = [0];
+    while (q.length) for (const u of TERRITORIES[q.pop()!].adj) if (!seen.has(u)) (seen.add(u), q.push(u));
+    expect(seen.size).toBe(TERRITORIES.length);
   });
 });
 
-describe('game engine', () => {
-  it('is deterministic for a seed', () => {
-    const a = newGame('veyra', 42);
-    const b = newGame('veyra', 42);
-    expect(a.opp).toEqual(b.opp);
-    expect(play(a, { kind: 'mobilize' })).toEqual(play(b, { kind: 'mobilize' }));
+describe('rules', () => {
+  it('gives each great power three core territories and income', () => {
+    const s = newGame('eu', 1);
+    expect(ownedBy(s, 'usa')).toHaveLength(3);
+    expect(income(s, 'usa').total).toBeGreaterThanOrEqual(3);
+    expect(current(s)).toBe('usa');
   });
 
-  it('opens with a standing offer that meets their aspiration', () => {
-    for (const sc of SCENARIOS) {
-      const s = newGame(sc.id, 7);
-      expect(theirValue(s.opp.weights, s.opp.standingOffer)).toBeGreaterThanOrEqual(aspiration(s, sc) - 0.02);
+  it('limits amphibious attacks to 2 dice except for the US', () => {
+    const s = newGame('eu', 2);
+    s.territories[T('uk')] = { owner: 'eu', armies: 10 };
+    s.territories[T('france')].armies = 10;
+    expect(attackDice(s, T('france'), T('uk')).a).toBe(2);
+    s.territories[T('us-east')].armies = 10;
+    s.territories[T('uk')] = { owner: null, armies: 3 };
+    expect(attackDice(s, T('us-east'), T('uk')).a).toBe(3);
+  });
+
+  it('ticks the Doomsday Clock when a homeland is struck', () => {
+    let s = newGame('rus', 3);
+    s = apply(s, { kind: 'deploy', t: T('us-east'), n: s.reinforcements });
+    s.territories[T('kazakhstan')] = { owner: 'usa', armies: 20 };
+    const before = s.clock;
+    s = apply(s, { kind: 'attack', from: T('kazakhstan'), to: T('urals'), blitz: false });
+    expect(s.clock).toBe(before - 1);
+    expect(s.learned).toContain('mad');
+  });
+
+  it('breaking a pact costs reputation', () => {
+    let s = newGame('usa', 4);
+    s.pacts.push({ a: 'usa', b: 'eu', until: 9 });
+    s.territories[T('uk')] = { owner: 'eu', armies: 1 };
+    s = apply(s, { kind: 'deploy', t: T('us-east'), n: s.reinforcements });
+    const rep = s.powers.usa.reputation;
+    s = apply(s, { kind: 'attack', from: T('us-east'), to: T('uk'), blitz: true });
+    expect(s.powers.usa.reputation).toBe(rep - 30);
+    expect(s.pacts).toHaveLength(0);
+  });
+});
+
+describe('full games', () => {
+  it('AI-only games always terminate', () => {
+    const outcomes: Record<string, number> = {};
+    for (let seed = 1; seed <= 12; seed++) {
+      const s = autoplay(newGame('usa', seed * 101));
+      expect(isOver(s)).toBe(true);
+      const key = `${s.endReason}:${s.winner ?? '-'}`;
+      outcomes[key] = (outcomes[key] ?? 0) + 1;
     }
-  });
-
-  it('adjustToward hits its target from either side', () => {
-    const s = newGame('tariff', 3);
-    const up = adjustToward(s, [100, 100, 100, 100], 0.6);
-    expect(theirValue(s.opp.weights, up)).toBeGreaterThanOrEqual(0.6);
-    const down = adjustToward(s, [0, 0, 0, 0], 0.5);
-    expect(theirValue(s.opp.weights, down)).toBeGreaterThanOrEqual(0.5);
-    expect(theirValue(s.opp.weights, down)).toBeLessThan(0.52);
-  });
-
-  it('accepts a generous offer and ratifies when it clears the threshold', () => {
-    const s = newGame('veyra', 11);
-    const sc = getScenario('veyra');
-    const x = adjustToward(s, [100, 100, 100, 100], aspiration(s, sc) + 0.01);
-    const out = play(s, { kind: 'propose', values: x });
-    const pre = previewDeal(s, x);
-    expect(out.status === 'deal').toBe(pre.passes);
-  });
-
-  it('refuses to sign arms deals without trust (commitment problem)', () => {
-    const s = newGame('kessel', 5);
-    const out = act(s, { kind: 'propose', values: [0, 0, 0, 0] });
-    expect(out.status).toBe('playing');
-    expect(out.concepts).toContain('commitment-problem');
-  });
-
-  it('red lines cause ratification failure when crossed', () => {
-    let s = newGame('veyra', 9);
-    s = play(s, { kind: 'tieHands', issue: 0, min: 80 });
-    const pre = previewDeal(s, [10, 50, 50, 50]);
-    expect(pre.brokenRedLines).toEqual([0]);
-    expect(pre.passes).toBe(false);
-  });
-
-  it('mobilization lowers an opportunist\'s reservation but raises an insecure one\'s', () => {
-    const findType = (t: string) => {
-      for (let seed = 1; seed < 500; seed++) {
-        const g = newGame('veyra', seed);
-        if (g.opp.type === t) return g;
-      }
-      throw new Error('no seed');
-    };
-    const sc = getScenario('veyra');
-    const opp = findType('opportunist');
-    expect(reservation(act(opp, { kind: 'mobilize' }), sc)).toBeLessThan(reservation(opp, sc));
-    const ins = findType('insecure');
-    expect(reservation(act(ins, { kind: 'mobilize' }), sc)).toBeGreaterThan(reservation(ins, sc));
-  });
-
-  it('every game terminates and scores within 0–100', () => {
-    const kinds: Action['kind'][] = ['propose', 'mobilize', 'warning', 'goodwill', 'backchannel', 'mediator'];
-    for (const sc of SCENARIOS) {
-      for (let seed = 1; seed <= 40; seed++) {
-        let s = newGame(sc.id, seed);
-        let guard = 0;
-        while (s.status === 'playing' && guard++ < 50) {
-          const k = kinds[(seed + guard) % kinds.length];
-          const a: Action = k === 'propose' ? { kind: 'propose', values: s.opp.standingOffer.map((v) => Math.min(100, v + 10)) } : ({ kind: k } as Action);
-          const next = play(s, a);
-          s = next === s ? play(s, { kind: 'warning' }) : next;
-        }
-        expect(s.status).not.toBe('playing');
-        const r = result(s);
-        expect(r.score).toBeGreaterThanOrEqual(0);
-        expect(r.score).toBeLessThanOrEqual(100);
-      }
-    }
+    console.log(outcomes);
   });
 });

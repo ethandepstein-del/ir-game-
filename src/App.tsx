@@ -1,76 +1,58 @@
 import { useCallback, useState } from 'react';
 import type { ConceptId } from './data/concepts';
-import { debriefConcepts, newGame, result } from './engine/game';
+import type { PowerId } from './data/world';
+import { newGame } from './engine/game';
 import type { GameState } from './engine/types';
 import { loadProgress, saveProgress, type Progress } from './storage';
-import { Briefing } from './ui/Briefing';
 import { Codex } from './ui/Codex';
-import { Debrief } from './ui/Debrief';
-import { Table } from './ui/Table';
-import { Title } from './ui/Title';
-
-type Screen =
-  | { name: 'title' }
-  | { name: 'briefing'; scenarioId: string }
-  | { name: 'table' }
-  | { name: 'debrief' }
-  | { name: 'codex'; focus?: ConceptId; back: 'title' | 'debrief' };
+import { End } from './ui/End';
+import { Game } from './ui/Game';
+import { Start } from './ui/Start';
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>({ name: 'title' });
+  const [screen, setScreen] = useState<'start' | 'game' | 'end'>('start');
   const [game, setGame] = useState<GameState | null>(null);
+  const [codex, setCodex] = useState<{ focus?: ConceptId } | null>(null);
   const [progress, setProgress] = useState<Progress>(loadProgress);
 
-  const start = useCallback((scenarioId: string) => {
-    setGame(newGame(scenarioId));
-    setScreen({ name: 'table' });
-    window.scrollTo(0, 0);
+  const update = useCallback((fn: (p: Progress) => Progress) => {
+    setProgress((prev) => {
+      const next = fn(prev);
+      saveProgress(next);
+      return next;
+    });
   }, []);
 
-  const finish = useCallback(
-    (final: GameState) => {
-      const r = result(final);
-      const prevBest = progress.best[final.scenarioId];
-      const next: Progress = {
-        concepts: [...new Set([...progress.concepts, ...debriefConcepts(final)])],
-        best: !prevBest || r.score > prevBest.score ? { ...progress.best, [final.scenarioId]: { score: r.score, grade: r.grade } } : progress.best,
-      };
-      setProgress(next);
-      saveProgress(next);
-      setScreen({ name: 'debrief' });
-      window.scrollTo(0, 0);
-    },
-    [progress],
+  const learn = useCallback(
+    (ids: ConceptId[]) => update((p) => ({ ...p, concepts: [...new Set([...p.concepts, ...ids])] })),
+    [update],
   );
 
-  const openCodex = (focus: ConceptId | undefined, back: 'title' | 'debrief') => {
-    setScreen({ name: 'codex', focus, back });
-    window.scrollTo(0, 0);
+  const start = (p: PowerId) => {
+    setGame(newGame(p));
+    setScreen('game');
   };
 
-  switch (screen.name) {
-    case 'title':
-      return (
-        <Title
-          progress={progress}
-          onPick={(id) => setScreen({ name: 'briefing', scenarioId: id })}
-          onCodex={() => openCodex(undefined, 'title')}
-        />
-      );
-    case 'briefing':
-      return <Briefing scenarioId={screen.scenarioId} onStart={() => start(screen.scenarioId)} onBack={() => setScreen({ name: 'title' })} />;
-    case 'table':
-      return game ? <Table game={game} setGame={setGame} onFinish={finish} onQuit={() => setScreen({ name: 'title' })} /> : null;
-    case 'debrief':
-      return game ? (
-        <Debrief
-          game={game}
-          onReplay={() => start(game.scenarioId)}
-          onMenu={() => setScreen({ name: 'title' })}
-          onConcept={(id) => openCodex(id, 'debrief')}
-        />
-      ) : null;
-    case 'codex':
-      return <Codex unlocked={progress.concepts} focus={screen.focus} onBack={() => setScreen(screen.back === 'title' ? { name: 'title' } : { name: 'debrief' })} />;
-  }
+  const end = () => {
+    if (!game) return;
+    update((p) => ({
+      ...p,
+      played: p.played + 1,
+      wins: game.winner === game.player ? { ...p.wins, [game.player]: (p.wins[game.player] ?? 0) + 1 } : p.wins,
+    }));
+    setScreen('end');
+  };
+
+  return (
+    <>
+      {screen === 'start' && <Start progress={progress} onStart={start} onCodex={() => setCodex({})} />}
+      {screen === 'game' && game && (
+        <Game game={game} setGame={setGame} onLearn={learn} onCodex={(id) => setCodex({ focus: id })} onQuit={() => setScreen('start')} onEnd={end} />
+      )}
+      {screen === 'end' && game && (
+        <End game={game} onAgain={() => start(game.player)} onMenu={() => setScreen('start')} onCodex={(id) => setCodex({ focus: id })} />
+      )}
+      {codex && <Codex unlocked={progress.concepts} focus={codex.focus} onBack={() => setCodex(null)} />}
+    </>
+  );
 }
