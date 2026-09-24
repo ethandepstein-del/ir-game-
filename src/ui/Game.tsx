@@ -31,6 +31,7 @@ import { FxEngine } from './fx/particles';
 import { GEO, MAP_W } from './geometry';
 import { SoundControls } from './SoundControls';
 import { useStage } from './Stage';
+import { Tutorial, tutorialHolds } from './Tutorial';
 import { NEUTRAL, WorldMap, type Highlight } from './WorldMap';
 
 type Speed = 'normal' | 'fast' | 'instant';
@@ -48,6 +49,8 @@ interface Props {
   onCodex: (id?: ConceptId) => void;
   onQuit: () => void;
   onEnd: () => void;
+  tutorial: boolean;
+  onTutorialDone: () => void;
 }
 
 function useIsPhone() {
@@ -60,7 +63,7 @@ function useIsPhone() {
   return phone;
 }
 
-export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) {
+export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd, tutorial, onTutorialDone }: Props) {
   const [sel, setSel] = useState<number | null>(null);
   const [tgt, setTgt] = useState<number | null>(null);
   const [step, setStep] = useState<1 | 5 | 0>(1);
@@ -77,6 +80,13 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
   const { stage, mapOverlay, screenOverlay, shakeKey, shakeLevel } = useStage(fxEngine);
   const busyUntil = useRef(0);
   const phone = useIsPhone();
+  const [tut, setTut] = useState<number | null>(tutorial ? 0 : null);
+  const [attacks, setAttacks] = useState(0);
+  const tutHold = tut !== null && tutorialHolds(tut);
+  const closeTut = useCallback(() => {
+    setTut(null);
+    onTutorialDone();
+  }, [onTutorialDone]);
 
   const me = game.player;
   const turnOf = current(game);
@@ -118,7 +128,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
 
   // Drive AI turns, paced by the choreography of the previous action.
   useEffect(() => {
-    if (over || game.offer || turnOf === me) return;
+    if (over || game.offer || turnOf === me || tutHold) return;
     const run = () => {
       let s = game;
       let guard = 0;
@@ -146,7 +156,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
     const wait = Math.max(MIN_DELAY[speed], speed === 'instant' ? 0 : busyUntil.current - performance.now());
     const id = setTimeout(run, wait);
     return () => clearTimeout(id);
-  }, [game, speed, over, turnOf, me, commit]);
+  }, [game, speed, over, turnOf, me, commit, tutHold]);
 
   useEffect(() => {
     if (!toast) return;
@@ -262,6 +272,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
 
   const doAttack = (a: Action) => {
     const next = act(a);
+    if (next !== game) setAttacks((n) => n + 1);
     if (a.kind === 'attack') {
       if (next.territories[a.to].owner === me) {
         setSel(a.to);
@@ -370,7 +381,10 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
             <SpeedIcon n={speed === 'normal' ? 1 : speed === 'fast' ? 2 : 3} />
           </button>
           <SoundControls />
-          <button type="button" className="icon-btn hide-phone" onClick={() => onCodex()} aria-label="Open the Codex">
+          <button type="button" className="icon-btn help-btn" onClick={() => setTut(0)} aria-label="Replay the tutorial" title="How to play">
+            ?
+          </button>
+          <button type="button" className="icon-btn hide-phone codex-btn" onClick={() => onCodex()} aria-label="Open the Codex">
             <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
               <path d="M4 3h9a3 3 0 013 3v11H7a3 3 0 01-3-3z M4 14a3 3 0 013-3h9" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinejoin="round" />
             </svg>
@@ -789,6 +803,9 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       )}
 
       {screenOverlay}
+      {tut !== null && !game.pendingObligation && !(game.offer && myTurn) && !confirm && (
+        <Tutorial view={{ game, sel, tgt, attacks, phone }} index={tut} setIndex={setTut} onClose={closeTut} />
+      )}
     </div>
   );
 }

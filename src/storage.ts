@@ -4,6 +4,7 @@ export interface Progress {
   concepts: ConceptId[];
   wins: Record<string, number>;
   played: number;
+  tutorialDone?: boolean;
 }
 
 const KEY = 'anarchy/progress/v1';
@@ -13,7 +14,7 @@ export function loadProgress(): Progress {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<Progress>;
-      return { concepts: p.concepts ?? [], wins: p.wins ?? {}, played: p.played ?? 0 };
+      return { concepts: p.concepts ?? [], wins: p.wins ?? {}, played: p.played ?? 0, tutorialDone: p.tutorialDone ?? false };
     }
   } catch {
     // Storage may be unavailable; progress is a convenience.

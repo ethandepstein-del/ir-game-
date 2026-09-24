@@ -8,6 +8,7 @@ import { sfx } from './ui/audio/sfx';
 import { Codex } from './ui/Codex';
 import { End } from './ui/End';
 import { Game } from './ui/Game';
+import { PaperDefs } from './ui/PaperDefs';
 import { Start } from './ui/Start';
 
 /** Interface sounds for every button, wired once at the document level. */
@@ -41,6 +42,7 @@ function useUiSounds() {
 export function App() {
   const [screen, setScreen] = useState<'start' | 'game' | 'end'>('start');
   const [game, setGame] = useState<GameState | null>(null);
+  const [tutorial, setTutorial] = useState(false);
   const [codex, setCodex] = useState<{ focus?: ConceptId } | null>(null);
   const [progress, setProgress] = useState<Progress>(loadProgress);
   useUiSounds();
@@ -58,11 +60,14 @@ export function App() {
     [update],
   );
 
-  const start = (p: PowerId) => {
+  const start = (p: PowerId, tour = false) => {
+    setTutorial(tour);
     setGame(newGame(p));
     setScreen('game');
     window.scrollTo(0, 0);
   };
+
+  const tutorialDone = useCallback(() => update((p) => ({ ...p, tutorialDone: true })), [update]);
 
   const end = () => {
     if (!game) return;
@@ -78,9 +83,20 @@ export function App() {
 
   return (
     <>
+      <PaperDefs />
       {screen === 'start' && <Start progress={progress} onStart={start} onCodex={() => setCodex({})} />}
       {screen === 'game' && game && (
-        <Game game={game} setGame={setGame} onLearn={learn} onCodex={(id) => setCodex({ focus: id })} onQuit={() => setScreen('start')} onEnd={end} />
+        <Game
+          key={game.seed}
+          game={game}
+          setGame={setGame}
+          onLearn={learn}
+          onCodex={(id) => setCodex({ focus: id })}
+          onQuit={() => setScreen('start')}
+          onEnd={end}
+          tutorial={tutorial}
+          onTutorialDone={tutorialDone}
+        />
       )}
       {screen === 'end' && game && (
         <End game={game} onAgain={() => start(game.player)} onMenu={() => setScreen('start')} onCodex={(id) => setCodex({ focus: id })} />

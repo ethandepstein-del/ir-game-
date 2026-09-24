@@ -3,7 +3,7 @@ import { POWER, REGIONS, TERRITORIES } from '../data/world';
 import { capitalOf } from '../engine/game';
 import type { GameState } from '../engine/types';
 import type { FxEngine } from './fx/particles';
-import { GEO, MAP_H, MAP_W, S } from './geometry';
+import { GEO, INKED, MAP_H, MAP_W, S } from './geometry';
 
 export const NEUTRAL = '#f3f0e6';
 const SQ3 = Math.sqrt(3);
@@ -300,8 +300,13 @@ const StaticDefs = memo(function StaticDefs() {
   return (
     <defs>
       {/* Ocean: flat printed blue with engraved wave hatching. */}
-      <pattern id="waves" width={24} height={10} patternUnits="userSpaceOnUse">
-        <path d="M0 6 Q6 3 12 6 T24 6" fill="none" stroke="#a9c3d3" strokeWidth="0.7" />
+      <pattern id="waves" width={46} height={15} patternUnits="userSpaceOnUse">
+        <path d="M1 6 q4 -2.6 8.5 0 t9 .3 M24 13 q4 -2.4 8.4 0 t8.8 -.2" fill="none" stroke="#9fbccd" strokeWidth="0.75" strokeLinecap="round" />
+      </pattern>
+      {/* Owned land: colored-pencil strokes over the flat ink. */}
+      <pattern id="pencil" width={5.5} height={5.5} patternUnits="userSpaceOnUse" patternTransform="rotate(-35)">
+        <path d="M0 1.2 H5.5" stroke="rgba(20,16,10,0.16)" strokeWidth="0.9" />
+        <path d="M0 3.9 H5.5" stroke="rgba(255,255,255,0.13)" strokeWidth="0.7" />
       </pattern>
       {/* Neutral land: halftone dots on paper. */}
       <pattern id="halftone" width={w / 2} height={w / 2} patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
@@ -330,8 +335,9 @@ const StaticOverlay = memo(function StaticOverlay({ k }: { k: number }) {
   return (
     <g pointerEvents="none">
       <path d={GEO.borders} className="borders" style={{ strokeWidth: Math.max(1.1, 1.5 * k) }} />
-      <path d={GEO.regionBorders} className="region-borders" style={{ strokeWidth: Math.max(1.8, 2.6 * k) }} />
-      <path d={GEO.coast} className="coast" />
+      <path d={INKED.regionBorders2} className="region-borders ghost" style={{ strokeWidth: Math.max(0.9, 1.2 * k) }} />
+      <path d={INKED.regionBorders} className="region-borders" style={{ strokeWidth: Math.max(1.6, 2.2 * k) }} />
+      <path d={INKED.coast} className="coast" />
     </g>
   );
 });
@@ -354,7 +360,7 @@ const Territories = memo(function Territories({
         return (
           <g key={i}>
             <path d={d} data-t={i} fill={o ? POWER[o].color : NEUTRAL} className={cls} onClick={() => onPick(i)} />
-            {!o && <path d={d} fill="url(#halftone)" pointerEvents="none" />}
+            <path d={d} fill={o ? 'url(#pencil)' : 'url(#halftone)'} pointerEvents="none" />
           </g>
         );
       })}
@@ -437,14 +443,19 @@ function AimArrow({ from, to, k, mode, odds }: { from: number; to: number; k: nu
   const pct = odds !== null ? Math.round(odds * 100) : null;
   const tone = pct === null ? '' : pct >= 65 ? 'good' : pct >= 40 ? 'even' : 'bad';
   const d = `M${sx},${sy} Q${mx},${my} ${ex},${ey}`;
+  // An open, hand-drawn arrowhead instead of a printed triangle.
+  const ang = Math.atan2(ey - my, ex - mx);
+  const hl = 13 * k;
+  const head = `M${ex - hl * Math.cos(ang - 0.5)},${ey - hl * Math.sin(ang - 0.5)} L${ex},${ey} L${ex - hl * Math.cos(ang + 0.45)},${ey - hl * Math.sin(ang + 0.45)}`;
   return (
-    <g className={`aim ${attack ? 'aim-attack' : 'aim-fortify'}`} pointerEvents="none">
+    <g className={`aim ${attack ? 'aim-attack' : 'aim-fortify'}`} pointerEvents="none" filter="url(#boil)">
       <path d={d} className="aim-under" style={{ strokeWidth: 9 * k }} />
-      <path d={d} className="aim-line" style={{ strokeWidth: 4.5 * k }} markerEnd={`url(#arrow-${attack ? 'attack' : 'fortify'})`} />
+      <path d={d} className="aim-line" style={{ strokeWidth: 3.6 * k }} pathLength={1} />
+      <path d={head} className="aim-line aim-head" style={{ strokeWidth: 3.6 * k }} />
       {pct !== null && (
         <g transform={`translate(${lx} ${ly})`}>
-          <rect x={-27 * k} y={-13 * k} width={54 * k} height={25 * k} className={`aim-chip ${tone}`} style={{ strokeWidth: 2 * k }} />
-          <text y={5.5 * k} textAnchor="middle" className="aim-text" style={{ fontSize: 16 * k }}>
+          <ellipse rx={29 * k} ry={16 * k} className={`aim-chip ${tone}`} style={{ strokeWidth: 2 * k }} transform="rotate(-6)" />
+          <text y={7 * k} textAnchor="middle" className="aim-text" style={{ fontSize: 22 * k }}>
             {pct}%
           </text>
         </g>

@@ -83,3 +83,21 @@ function build() {
 
 export const GEO = build();
 
+
+/** Nudge every vertex by a small, repeatable amount so a ruled line reads as drawn by hand. */
+export function wobble(d: string, amp: number, salt = 0): string {
+  return d.replace(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g, (_, xs: string, ys: string) => {
+    const x = Number(xs);
+    const y = Number(ys);
+    const h = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453;
+    const g = Math.sin(x * 39.3468 + y * 11.135 + salt * 91.123) * 24634.6345;
+    return `${f(x + (h - Math.floor(h) - 0.5) * 2 * amp)},${f(y + (g - Math.floor(g) - 0.5) * 2 * amp)}`;
+  });
+}
+
+/** Hand-inked versions of the static lines, computed once. */
+export const INKED = {
+  regionBorders: wobble(GEO.regionBorders, 0.9, 1),
+  regionBorders2: wobble(GEO.regionBorders, 1.1, 2),
+  coast: wobble(GEO.coast, 0.7, 3),
+};

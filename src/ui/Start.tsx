@@ -71,8 +71,9 @@ const RULES: { title: string; body: React.ReactNode; icon: string }[] = [
   },
 ];
 
-export function Start({ progress, onStart, onCodex }: { progress: Progress; onStart: (p: PowerId) => void; onCodex: () => void }) {
+export function Start({ progress, onStart, onCodex }: { progress: Progress; onStart: (p: PowerId, tour: boolean) => void; onCodex: () => void }) {
   const [pick, setPick] = useState<PowerId>('usa');
+  const [tour, setTour] = useState(!progress.tutorialDone);
   const poster = useMemo(
     () =>
       GEO.paths.map((d, i) => (
@@ -107,11 +108,20 @@ export function Start({ progress, onStart, onCodex }: { progress: Progress; onSt
               onClick={() => {
                 sfx.unlock();
                 sfx.conquest();
-                onStart(pick);
+                onStart(pick, tour);
               }}
             >
               Take command of {POWER[pick].name}
             </button>
+            <label className="tour-check">
+              <input type="checkbox" checked={tour} onChange={(e) => setTour(e.target.checked)} />
+              <span className="tour-box" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22">
+                  <path d="M4 13 C7 15 8 17 10 20 C13 13 16 8 21 3" />
+                </svg>
+              </span>
+              <span className="tour-label">Show me how to play</span>
+            </label>
             <button type="button" className="btn ghost" onClick={onCodex}>
               Codex · {progress.concepts.length}/{CONCEPT_ORDER.length}
             </button>

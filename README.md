@@ -15,6 +15,10 @@ npm run build:single  # one self-contained HTML file in dist-single/
 npm run map           # regenerate the hex map from Natural Earth data
 ```
 
+Your first game opens with a guided tutorial: sticky notes walk you through one full turn (deploy, attack, fortify), diplomacy and the Doomsday Clock, with a pencil circling what to click next. Replay it at any time with the **?** button in the top bar, or tick *Show me how to play* on the start screen.
+
+The table is styled as paper: cut-card panels, an index-card territory dossier, sticky-note theory notes, a typewritten dispatch strip, newspaper-clipping bulletins, and hand-inked map borders with colored-pencil hatching. The attack arrow and tutorial marks are redrawn a few times a second so they wobble like hand-drawn animation.
+
 ## Rules in brief
 
 - **Turn:** deploy armies, attack with Risk dice (up to 3 vs 2, ties to the defender), then make one fortify move. Conquering a territory in a turn earns a crisis card.
@@ -59,7 +63,8 @@ When a concept first happens in play, a short "Theory in play" note appears. The
 scripts/build-map.mjs   Natural Earth → hex grid, territory grouping, adjacency, sea lanes
 src/data/               map (generated), regions & powers, cards, concepts
 src/engine/             pure, seeded rules engine (game.ts), diplomacy.ts, ai.ts + tests
-src/ui/                 React: Start, Game (map + sidebar), WorldMap (SVG, zoom/pan), End, Codex
+src/ui/                 React: Start, Game (map + sidebar), WorldMap (SVG, zoom/pan), Tutorial, End, Codex
+src/ui/paper.css        the paper-and-pencil finish (loaded over styles.css)
 ```
 
 The engine is a pure reducer: `apply(state, action)`. Human and AI players use the same actions. The AI:
