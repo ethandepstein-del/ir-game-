@@ -2,6 +2,10 @@
 export const COLS = 120;
 export const ROWS = 60;
 export const ALPHA = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+/** Projection used to rasterize: equirectangular, longitude starting at LON0. */
+export const LON0 = -170;
+export const LAT_TOP = 76;
+export const LAT_BOTTOM = -50;
 /** One string per hex row; each char is a territory index in ALPHA, '.' is ocean. */
 export const GRID: string[] = [
   "...................1.......222........333333333333..........................m.........nnnnnnnn..........................",

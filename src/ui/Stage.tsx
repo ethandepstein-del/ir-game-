@@ -179,5 +179,5 @@ export function useStage(fx: FxEngine) {
     </>
   );
 
-  return { stage, mapOverlay, screenOverlay, shakeClass: shake ? `shake-${shake.level}` : '', shakeKey: shake?.id ?? 0 };
+  return { stage, mapOverlay, screenOverlay, shakeLevel: shake?.level ?? 1, shakeKey: shake?.id ?? 0 };
 }

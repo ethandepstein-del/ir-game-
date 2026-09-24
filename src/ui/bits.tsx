@@ -1,5 +1,5 @@
 import { POWER, type PowerId } from '../data/world';
-import type { BattleReport } from '../engine/types';
+import type { BattleReport, CardId } from '../engine/types';
 
 export function PowerDot({ p }: { p: PowerId }) {
   return <i className="pdot" style={{ background: POWER[p].color }} aria-hidden="true" />;
@@ -46,5 +46,55 @@ export function DiceRow({ battle }: { battle: BattleReport }) {
         {battle.conquered ? 'Taken' : `−${battle.aLoss} / −${battle.dLoss}`}
       </span>
     </div>
+  );
+}
+
+/** Donut showing a power's share of world strength. */
+export function ShareRing({ share, color, size = 38 }: { share: number; color: string; size?: number }) {
+  const r = 15;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className="share-ring" width={size} height={size} viewBox="0 0 38 38" aria-label={`${Math.round(share * 100)}% of world strength`}>
+      <circle cx="19" cy="19" r={r} className="ring-track" />
+      <circle
+        cx="19"
+        cy="19"
+        r={r}
+        className="ring-fill"
+        stroke={color}
+        strokeDasharray={`${c * share} ${c}`}
+        transform="rotate(-90 19 19)"
+      />
+      <text x="19" y="23" textAnchor="middle" className="ring-text">
+        {Math.round(share * 100)}
+      </text>
+    </svg>
+  );
+}
+
+const GLYPHS: Record<CardId, string> = {
+  // Two rising bars with arrows: escalation.
+  'arms-race': 'M5 20V12h4v8M11 20V7h4v13M17 20V4 M14 7l3-3 3 3',
+  // A padlocked coin: sanctions.
+  sanctions: 'M12 4a8 8 0 100 16a8 8 0 100-16M8 12h8M12 8v8',
+  // Crown tipping over: coup.
+  coup: 'M4 16l2-9 4 4 3-6 3 6 4-4 2 9z M4 19h16',
+  // Puppet strings: proxy war.
+  'proxy-war': 'M4 4h16M8 4v6M16 4v6M12 4v8M8 10l4 4 4-4M12 14v6M9 20h6',
+  // Handshake over table: summit.
+  summit: 'M3 13l4-4 3 2 4-3 4 3 3-1M3 17h18M6 17v3M18 17v3',
+  // Carrier silhouette.
+  carrier: 'M2 15h20l-3 4H6z M7 15v-3h8l2 3M10 12V9h3',
+  // Lightning arrow: blitzkrieg.
+  blitzkrieg: 'M13 3L5 13h6l-2 8 8-10h-6z',
+  // Two linked rings: détente.
+  detente: 'M9 8a5 5 0 100 8a5 5 0 100-8M15 8a5 5 0 100 8a5 5 0 100-8',
+};
+
+export function CardGlyph({ id }: { id: CardId }) {
+  return (
+    <svg className="card-glyph" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+      <path d={GLYPHS[id]} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

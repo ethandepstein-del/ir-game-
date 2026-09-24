@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { CARDS } from '../data/cards';
 import { CONCEPTS, type ConceptId } from '../data/concepts';
-import { HEGEMONY, MAX_ROUNDS, POWER, POWERS, REGION_MEMBERS, REGIONS, TERRITORIES } from '../data/world';
+import { HEGEMONY, MAX_ROUNDS, POWER, POWERS, REGION_MEMBERS, REGIONS, TERRITORIES, type PowerId } from '../data/world';
 import { aiStep } from '../engine/ai';
 import {
   apply,
@@ -20,21 +20,23 @@ import {
   shares,
   winChance,
 } from '../engine/game';
-import type { Action, FxEvent, GameState } from '../engine/types';
+import type { Action, CardId, FxEvent, GameState } from '../engine/types';
 import { sfx } from './audio/sfx';
-import { Clock, PowerDot } from './bits';
+import { CardGlyph, Clock, PowerDot, ShareRing } from './bits';
 import { direct } from './fx/director';
 import { FxEngine } from './fx/particles';
 import { GEO, MAP_W } from './geometry';
 import { SoundControls } from './SoundControls';
 import { useStage } from './Stage';
-import { WorldMap, type Highlight } from './WorldMap';
+import { NEUTRAL, WorldMap, type Highlight } from './WorldMap';
 
 type Speed = 'normal' | 'fast' | 'instant';
 const MIN_DELAY: Record<Speed, number> = { normal: 280, fast: 70, instant: 0 };
 
 /** Events worth surfacing even when the AI plays instantly. */
 const MAJOR = new Set<FxEvent['t']>(['coalition', 'coalitionEnd', 'bandwagon', 'transition', 'era', 'world', 'eliminated', 'capital', 'clock', 'end', 'pactBroken']);
+
+const ERA_LABEL = { balanced: 'Balanced', defense: 'Defense dominant', offense: 'Offense dominant' } as const;
 
 interface Props {
   game: GameState;
@@ -45,9 +47,14 @@ interface Props {
   onEnd: () => void;
 }
 
-interface Toast {
-  id: ConceptId;
-  key: number;
+function useIsPhone() {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760);
+  useEffect(() => {
+    const on = () => setPhone(window.innerWidth < 760);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return phone;
 }
 
 export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) {
@@ -59,16 +66,19 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
   const [fortN, setFortN] = useState(1);
   const [moveN, setMoveN] = useState(0);
   const [speed, setSpeed] = useState<Speed>('normal');
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toast, setToast] = useState<{ id: ConceptId; key: number } | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
+  const [drawer, setDrawer] = useState<'powers' | 'cards' | null>(null);
   const toastKey = useRef(0);
   const fxEngine = useMemo(() => new FxEngine(), []);
-  const { stage, mapOverlay, screenOverlay, shakeClass, shakeKey } = useStage(fxEngine);
+  const { stage, mapOverlay, screenOverlay, shakeKey, shakeLevel } = useStage(fxEngine);
   const busyUntil = useRef(0);
+  const phone = useIsPhone();
 
   const me = game.player;
   const turnOf = current(game);
-  const myTurn = turnOf === me && !isOver(game);
   const over = isOver(game);
+  const myTurn = turnOf === me && !over;
 
   const commit = useCallback(
     (next: GameState, detail: 'full' | 'brief' | 'silent' = 'full') => {
@@ -76,7 +86,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       busyUntil.current = performance.now() + span;
       if (next.dispatches.length) {
         onLearn(next.dispatches);
-        setToasts((t) => [...t, ...next.dispatches.map((id) => ({ id, key: ++toastKey.current }))].slice(-1));
+        setToast({ id: next.dispatches[next.dispatches.length - 1], key: ++toastKey.current });
       }
       setGame(next);
     },
@@ -87,25 +97,23 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
     (a: Action) => {
       const next = apply(game, a);
       if (next !== game) commit(next);
+      else sfx.deny();
       return next;
     },
     [game, commit],
   );
 
-  // Play the opening beats (first turn, first dispatch) once.
+  // Opening beats.
   useEffect(() => {
     commit({ ...game });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   useEffect(() => () => fxEngine.clear(), [fxEngine]);
-
-  // Expose read-only state for automated playtesting.
   useEffect(() => {
     (window as unknown as { __anarchy?: unknown }).__anarchy = { state: game, speed };
   }, [game, speed]);
 
-  // Drive AI turns.
+  // Drive AI turns, paced by the choreography of the previous action.
   useEffect(() => {
     if (over || game.offer || turnOf === me) return;
     const run = () => {
@@ -118,7 +126,16 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
         let next = apply(s, a);
         if (next === s) next = apply(s, s.phase === 'attack' ? { kind: 'endAttack' } : { kind: 'endTurn' });
         learned.push(...next.dispatches);
-        events.push(...next.fx.filter((e) => speed !== 'instant' || MAJOR.has(e.t) || (e.t === 'turn' && e.power === me) || (e.t === 'pact' && (e.a === me || e.b === me)) || (e.t === 'conquer' && e.loser === me)));
+        events.push(
+          ...next.fx.filter(
+            (e) =>
+              speed !== 'instant' ||
+              MAJOR.has(e.t) ||
+              (e.t === 'turn' && e.power === me) ||
+              (e.t === 'pact' && (e.a === me || e.b === me)) ||
+              (e.t === 'conquer' && e.loser === me),
+          ),
+        );
         s = next;
       } while (speed === 'instant' && !isOver(s) && current(s) !== me && guard++ < 5000);
       commit({ ...s, dispatches: learned, fx: events }, speed === 'normal' ? 'full' : speed === 'fast' ? 'brief' : 'silent');
@@ -129,22 +146,21 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
   }, [game, speed, over, turnOf, me, commit]);
 
   useEffect(() => {
-    if (!toasts.length) return;
-    const id = setTimeout(() => setToasts((t) => t.slice(1)), 9000);
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 10000);
     return () => clearTimeout(id);
-  }, [toasts]);
+  }, [toast]);
 
   useEffect(() => {
     if (game.pendingMove && myTurn) setMoveN(game.pendingMove.max);
   }, [game.pendingMove, myTurn]);
 
-  // Clear stale selections when phases change.
   useEffect(() => {
     setTgt(null);
     setCardMode(null);
   }, [game.phase, game.turn]);
 
-  // Keyboard: Esc clears selection, Enter advances the phase.
+  // Keyboard: Esc clears, Enter advances the phase.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as Element).closest('input, textarea')) return;
@@ -152,6 +168,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
         setSel(null);
         setTgt(null);
         setCardMode(null);
+        setDrawer(null);
       }
       if (e.key === 'Enter' && myTurn && !game.pendingMove && !game.offer) {
         if (game.phase === 'attack') act({ kind: 'endAttack' });
@@ -172,7 +189,8 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       game.territories.forEach((t, i) => !t.owner && targets.add(i));
     } else if (myTurn && cardTarget === 'neutral-adjacent') {
       mode = 'card';
-      for (const m of ownedBy(game, me)) for (const u of TERRITORIES[m].adj) if (!game.territories[u].owner && game.territories[u].armies <= 4) targets.add(u);
+      for (const m of ownedBy(game, me))
+        for (const u of TERRITORIES[m].adj) if (!game.territories[u].owner && game.territories[u].armies <= 4) targets.add(u);
     } else if (myTurn && game.phase === 'deploy') {
       mode = 'deploy';
     } else if (myTurn && game.phase === 'attack' && sel !== null && game.territories[sel].owner === me) {
@@ -182,8 +200,19 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       mode = 'fortify';
       for (const u of reachable(game, sel)) targets.add(u);
     }
-    return { selected: sel, targets, mode };
-  }, [game, sel, myTurn, me, cardTarget]);
+    return { selected: sel, targets, mode, aimTo: tgt };
+  }, [game, sel, tgt, myTurn, me, cardTarget]);
+
+  const oddsCache = useRef(new Map<string, number>());
+  useEffect(() => oddsCache.current.clear(), [game]);
+  const oddsFn = useCallback(
+    (from: number, to: number) => {
+      const key = `${from}-${to}`;
+      if (!oddsCache.current.has(key)) oddsCache.current.set(key, winChance(game, from, to, 600));
+      return oddsCache.current.get(key)!;
+    },
+    [game],
+  );
 
   const onPick = (t: number) => {
     const T = game.territories[t];
@@ -210,9 +239,8 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       if (T.owner === me) {
         setSel(t);
         setTgt(null);
-      } else if (sel !== null && highlight.targets.has(t)) {
-        setTgt(t);
-      } else {
+      } else if (sel !== null && highlight.targets.has(t)) setTgt(t);
+      else {
         setSel(t);
         setTgt(null);
       }
@@ -229,16 +257,6 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
     }
   };
 
-  const attack = (blitz: boolean) => {
-    if (sel === null || tgt === null) return;
-    const a: Action = { kind: 'attack', from: sel, to: tgt, blitz };
-    const def = game.territories[tgt].owner;
-    if (def && hasPact(game, me, def)) {
-      setConfirm(a);
-      return;
-    }
-    doAttack(a);
-  };
   const doAttack = (a: Action) => {
     const next = act(a);
     if (a.kind === 'attack') {
@@ -248,368 +266,423 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       } else if (next.territories[a.from].armies < 2) setTgt(null);
     }
   };
-
-  const odds = useMemo(
-    () => (myTurn && game.phase === 'attack' && sel !== null && tgt !== null && !attackBlocker(game, sel, tgt) ? winChance(game, sel, tgt) : null),
-    [game, sel, tgt, myTurn],
-  );
+  const attack = (blitz: boolean) => {
+    if (sel === null || tgt === null) return;
+    const a: Action = { kind: 'attack', from: sel, to: tgt, blitz };
+    const def = game.territories[tgt].owner;
+    if (def && hasPact(game, me, def)) setConfirm(a);
+    else doAttack(a);
+  };
 
   const sh = shares(game);
   const pol = polarity(game);
   const myTerr = ownedBy(game, me).length;
-  const inc = income(game, me);
+  const insets = phone ? { top: 56, right: 0, bottom: 150, left: 0 } : { top: 92, right: 60, bottom: 130, left: 270 };
 
   return (
-    <div className="game">
-      <header className="hud">
-        <div className="hud-left">
-          <button type="button" className="link" onClick={onQuit}>
-            ← Menu
+    <div
+      className={`g-root ${myTurn ? 'is-mine' : 'is-waiting'} ${game.clock <= 3 ? 'is-doom' : ''}`}
+      style={{ '--pc': POWER[turnOf].color, '--me': POWER[me].color } as CSSProperties}
+    >
+      <WorldMap
+        game={game}
+        highlight={highlight}
+        onPick={onPick}
+        fx={fxEngine}
+        odds={oddsFn}
+        overlay={mapOverlay}
+        shakeKey={shakeKey}
+        shakeLevel={shakeLevel}
+        insets={insets}
+      />
+
+      {/* ---------- Command bar ---------- */}
+      <header className="g-top">
+        <div className="g-top-left">
+          <button type="button" className="icon-btn" onClick={onQuit} aria-label="Back to menu">
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+              <path d="M12 4l-6 6 6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
-          <span className="logo-small">ANARCHY</span>
+          <span className="wordmark">ANARCHY</span>
+          {phone && (
+            <button type="button" className="chip-btn" onClick={() => setDrawer(drawer === 'powers' ? null : 'powers')} aria-expanded={drawer === 'powers'}>
+              Powers
+            </button>
+          )}
         </div>
-        <div className="hud-stats">
-          <Stat label="Round" value={`${Math.min(game.round, MAX_ROUNDS)}/${MAX_ROUNDS}`} />
-          <Stat label="System" value={pol} onClick={() => onCodex('polarity')} />
-          <Stat
-            label="Era"
-            value={game.era === 'balanced' ? 'Balanced' : game.era === 'defense' ? 'Defense dominant' : 'Offense dominant'}
-            onClick={() => onCodex('offense-defense')}
-          />
-          <Stat label="Hegemony" value={`${myTerr}/${HEGEMONY}`} />
+
+        <div className="g-top-center glass">
+          <Stat label="Round" value={`${Math.min(game.round, MAX_ROUNDS)}`} sub={`/${MAX_ROUNDS}`} hideOnPhone />
+          <Stat label="System" value={pol} onClick={() => onCodex('polarity')} hideOnPhone />
           <button
             type="button"
-            className={`clock-stat ${game.clock <= 3 ? 'hot' : ''}`}
+            className={`doom ${game.clock <= 3 ? 'hot' : ''}`}
             onClick={() => onCodex('mad')}
             title="Doomsday Clock: attacks on great-power homelands move it toward midnight."
           >
-            <Clock minutes={game.clock} size={38} />
-            <span>
-              <b key={game.clock} className="clock-num">
+            <Clock minutes={game.clock} size={phone ? 34 : 46} />
+            <span className="doom-text">
+              <b key={game.clock} className="doom-num">
                 {game.clock}
-              </b>{' '}
-              min to midnight
+              </b>
+              <span>min to midnight</span>
             </span>
           </button>
-          <div className="speed hud-speed" role="group" aria-label="AI speed">
+          <Stat label="Era" value={ERA_LABEL[game.era]} onClick={() => onCodex('offense-defense')} hideOnPhone />
+          <div className="stat heg" title={`Hold ${HEGEMONY} territories for hegemony`}>
+            <span className="stat-label">Hegemony</span>
+            <span className="stat-value">
+              {myTerr}
+              <small>/{HEGEMONY}</small>
+            </span>
+            <span className="heg-bar">
+              <i style={{ width: `${Math.min(100, (myTerr / HEGEMONY) * 100)}%` }} />
+            </span>
+          </div>
+        </div>
+
+        <div className="g-top-right">
+          <div className="seg" role="group" aria-label="AI speed">
             {(['normal', 'fast', 'instant'] as Speed[]).map((sp) => (
-              <button key={sp} type="button" className={speed === sp ? 'on' : ''} onClick={() => setSpeed(sp)} title={`AI speed: ${sp}`}>
-                {sp === 'normal' ? '▶' : sp === 'fast' ? '▶▶' : '▶▶▶'}
+              <button key={sp} type="button" className={speed === sp ? 'on' : ''} onClick={() => setSpeed(sp)} title={`AI speed: ${sp}`} aria-pressed={speed === sp}>
+                <SpeedIcon n={sp === 'normal' ? 1 : sp === 'fast' ? 2 : 3} />
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className="icon-btn speed-cycle"
+            aria-label={`AI speed: ${speed}. Tap to change.`}
+            onClick={() => setSpeed(speed === 'normal' ? 'fast' : speed === 'fast' ? 'instant' : 'normal')}
+          >
+            <SpeedIcon n={speed === 'normal' ? 1 : speed === 'fast' ? 2 : 3} />
+          </button>
           <SoundControls />
+          <button type="button" className="icon-btn hide-phone" onClick={() => onCodex()} aria-label="Open the Codex">
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+              <path d="M4 3h9a3 3 0 013 3v11H7a3 3 0 01-3-3z M4 14a3 3 0 013-3h9" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
       </header>
 
       {game.coalition && (
-        <div className={`banner ${game.coalition === me ? 'banner-hot' : ''}`}>
-          {game.coalition === me
-            ? 'The world is balancing against you. Every other power gets +3 armies a turn while your share stays above 27%.'
-            : `Balancing coalition against ${POWER[game.coalition].name}. Members get +3 armies a turn.`}
+        <div className={`ribbon ${game.coalition === me ? 'hot' : ''}`} style={{ '--rc': POWER[game.coalition].color } as CSSProperties}>
+          <span className="ribbon-dot" />
+          {game.coalition === me ? (
+            <span>
+              <b>The world is balancing against you.</b> Rivals get extra armies each turn until your share falls below 27%.
+            </span>
+          ) : (
+            <span>
+              <b>Coalition against {POWER[game.coalition].name}.</b> Members get extra armies each turn. A pact with the leader forfeits yours.
+            </span>
+          )}
           <button type="button" className="link" onClick={() => onCodex('balancing')}>
             Why?
           </button>
         </div>
       )}
 
-      <div className="board">
-        <section className="map-col">
-          <WorldMap
-            game={game}
-            highlight={highlight}
-            onPick={onPick}
-            fx={fxEngine}
-            overlay={mapOverlay}
-            shakeClass={shakeClass}
-            shakeKey={shakeKey}
-          />
-          <div className="toasts" aria-live="polite">
-            {toasts.map((t) => (
-              <div key={t.key} className="toast">
-                <p className="toast-kicker">Theory in play</p>
-                <p className="toast-title">{CONCEPTS[t.id].name}</p>
-                <p className="toast-text">{CONCEPTS[t.id].dispatch}</p>
-                <div className="toast-actions">
-                  <button type="button" className="link" onClick={() => onCodex(t.id)}>
-                    Read more
-                  </button>
-                  <button type="button" className="link" onClick={() => setToasts((ts) => ts.filter((x) => x.key !== t.key))}>
-                    Dismiss
-                  </button>
+      {/* ---------- Great powers roster ---------- */}
+      <aside className={`g-roster glass ${phone ? (drawer === 'powers' ? 'drawer open' : 'drawer') : ''}`} aria-label="Great powers">
+        <h2 className="panel-title">Great powers</h2>
+        <ul className="plaques">
+          {POWERS.map((p) => {
+            const ps = game.powers[p.id];
+            const pact = pactWith(game, me, p.id);
+            const canPropose = myTurn && p.id !== me && ps.alive && !pact && !game.proposedThisRound.includes(p.id);
+            const others = game.pacts.filter((x) => (x.a === p.id || x.b === p.id) && x.a !== me && x.b !== me);
+            return (
+              <li
+                key={p.id}
+                className={`plaque ${ps.alive ? '' : 'dead'} ${p.id === turnOf ? 'active' : ''} ${p.id === me ? 'me' : ''}`}
+                style={{ '--c': p.color } as CSSProperties}
+              >
+                <ShareRing share={sh[p.id]} color={p.color} size={34} />
+                <div className="plaque-body">
+                  <div className="plaque-row">
+                    <span className="plaque-name">{p.short}</span>
+                    <span className="plaque-full">{p.id === me ? 'You' : p.name}</span>
+                    <span className="plaque-rep" title="Reputation">
+                      rep {ps.reputation}
+                    </span>
+                    <span className="plaque-num" title="Territories">
+                      {ownedBy(game, p.id).length}
+                    </span>
+                  </div>
+                  <div className="plaque-tags">
+                    {!ps.alive && <span className="tag">Eliminated</span>}
+                    {game.coalition === p.id && <span className="tag hot">Coalition target</span>}
+                    {pact && <span className="tag good">Pact · {pact.until - game.round + 1}r</span>}
+                    {others.length > 0 && <span className="tag muted">⟷ {others.map((x) => POWER[x.a === p.id ? x.b : x.a].short).join(' ')}</span>}
+                  </div>
+                  {canPropose && (
+                    <button
+                      type="button"
+                      className="plaque-action"
+                      onClick={() => act({ kind: 'propose', to: p.id })}
+                      title={game.coalition === p.id ? 'Signing with the coalition target forfeits your coalition aid.' : 'Offer a 5-round non-aggression pact'}
+                    >
+                      Propose pact
+                    </button>
+                  )}
                 </div>
-              </div>
-            ))}
+              </li>
+            );
+          })}
+        </ul>
+        <details className="regions">
+          <summary>Regions</summary>
+          <ul>
+            {REGIONS.map((r) => {
+              const members = REGION_MEMBERS[r.id];
+              const mine = members.filter((t) => game.territories[t].owner === me).length;
+              const holder = POWERS.find((p) => members.every((t) => game.territories[t].owner === p.id));
+              return (
+                <li key={r.id}>
+                  <span className="reg-name">
+                    {holder ? <PowerDot p={holder.id} /> : <i className="pdot empty" />} {r.name}
+                  </span>
+                  <span className="reg-bar" title={`You hold ${mine} of ${members.length}`}>
+                    <i style={{ width: `${(mine / members.length) * 100}%` }} />
+                  </span>
+                  <span className="reg-num">+{r.bonus}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </details>
+      </aside>
+
+      {/* ---------- Dossier ---------- */}
+      {sel !== null && !(phone && drawer) && (
+        <Dossier
+          game={game}
+          t={sel}
+          tgt={tgt}
+          odds={highlight.mode === 'attack' && tgt !== null ? oddsFn(sel, tgt) : null}
+          onClose={() => {
+            setSel(null);
+            setTgt(null);
+          }}
+        />
+      )}
+
+      {/* ---------- Dispatch wire ---------- */}
+      <div className="g-wire">
+        {toast && !(phone && (sel !== null || drawer)) && (
+          <div className="theory glass" key={toast.key}>
+            <span className="theory-kicker">Theory in play</span>
+            <span className="theory-title">{CONCEPTS[toast.id].name}</span>
+            <span className="theory-text">{CONCEPTS[toast.id].dispatch}</span>
+            <span className="theory-actions">
+              <button type="button" className="link" onClick={() => onCodex(toast.id)}>
+                Read more
+              </button>
+              <button type="button" className="link muted" onClick={() => setToast(null)}>
+                Dismiss
+              </button>
+            </span>
           </div>
-          <div className="under-map">
-          {/* Log & regions */}
-          <section className="card">
-            <h3>Dispatches</h3>
-            <ol className="log" reversed>
+        )}
+        {!phone && (
+          <div className={`wire glass ${logOpen ? 'open' : ''}`}>
+            <button type="button" className="wire-head" onClick={() => setLogOpen((o) => !o)} aria-expanded={logOpen}>
+              <span className="wire-led" />
+              Dispatches
+              <span className="wire-chev">{logOpen ? 'Collapse' : 'Expand'}</span>
+            </button>
+            <ol className="wire-list">
               {[...game.log]
                 .reverse()
-                .slice(0, 14)
+                .slice(0, logOpen ? 40 : 3)
                 .map((l, i) => (
                   <li key={game.log.length - i} className={`log-${l.kind}`}>
-                    {l.power && <PowerDot p={l.power} />} <span>{l.text}</span>
+                    {l.power ? <PowerDot p={l.power} /> : <i className="pdot" style={{ background: NEUTRAL }} />}
+                    <span>{l.text}</span>
                   </li>
                 ))}
             </ol>
-          </section>
-
-          <section className="card regions">
-            <h3>Region bonuses</h3>
-            <ul>
-              {REGIONS.map((r) => {
-                const members = REGION_MEMBERS[r.id];
-                const mine = members.filter((t) => game.territories[t].owner === me).length;
-                const holder = POWERS.find((p) => members.every((t) => game.territories[t].owner === p.id));
-                return (
-                  <li key={r.id}>
-                    <span>
-                      {holder && <PowerDot p={holder.id} />} {r.name}
-                    </span>
-                    <span>
-                      you {mine}/{members.length} · +{r.bonus}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
           </div>
-        </section>
-
-        <aside className="side">
-          {/* Turn panel */}
-          <section className="card turn-card" style={{ ['--pc' as string]: POWER[turnOf].color }}>
-            {over ? (
-              <>
-                <h2>Game over</h2>
-                <button type="button" className="btn btn-primary" onClick={onEnd}>
-                  See the verdict
-                </button>
-              </>
-            ) : !myTurn ? (
-              <>
-                <p className="kicker">Round {game.round} · Enemy turn</p>
-                <h2 className="thinking">
-                  <PowerDot p={turnOf} /> {POWER[turnOf].name}
-                </h2>
-                <div className="scan" aria-hidden="true">
-                  <i />
-                </div>
-                <p className="hint">
-                  {game.phase === 'deploy' ? 'Mobilizing reserves…' : game.phase === 'attack' ? 'Conducting operations…' : 'Repositioning forces…'} Speed up with the ▶▶ controls.
-                </p>
-              </>
-            ) : game.pendingMove ? (
-              <>
-                <p className="kicker">Victory. Move in</p>
-                <h2>{TERRITORIES[game.pendingMove.to].name}</h2>
-                <label className="slider-row" htmlFor="move-n">
-                  <input
-                    id="move-n"
-                    type="range"
-                    min={game.pendingMove.min}
-                    max={game.pendingMove.max}
-                    value={moveN}
-                    onChange={(e) => setMoveN(Number(e.target.value))}
-                  />
-                  <b>{moveN}</b>
-                </label>
-                <button type="button" className="btn btn-primary" onClick={() => act({ kind: 'move', n: moveN })}>
-                  Move {moveN} armies
-                </button>
-              </>
-            ) : game.phase === 'deploy' ? (
-              <>
-                <p className="kicker">Your turn · Deploy</p>
-                <h2>
-                  <span className="big">{game.reinforcements}</span> armies to place
-                </h2>
-                <p className="hint">Click your territories to reinforce them.</p>
-                <div className="speed" role="group" aria-label="Armies per click">
-                  {([1, 5, 0] as const).map((n) => (
-                    <button key={n} type="button" className={step === n ? 'on' : ''} onClick={() => setStep(n)}>
-                      {n === 0 ? 'All' : `+${n}`}
-                    </button>
-                  ))}
-                </div>
-                <details className="income">
-                  <summary>Income: {inc.total}</summary>
-                  <ul>
-                    {inc.lines.map((l) => (
-                      <li key={l.label}>
-                        <span>{l.label}</span>
-                        <span>{l.value > 0 ? `+${l.value}` : l.value}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              </>
-            ) : game.phase === 'attack' ? (
-              <>
-                <p className="kicker">Your turn · Attack</p>
-                {sel !== null && tgt !== null && odds !== null ? (
-                  <>
-                    <h2>
-                      {TERRITORIES[sel].name} → {TERRITORIES[tgt].name}
-                    </h2>
-                    <p className="odds">
-                      {game.territories[sel].armies} vs {game.territories[tgt].armies} · win chance <b>{Math.round(odds * 100)}%</b>
-                    </p>
-                    <DiceNote game={game} from={sel} to={tgt} />
-                    <div className="row">
-                      <button type="button" className="btn" onClick={() => attack(false)}>
-                        Roll once
-                      </button>
-                      <button type="button" className="btn btn-primary" onClick={() => attack(true)}>
-                        Attack all-out
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <p className="hint">Select one of your territories with 2+ armies, then a highlighted neighbour.</p>
-                )}
-                <button type="button" className="btn btn-ghost" onClick={() => act({ kind: 'endAttack' })}>
-                  End attacks → fortify
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="kicker">Your turn · Fortify</p>
-                {sel !== null && tgt !== null ? (
-                  <>
-                    <h2>
-                      {TERRITORIES[sel].name} → {TERRITORIES[tgt].name}
-                    </h2>
-                    <label className="slider-row" htmlFor="fort-n">
-                      <input
-                        id="fort-n"
-                        type="range"
-                        min={1}
-                        max={Math.max(1, game.territories[sel].armies - 1)}
-                        value={fortN}
-                        onChange={(e) => setFortN(Number(e.target.value))}
-                      />
-                      <b>{fortN}</b>
-                    </label>
-                    <button type="button" className="btn btn-primary" onClick={() => act({ kind: 'fortify', from: sel, to: tgt, n: fortN })}>
-                      Move and end turn
-                    </button>
-                  </>
-                ) : (
-                  <p className="hint">Optionally move armies once through your own territory, then end your turn.</p>
-                )}
-                <button type="button" className="btn btn-ghost" onClick={() => act({ kind: 'endTurn' })}>
-                  End turn
-                </button>
-              </>
-            )}
-          </section>
-
-          {/* Selected territory */}
-          {sel !== null && <TerritoryCard game={game} t={sel} />}
-
-          {/* Cards */}
-          <section className="card">
-            <h3>Crisis cards</h3>
-            {game.powers[me].cards.length === 0 ? (
-              <p className="hint">Conquer at least one territory in a turn to draw a card.</p>
-            ) : (
-              <ul className="cards">
-                {game.powers[me].cards.map((c, i) => {
-                  const def = CARDS[c];
-                  const usable = myTurn && !game.pendingMove && (game.phase === 'deploy' || (game.phase === 'attack' && c !== 'arms-race'));
-                  return (
-                    <li key={`${c}-${i}`}>
-                      <button
-                        type="button"
-                        className={`crisis ${cardMode === i ? 'on' : ''}`}
-                        disabled={!usable}
-                        onClick={() => {
-                          if (def.target === 'none') act({ kind: 'play', card: i });
-                          else setCardMode(cardMode === i ? null : i);
-                        }}
-                      >
-                        <span className="crisis-name">{def.name}</span>
-                        <span className="crisis-text">{def.text}</span>
-                      </button>
-                      {cardMode === i && def.target === 'power' && (
-                        <div className="power-pick">
-                          {POWERS.filter((p) => p.id !== me && game.powers[p.id].alive && !(c === 'detente' && hasPact(game, me, p.id))).map((p) => (
-                            <button key={p.id} type="button" className="btn btn-small" onClick={() => (act({ kind: 'play', card: i, target: p.id }), setCardMode(null))}>
-                              <PowerDot p={p.id} /> {p.short}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {cardMode === i && def.target !== 'power' && <p className="hint">Pick a highlighted minor state on the map.</p>}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          {/* Powers */}
-          <section className="card">
-            <h3>Great powers</h3>
-            <ul className="powers">
-              {POWERS.map((p) => {
-                const ps = game.powers[p.id];
-                const pact = pactWith(game, me, p.id);
-                const canPropose = myTurn && p.id !== me && ps.alive && !pact && !game.proposedThisRound.includes(p.id);
-                return (
-                  <li key={p.id} className={ps.alive ? '' : 'dead'}>
-                    <div className="pw-row">
-                      <PowerDot p={p.id} />
-                      <span className="pw-name">
-                        {p.name}
-                        {p.id === me && <em> (you)</em>}
-                      </span>
-                      <span className="pw-num">{ownedBy(game, p.id).length}</span>
-                    </div>
-                    <div className="share-bar" title={`${Math.round(sh[p.id] * 100)}% of great-power strength`}>
-                      <i style={{ width: `${sh[p.id] * 100}%`, background: p.color }} />
-                    </div>
-                    <div className="pw-tags">
-                      {!ps.alive && <span className="tag">Eliminated</span>}
-                      {game.coalition === p.id && <span className="tag tag-hot">Coalition target</span>}
-                      {pact && <span className="tag">Pact · {pact.until - game.round + 1}r</span>}
-                      {p.id !== me && ps.alive && game.pacts.some((x) => (x.a === p.id || x.b === p.id) && x.a !== me && x.b !== me) && (
-                        <span className="tag tag-muted">
-                          Pact with{' '}
-                          {game.pacts
-                            .filter((x) => (x.a === p.id || x.b === p.id) && x.a !== me && x.b !== me)
-                            .map((x) => POWER[x.a === p.id ? x.b : x.a].short)
-                            .join(', ')}
-                        </span>
-                      )}
-                      <span className="tag tag-muted">Rep {ps.reputation}</span>
-                      {canPropose && (
-                        <button type="button" className="btn btn-small" onClick={() => act({ kind: 'propose', to: p.id })}>
-                          Propose pact
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-
-        </aside>
+        )}
       </div>
+
+      {/* ---------- Card hand ---------- */}
+      <Hand
+        game={game}
+        me={me}
+        myTurn={myTurn}
+        cardMode={cardMode}
+        setCardMode={setCardMode}
+        act={act}
+        phone={phone}
+        open={drawer === 'cards'}
+        setOpen={(o) => setDrawer(o ? 'cards' : null)}
+      />
+
+      {/* ---------- Phase dock ---------- */}
+      <section className={`g-dock glass ${myTurn ? 'mine' : ''}`} aria-label="Your move">
+        <div className="phases" aria-hidden={!myTurn}>
+          {(['deploy', 'attack', 'fortify'] as const).map((ph, i) => (
+            <span
+              key={ph}
+              className={`phase ${myTurn && game.phase === ph ? 'on' : ''} ${myTurn && ['deploy', 'attack', 'fortify'].indexOf(game.phase) > i ? 'done' : ''}`}
+            >
+              <i>{i + 1}</i>
+              {ph}
+            </span>
+          ))}
+        </div>
+        <div className="dock-body">
+          {over ? (
+            <>
+              <div className="dock-main">
+                <span className="dock-kicker">The game is over</span>
+                <span className="dock-title">{game.endReason === 'nuclear' ? 'Midnight.' : game.winner === me ? 'Victory.' : 'Defeat.'}</span>
+              </div>
+              <button type="button" className="btn primary big" onClick={onEnd}>
+                See the verdict
+              </button>
+            </>
+          ) : !myTurn ? (
+            <>
+              <div className="dock-main">
+                <span className="dock-kicker">
+                  Round {game.round} · {game.phase === 'deploy' ? 'Mobilizing' : game.phase === 'attack' ? 'Conducting operations' : 'Repositioning'}
+                </span>
+                <span className="dock-title enemy">
+                  <PowerDot p={turnOf} /> {POWER[turnOf].name}
+                </span>
+                <span className="scan" aria-hidden="true">
+                  <i />
+                </span>
+              </div>
+              <span className="dock-hint hide-phone">Speed up enemy turns with the ▸▸ control.</span>
+            </>
+          ) : game.pendingMove ? (
+            <>
+              <div className="dock-main">
+                <span className="dock-kicker">Territory taken · move in</span>
+                <span className="dock-title">{TERRITORIES[game.pendingMove.to].name}</span>
+              </div>
+              <label className="slider" htmlFor="move-n">
+                <input
+                  id="move-n"
+                  type="range"
+                  min={game.pendingMove.min}
+                  max={game.pendingMove.max}
+                  value={moveN}
+                  onChange={(e) => setMoveN(Number(e.target.value))}
+                />
+                <b>{moveN}</b>
+              </label>
+              <button type="button" className="btn primary" onClick={() => act({ kind: 'move', n: moveN })}>
+                Move {moveN}
+              </button>
+            </>
+          ) : game.phase === 'deploy' ? (
+            <>
+              <div className="dock-main">
+                <span className="dock-kicker">Reinforcements</span>
+                <span className="dock-title">
+                  <span className="big-num">{game.reinforcements}</span> to deploy
+                </span>
+                <IncomeLine game={game} />
+              </div>
+              <span className="dock-hint hide-phone">Click your territories to place armies.</span>
+              <div className="seg" role="group" aria-label="Armies per click">
+                {([1, 5, 0] as const).map((n) => (
+                  <button key={n} type="button" className={step === n ? 'on' : ''} onClick={() => setStep(n)} aria-pressed={step === n}>
+                    {n === 0 ? 'All' : `+${n}`}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : game.phase === 'attack' ? (
+            <>
+              {sel !== null && tgt !== null && !attackBlocker(game, sel, tgt) ? (
+                <>
+                  <div className="dock-main">
+                    <span className="dock-kicker">
+                      {game.territories[sel].armies} vs {game.territories[tgt].armies} · {Math.round(oddsFn(sel, tgt) * 100)}% to take it
+                    </span>
+                    <span className="dock-title small">
+                      {TERRITORIES[sel].name} <span className="arrow">→</span> {TERRITORIES[tgt].name}
+                    </span>
+                  </div>
+                  <div className="dock-actions">
+                    <button type="button" className="btn" onClick={() => attack(false)}>
+                      Roll once
+                    </button>
+                    <button type="button" className="btn danger big" onClick={() => attack(true)}>
+                      Attack all-out
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="dock-main">
+                  <span className="dock-kicker">Attack</span>
+                  <span className="dock-title small">
+                    {sel !== null && game.territories[sel].owner === me
+                      ? game.territories[sel].armies < 2
+                        ? 'Need 2+ armies here to attack.'
+                        : 'Choose a highlighted enemy.'
+                      : 'Select one of your territories.'}
+                  </span>
+                </div>
+              )}
+              <button type="button" className="btn ghost" onClick={() => act({ kind: 'endAttack' })} title="Enter">
+                End attacks →
+              </button>
+            </>
+          ) : (
+            <>
+              {sel !== null && tgt !== null ? (
+                <>
+                  <div className="dock-main">
+                    <span className="dock-kicker">Fortify</span>
+                    <span className="dock-title small">
+                      {TERRITORIES[sel].name} → {TERRITORIES[tgt].name}
+                    </span>
+                  </div>
+                  <label className="slider" htmlFor="fort-n">
+                    <input
+                      id="fort-n"
+                      type="range"
+                      min={1}
+                      max={Math.max(1, game.territories[sel].armies - 1)}
+                      value={fortN}
+                      onChange={(e) => setFortN(Number(e.target.value))}
+                    />
+                    <b>{fortN}</b>
+                  </label>
+                  <button type="button" className="btn primary" onClick={() => act({ kind: 'fortify', from: sel, to: tgt, n: fortN })}>
+                    Move & end turn
+                  </button>
+                </>
+              ) : (
+                <div className="dock-main">
+                  <span className="dock-kicker">Fortify (optional)</span>
+                  <span className="dock-title small">Move armies once through your own territory.</span>
+                </div>
+              )}
+              <button type="button" className="btn ghost" onClick={() => act({ kind: 'endTurn' })} title="Enter">
+                End turn →
+              </button>
+            </>
+          )}
+        </div>
+      </section>
 
       {game.offer && myTurn && (
         <Modal>
-          <p className="kicker">Diplomatic cable</p>
-          <h2>{POWER[game.offer.from].name} proposes a non-aggression pact</h2>
-          <p>Five rounds of peace on your shared border. Breaking it later will cost you 30 reputation.</p>
+          <span className="modal-kicker">Diplomatic cable · {POWER[game.offer.from].name}</span>
+          <h2>A non-aggression pact is offered</h2>
+          <p>Five rounds of peace on your shared border. Breaking it later costs you 30 reputation.</p>
           <div className="row">
-            <button type="button" className="btn btn-primary" onClick={() => act({ kind: 'answerOffer', accept: true })}>
+            <button type="button" className="btn primary" onClick={() => act({ kind: 'answerOffer', accept: true })}>
               Sign
             </button>
             <button type="button" className="btn" onClick={() => act({ kind: 'answerOffer', accept: false })}>
@@ -621,11 +694,18 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
 
       {confirm && confirm.kind === 'attack' && (
         <Modal>
-          <p className="kicker">Break the pact?</p>
-          <h2>You have a non-aggression pact with {POWER[game.territories[confirm.to].owner!].name}</h2>
-          <p>Attacking tears it up. Your reputation drops by 30, and other powers will be less willing to sign with you.</p>
+          <span className="modal-kicker hot">Break the pact?</span>
+          <h2>You have a pact with {POWER[game.territories[confirm.to].owner!].name}</h2>
+          <p>Attacking tears it up. Your reputation drops by 30 and other powers will trust your signature less.</p>
           <div className="row">
-            <button type="button" className="btn btn-danger" onClick={() => (doAttack(confirm), setConfirm(null))}>
+            <button
+              type="button"
+              className="btn danger"
+              onClick={() => {
+                doAttack(confirm);
+                setConfirm(null);
+              }}
+            >
               Attack anyway
             </button>
             <button type="button" className="btn" onClick={() => setConfirm(null)}>
@@ -634,24 +714,111 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
           </div>
         </Modal>
       )}
+
       {screenOverlay}
     </div>
   );
 }
 
-function Stat({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
+function SpeedIcon({ n }: { n: number }) {
+  return (
+    <svg viewBox={`0 0 ${8 * n + 4} 12`} width={8 * n + 4} height="12" aria-hidden="true">
+      {Array.from({ length: n }, (_, i) => (
+        <path key={i} d={`M${2 + i * 8},1 L${9 + i * 8},6 L${2 + i * 8},11 Z`} fill="currentColor" />
+      ))}
+    </svg>
+  );
+}
+
+function Stat({ label, value, sub, onClick, hideOnPhone }: { label: string; value: string; sub?: string; onClick?: () => void; hideOnPhone?: boolean }) {
   const inner = (
     <>
       <span className="stat-label">{label}</span>
-      <span className="stat-value">{value}</span>
+      <span className="stat-value">
+        {value}
+        {sub && <small>{sub}</small>}
+      </span>
     </>
   );
+  const cls = `stat ${hideOnPhone ? 'hide-phone' : ''}`;
   return onClick ? (
-    <button type="button" className="stat" onClick={onClick}>
+    <button type="button" className={`${cls} as-btn`} onClick={onClick}>
       {inner}
     </button>
   ) : (
-    <div className="stat">{inner}</div>
+    <div className={cls}>{inner}</div>
+  );
+}
+
+function IncomeLine({ game }: { game: GameState }) {
+  const inc = income(game, game.player);
+  return (
+    <span className="income">
+      {inc.lines.map((l) => (
+        <span key={l.label} className={l.value < 0 ? 'neg' : ''}>
+          {l.value > 0 ? '+' : ''}
+          {l.value} {/territories/.test(l.label) ? 'territories' : l.label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function Dossier({ game, t, tgt, odds, onClose }: { game: GameState; t: number; tgt: number | null; odds: number | null; onClose: () => void }) {
+  const focus = tgt ?? t;
+  const def = TERRITORIES[focus];
+  const st = game.territories[focus];
+  const region = REGIONS.find((r) => r.id === def.region)!;
+  const core = coreOf(focus);
+  const cap = capitalOf(focus);
+  const members = REGION_MEMBERS[region.id];
+  const color = st.owner ? POWER[st.owner].color : NEUTRAL;
+  return (
+    <aside className="g-dossier glass" style={{ '--c': color } as CSSProperties} aria-label="Territory intelligence" key={focus}>
+      <button type="button" className="dossier-close" onClick={onClose} aria-label="Close">
+        ×
+      </button>
+      <span className="dossier-kicker">
+        {region.name} · +{region.bonus}
+      </span>
+      <h2 className="dossier-name">{def.name}</h2>
+      <div className="dossier-owner">
+        <i className="pdot" style={{ background: color }} />
+        {st.owner ? POWER[st.owner].name : 'Minor state'}
+        <span className="dossier-armies">
+          <span className="big-num">{st.armies}</span> armies
+        </span>
+      </div>
+      {(cap || core) && (
+        <div className="plaque-tags">
+          {cap && <span className="tag">★ Capital of {POWER[cap].short}</span>}
+          {core && !cap && <span className="tag">{POWER[core].short} homeland</span>}
+          {core && <span className="tag hot">Striking it moves the clock</span>}
+        </div>
+      )}
+      <div className="dossier-region" aria-label={`${region.name} control`}>
+        {members.map((m) => (
+          <i
+            key={m}
+            title={TERRITORIES[m].name}
+            style={{ background: game.territories[m].owner ? POWER[game.territories[m].owner!].color : NEUTRAL }}
+            className={m === focus ? 'cur' : ''}
+          />
+        ))}
+      </div>
+      {odds !== null && tgt !== null && (
+        <div className="dossier-odds">
+          <div className="odds-bar">
+            <i style={{ width: `${odds * 100}%` }} />
+          </div>
+          <span>
+            <b>{Math.round(odds * 100)}%</b> chance an all-out attack takes it
+          </span>
+          <DiceNote game={game} from={t} to={tgt} />
+        </div>
+      )}
+      <p className="dossier-borders">Borders {def.adj.map((u) => TERRITORIES[u].name).join(' · ')}</p>
+    </aside>
   );
 }
 
@@ -661,48 +828,95 @@ function DiceNote({ game, from, to }: { game: GameState; from: number; to: numbe
   if (d.amphibious && game.territories[from].owner !== 'usa') notes.push('Amphibious: max 2 dice.');
   if (game.era === 'defense') notes.push('Defense era: +1 to their best die.');
   if (game.era === 'offense' || game.blitz) notes.push('You win ties.');
-  const def = game.territories[to].owner;
-  if (def && coreOf(to) === def) notes.push('Homeland strike: the Doomsday Clock will move.');
-  return <p className="hint">{notes.join(' ')}</p>;
+  return <span className="dice-note">{notes.join(' ')}</span>;
 }
 
-function TerritoryCard({ game, t }: { game: GameState; t: number }) {
-  const def = TERRITORIES[t];
-  const st = game.territories[t];
-  const region = REGIONS.find((r) => r.id === def.region)!;
-  const core = coreOf(t);
-  const cap = capitalOf(t);
-  const neighbours = def.adj.map((u) => TERRITORIES[u].name);
+function Hand({
+  game,
+  me,
+  myTurn,
+  cardMode,
+  setCardMode,
+  act,
+  phone,
+  open,
+  setOpen,
+}: {
+  game: GameState;
+  me: PowerId;
+  myTurn: boolean;
+  cardMode: number | null;
+  setCardMode: (n: number | null) => void;
+  act: (a: Action) => GameState;
+  phone: boolean;
+  open: boolean;
+  setOpen: (o: boolean) => void;
+}) {
+  const cards = game.powers[me].cards;
+  const usable = (c: CardId) => myTurn && !game.pendingMove && (game.phase === 'deploy' || (game.phase === 'attack' && c !== 'arms-race'));
+  if (phone && !open)
+    return (
+      <button type="button" className="hand-toggle glass" onClick={() => setOpen(true)} disabled={!cards.length}>
+        Cards <b>{cards.length}</b>
+      </button>
+    );
   return (
-    <section className="card terr-card" style={{ ['--pc' as string]: st.owner ? POWER[st.owner].color : '#56606d' }}>
-      <p className="kicker">{region.name}</p>
-      <h3 className="terr-name">{def.name}</h3>
-      <p>
-        {st.owner ? (
-          <>
-            <PowerDot p={st.owner} /> {POWER[st.owner].name}
-          </>
-        ) : (
-          'Minor state'
-        )}{' '}
-        · <b>{st.armies}</b> armies
-      </p>
-      <div className="pw-tags">
-        {cap && <span className="tag">Capital of {POWER[cap].short}</span>}
-        {core && !cap && <span className="tag">{POWER[core].short} homeland</span>}
-      </div>
-      <p className="hint">
-        Borders: {neighbours.join(', ')}
-      </p>
-    </section>
+    <div className={`g-hand ${phone ? 'sheet glass' : ''}`} aria-label="Crisis cards">
+      {phone && (
+        <button type="button" className="sheet-close link" onClick={() => setOpen(false)}>
+          Close
+        </button>
+      )}
+      {cards.length === 0 && !phone && <span className="hand-empty">Win a territory in a turn to draw a crisis card.</span>}
+      {cards.map((c, i) => {
+        const def = CARDS[c];
+        const n = cards.length;
+        const angle = phone ? 0 : (i - (n - 1) / 2) * 5;
+        const lift = phone ? 0 : Math.pow(Math.abs(i - (n - 1) / 2), 1.6) * 5;
+        return (
+          <div key={`${c}-${i}`} className="card-slot" style={{ '--a': `${angle}deg`, '--l': `${lift}px` } as CSSProperties}>
+            <button
+              type="button"
+              className={`crisis ${cardMode === i ? 'on' : ''}`}
+              disabled={!usable(c)}
+              onClick={() => {
+                if (def.target === 'none') act({ kind: 'play', card: i });
+                else setCardMode(cardMode === i ? null : i);
+              }}
+            >
+              <CardGlyph id={c} />
+              <span className="crisis-name">{def.name}</span>
+              <span className="crisis-text">{def.text}</span>
+            </button>
+            {cardMode === i && def.target === 'power' && (
+              <div className="power-pick glass">
+                {POWERS.filter((p) => p.id !== me && game.powers[p.id].alive && !(c === 'detente' && hasPact(game, me, p.id))).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="btn small"
+                    onClick={() => {
+                      act({ kind: 'play', card: i, target: p.id });
+                      setCardMode(null);
+                    }}
+                  >
+                    <PowerDot p={p.id} /> {p.short}
+                  </button>
+                ))}
+              </div>
+            )}
+            {cardMode === i && def.target !== 'power' && <span className="pick-hint">Pick a highlighted minor state</span>}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
 function Modal({ children }: { children: React.ReactNode }) {
   return (
     <div className="overlay" role="dialog" aria-modal="true">
-      <div className="modal">{children}</div>
+      <div className="modal glass">{children}</div>
     </div>
   );
 }
-

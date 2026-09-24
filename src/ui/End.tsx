@@ -109,7 +109,7 @@ export function End({ game, onAgain, onMenu, onCodex }: { game: GameState; onAga
   }, [mode]);
 
   return (
-    <main className={`end end-${mode}`}>
+    <main className={`end end-${mode}`} style={{ '--me': POWER[me].color } as CSSProperties}>
       <Weather mode={mode} color={POWER[me].color} />
       <header className={`end-hero ${mode}`}>
         <p className="kicker">{REASON[game.endReason!]} · Round {Math.min(game.round, 20)}</p>
@@ -155,7 +155,7 @@ export function End({ game, onAgain, onMenu, onCodex }: { game: GameState; onAga
       </div>
 
       <div className="row">
-        <button type="button" className="btn btn-primary btn-big" onClick={onAgain}>
+        <button type="button" className="btn primary huge" onClick={onAgain}>
           Play again as {POWER[me].name}
         </button>
         <button type="button" className="btn" onClick={onMenu}>

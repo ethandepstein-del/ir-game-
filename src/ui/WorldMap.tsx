@@ -1,16 +1,19 @@
-import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { POWER, REGIONS, TERRITORIES } from '../data/world';
 import { capitalOf } from '../engine/game';
 import type { GameState } from '../engine/types';
 import type { FxEngine } from './fx/particles';
-import { GEO, MAP_H, MAP_W } from './geometry';
+import { GEO, MAP_H, MAP_W, S } from './geometry';
 
-const NEUTRAL = '#56606d';
+export const NEUTRAL = '#4a5868';
+const SQ3 = Math.sqrt(3);
 
 export interface Highlight {
   selected: number | null;
   targets: Set<number>;
   mode: 'attack' | 'fortify' | 'card' | 'deploy' | 'none';
+  /** Committed target (attack/fortify), if any. */
+  aimTo?: number | null;
 }
 
 interface Props {
@@ -18,32 +21,40 @@ interface Props {
   highlight: Highlight;
   onPick: (t: number) => void;
   fx: FxEngine;
+  /** Attack odds for the arrow label. */
+  odds?: (from: number, to: number) => number;
   overlay?: ReactNode;
-  shakeClass?: string;
   shakeKey?: number;
+  shakeLevel?: number;
+  /** Screen-space insets (px) the HUD covers, so "fit" frames the world inside them. */
+  insets?: { top: number; right: number; bottom: number; left: number };
 }
 
 type Box = { x: number; y: number; w: number };
-const FULL: Box = { x: 0, y: 0, w: MAP_W };
 
-export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = '', shakeKey = 0 }: Props) {
+const ALL_LAND = GEO.paths.join('');
+
+export function WorldMap({ game, highlight, onPick, fx, odds, overlay, shakeKey = 0, shakeLevel = 1, insets }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const view = useRef({ x: 0, y: 0, k: 1 });
-  const [box, setBox] = useState<Box>(FULL);
-  const [size, setSize] = useState({ w: 1000, h: 1000 * (MAP_H / MAP_W) });
-  const drag = useRef<{ x: number; y: number; box: Box; moved: boolean } | null>(null);
-  const [hoverT, setHoverT] = useState<number | null>(null);
   const tip = useRef<HTMLDivElement>(null);
-  const px = size.w;
+  const view = useRef({ x: 0, y: 0, k: 1 });
+  const [size, setSize] = useState({ w: 1200, h: 800 });
+  const [box, setBox] = useState<Box>({ x: 0, y: 0, w: MAP_W });
+  const [hoverT, setHoverT] = useState<number | null>(null);
+  const drag = useRef<{ x: number; y: number; box: Box; moved: boolean } | null>(null);
+  const pinch = useRef<{ d: number; box: Box; cx: number; cy: number } | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
   const aspect = size.h / size.w;
+  const px = size.w;
+  const k = box.w / px;
   const h = box.w * aspect;
-  const home = GEO.labels[TERRITORIES.findIndex((t) => t.id === POWER[game.player].capital)];
+  view.current = { x: box.x, y: box.y, k };
 
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
-    const measure = () => setSize({ w: el.clientWidth || 1000, h: el.clientHeight || 600 });
+    const measure = () => setSize({ w: el.clientWidth || 1200, h: el.clientHeight || 800 });
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -52,37 +63,51 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
 
   const clampBox = useCallback(
     (b: Box): Box => {
-      const maxW = Math.min(MAP_W, MAP_H / aspect);
-      const w = Math.min(maxW, Math.max(MAP_W / 6, b.w));
+      const w = Math.min(MAP_W * 1.2, Math.max(MAP_W / 7, b.w));
       const vh = w * aspect;
-      const y = vh >= MAP_H ? (MAP_H - vh) / 2 : Math.min(MAP_H - vh, Math.max(0, b.y));
-      return { w, x: Math.min(MAP_W - w, Math.max(0, b.x)), y };
+      const padX = w * 0.2;
+      const padY = vh * 0.2;
+      const x = Math.min(Math.max(MAP_W - w, 0) + padX, Math.max(Math.min(0, MAP_W - w) - padX, b.x));
+      const y = Math.min(Math.max(MAP_H - vh, 0) + padY, Math.max(Math.min(0, MAP_H - vh) - padY, b.y));
+      return { w, x, y };
     },
     [aspect],
   );
 
   const fit = useCallback(() => {
-    // Phones start zoomed in on your capital; wide screens see the whole world.
-    const w = px < 700 ? MAP_W / 3 : MAP_W;
-    setBox(clampBox({ w, x: home[0] - w / 2, y: home[1] - (w * aspect) / 2 }));
-  }, [px, aspect, clampBox, home]);
+    const ins = insets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    const availW = Math.max(200, size.w - ins.left - ins.right);
+    const availH = Math.max(200, size.h - ins.top - ins.bottom);
+    // Units per pixel so the whole world fits in the free area.
+    const kFit = Math.max(MAP_W / availW, MAP_H / availH) * 1.02;
+    const phone = size.w < 760;
+    const kk = phone ? kFit / 2.6 : kFit;
+    const home = GEO.labels[TERRITORIES.findIndex((t) => t.id === POWER[game.player].capital)];
+    const cx = phone ? home[0] : MAP_W / 2;
+    const cy = phone ? home[1] : MAP_H / 2;
+    // Centre the target in the free area rather than the full canvas.
+    const x = cx - (ins.left + availW / 2) * kk;
+    const y = cy - (ins.top + availH / 2) * kk;
+    setBox(clampBox({ w: size.w * kk, x, y }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.w, size.h, insets?.top, insets?.right, insets?.bottom, insets?.left, clampBox, game.player]);
 
   useEffect(() => {
     fit();
-    // Refit only when the container changes shape.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [px, aspect]);
+  }, [fit]);
 
-  const zoom = useCallback(
-    (factor: number, cx?: number, cy?: number) => {
+  const zoomAt = useCallback(
+    (factor: number, sx?: number, sy?: number) => {
       setBox((b) => {
-        const fx = cx ?? b.x + b.w / 2;
-        const fy = cy ?? b.y + (b.w * aspect) / 2;
+        const k0 = b.w / size.w;
+        const fx0 = b.x + (sx ?? size.w / 2) * k0;
+        const fy0 = b.y + (sy ?? size.h / 2) * k0;
         const w = b.w * factor;
-        return clampBox({ w, x: fx - ((fx - b.x) / b.w) * w, y: fy - ((fy - b.y) / (b.w * aspect)) * w * aspect });
+        const k1 = w / size.w;
+        return clampBox({ w, x: fx0 - (sx ?? size.w / 2) * k1, y: fy0 - (sy ?? size.h / 2) * k1 });
       });
     },
-    [aspect, clampBox],
+    [size.w, size.h, clampBox],
   );
 
   useEffect(() => {
@@ -91,21 +116,11 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      setBox((b) => {
-        const k = b.w / r.width;
-        const cx = b.x + (e.clientX - r.left) * k;
-        const cy = b.y + (e.clientY - r.top) * k;
-        const w = b.w * (e.deltaY > 0 ? 1.15 : 1 / 1.15);
-        return clampBox({ w, x: cx - ((cx - b.x) / b.w) * w, y: cy - ((cy - b.y) / b.w) * w });
-      });
+      zoomAt(e.deltaY > 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [clampBox]);
-
-  const k = box.w / px; // SVG units per screen pixel
-  const r = (px < 700 ? 11 : 9.5) * k;
-  view.current = { x: box.x, y: box.y, k };
+  }, [zoomAt]);
 
   useEffect(() => {
     fx.attach(canvas.current, () => view.current);
@@ -114,8 +129,7 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
 
   useEffect(() => {
     if (!shakeKey || !wrap.current || fx.reduced) return;
-    const level = Number(shakeClass.replace('shake-', '')) || 1;
-    const a = 3 * level;
+    const a = 3 * shakeLevel;
     wrap.current.animate(
       [
         { transform: 'translate(0,0)' },
@@ -125,46 +139,84 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
         { transform: `translate(${a * 0.4}px,${a * 0.3}px)` },
         { transform: 'translate(0,0)' },
       ],
-      { duration: 380 + level * 120, easing: 'ease-out' },
+      { duration: 380 + shakeLevel * 120, easing: 'ease-out' },
     );
-  }, [shakeKey, shakeClass, fx]);
+  }, [shakeKey, shakeLevel, fx]);
 
-  const radar = { left: (home[0] - box.x) / k, top: (home[1] - box.y) / k };
+  // ---------- pointer handling (drag to pan, pinch to zoom, tap to pick) ----------
 
   const onDown = (e: React.PointerEvent) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const r = wrap.current!.getBoundingClientRect();
+      pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y), box, cx: (a.x + b.x) / 2 - r.left, cy: (a.y + b.y) / 2 - r.top };
+      if (drag.current) drag.current.moved = true;
+      return;
+    }
     drag.current = { x: e.clientX, y: e.clientY, box, moved: false };
   };
+
   const onMove = (e: React.PointerEvent) => {
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const r = wrap.current!.getBoundingClientRect();
+    if (pinch.current && pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const p = pinch.current;
+      const k0 = p.box.w / size.w;
+      const w = p.box.w * (p.d / Math.max(20, d));
+      const k1 = w / size.w;
+      const fx0 = p.box.x + p.cx * k0;
+      const fy0 = p.box.y + p.cy * k0;
+      setBox(clampBox({ w, x: fx0 - p.cx * k1, y: fy0 - p.cy * k1 }));
+      return;
+    }
     const d = drag.current;
-    if (e.pointerType === 'mouse' && wrap.current) {
+    if (e.pointerType === 'mouse') {
       const el = (e.target as Element).closest('[data-t]');
       const next = el && !d?.moved ? Number(el.getAttribute('data-t')) : null;
       if (next !== hoverT) setHoverT(next);
-      const r = wrap.current.getBoundingClientRect();
-      const x = e.clientX - r.left;
-      const y = e.clientY - r.top;
       if (tip.current) {
-        const flip = x > r.width - 240;
-        tip.current.style.left = `${flip ? x - 14 : x + 14}px`;
-        tip.current.style.top = `${y + 14}px`;
+        const x = e.clientX - r.left;
+        const y = e.clientY - r.top;
+        const flip = x > r.width - 260;
+        tip.current.style.left = `${flip ? x - 16 : x + 16}px`;
+        tip.current.style.top = `${y + 16}px`;
         tip.current.style.transform = flip ? 'translateX(-100%)' : '';
       }
     }
     if (!d) return;
     const dx = e.clientX - d.x;
     const dy = e.clientY - d.y;
-    if (!d.moved && Math.hypot(dx, dy) < 5) return;
+    if (!d.moved && Math.hypot(dx, dy) < 6) return;
     d.moved = true;
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     setBox(clampBox({ w: d.box.w, x: d.box.x - dx * k, y: d.box.y - dy * k }));
   };
-  const onUp = () => {
-    setTimeout(() => (drag.current = null), 0);
+
+  const onUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    setTimeout(() => {
+      if (pointers.current.size === 0) drag.current = null;
+    }, 0);
   };
+
   const pick = (t: number) => {
     if (drag.current?.moved) return;
     onPick(t);
   };
+
+  // ---------- derived visuals ----------
+
+  const tokenPx = px < 760 ? 24 : k > 1.3 ? 26 : 28;
+  const aimTo =
+    highlight.aimTo ??
+    (hoverT !== null && highlight.targets.has(hoverT) && (highlight.mode === 'attack' || highlight.mode === 'fortify') ? hoverT : null);
+  const aimOdds = useMemo(
+    () => (highlight.mode === 'attack' && highlight.selected !== null && aimTo !== null && odds ? odds(highlight.selected, aimTo) : null),
+    [highlight.mode, highlight.selected, aimTo, odds],
+  );
 
   return (
     <div className="map-wrap" ref={wrap}>
@@ -174,68 +226,131 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
-        onPointerLeave={() => {
-          onUp();
+        onPointerCancel={onUp}
+        onPointerLeave={(e) => {
+          onUp(e);
           setHoverT(null);
         }}
         role="img"
         aria-label="World map"
       >
-        <rect x={0} y={0} width={MAP_W} height={MAP_H} className="ocean" />
-        <Graticule />
-        <path d={GEO.lanes} className="lanes" style={{ strokeWidth: 1.4 * k }} />
+        <StaticDefs />
+        <rect x={-MAP_W} y={-MAP_H} width={MAP_W * 3} height={MAP_H * 3} fill="url(#ocean)" />
+        <rect x={-MAP_W} y={-MAP_H} width={MAP_W * 3} height={MAP_H * 3} fill="url(#sonar)" />
+        <StaticUnderlay k={k} />
         <Territories game={game} highlight={highlight} onPick={pick} />
-        <path d={GEO.borders} className="borders" />
-        <path d={GEO.coast} className="coast" />
-        <path d={GEO.regionBorders} className="region-borders" style={{ strokeWidth: Math.max(2.2, 2.6 * k) }} />
+        <StaticOverlay k={k} />
         {[...highlight.targets].map((t) => (
-          <path key={t} d={GEO.outlines[t]} className={`target-outline target-${highlight.mode}`} style={{ strokeWidth: 2 * k }} />
+          <path key={t} d={GEO.outlines[t]} className={`target-outline target-${highlight.mode}`} style={{ strokeWidth: 2.2 * k }} />
         ))}
-        {highlight.selected !== null && <path d={GEO.outlines[highlight.selected]} className="sel-outline" style={{ strokeWidth: 2.5 * k }} />}
-        {game.territories.map((t, i) => {
-          const [x, y] = GEO.labels[i];
-          const color = t.owner ? POWER[t.owner].color : NEUTRAL;
-          const cap = capitalOf(i);
-          return (
-            <g key={i} className="badge" data-t={i} onClick={() => pick(i)}>
-              <circle key={`o${t.owner}`} cx={x} cy={y} r={r} fill="#0b1520" stroke={color} strokeWidth={2 * k} className="badge-ring" />
-              <text key={`n${t.armies}`} x={x} y={y + 3.8 * k} textAnchor="middle" style={{ fontSize: 11 * k }} className="badge-num">
-                {t.armies}
-              </text>
-              {cap && (
-                <path
-                  d={star(x + r * 0.85, y - r * 0.85, 5 * k)}
-                  fill={POWER[cap].color}
-                  stroke="#0b1520"
-                  strokeWidth={0.8 * k}
-                />
-              )}
-              <title>{`${TERRITORIES[i].name}: ${t.owner ? POWER[t.owner].name : 'minor state'}, ${t.armies} armies`}</title>
-            </g>
-          );
-        })}
+        {highlight.selected !== null && (
+          <path d={GEO.outlines[highlight.selected]} className="sel-outline" style={{ strokeWidth: 3 * k }} />
+        )}
+        {highlight.selected !== null && aimTo !== null && (
+          <AimArrow from={highlight.selected} to={aimTo} k={k} mode={highlight.mode} odds={aimOdds} />
+        )}
+        {game.territories.map((t, i) => (
+          <Token
+            key={i}
+            i={i}
+            armies={t.armies}
+            owner={t.owner}
+            size={tokenPx * k}
+            mine={t.owner === game.player}
+            dim={
+              (highlight.mode === 'attack' || highlight.mode === 'fortify' || highlight.mode === 'card') &&
+              highlight.targets.size > 0 &&
+              !highlight.targets.has(i) &&
+              highlight.selected !== i
+            }
+            onPick={pick}
+          />
+        ))}
       </svg>
-      <div className="radar" style={{ left: radar.left, top: radar.top }} aria-hidden="true" />
       <canvas ref={canvas} className="fx-canvas" aria-hidden="true" />
       <div className="map-vignette" aria-hidden="true" />
-      {overlay}
       <div className="map-tip" ref={tip} hidden={hoverT === null}>
         {hoverT !== null && <TipBody game={game} t={hoverT} />}
       </div>
+      {overlay}
       <div className="map-zoom">
-        <button type="button" onClick={() => zoom(1 / 1.4)} aria-label="Zoom in">
-          +
+        <button type="button" onClick={() => zoomAt(1 / 1.35)} aria-label="Zoom in">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
         </button>
-        <button type="button" onClick={() => zoom(1.4)} aria-label="Zoom out">
-          −
+        <button type="button" onClick={() => zoomAt(1.35)} aria-label="Zoom out">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
         </button>
-        <button type="button" onClick={fit} aria-label="Reset view">
-          ⤢
+        <button type="button" onClick={fit} aria-label="Fit the world">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+          </svg>
         </button>
       </div>
     </div>
   );
 }
+
+// ---------- static layers (memoised: they never change) ----------
+
+const StaticDefs = memo(function StaticDefs() {
+  const w = SQ3 * S;
+  const hh = 3 * S;
+  return (
+    <defs>
+      <radialGradient id="ocean" cx="50%" cy="40%" r="75%">
+        <stop offset="0%" stopColor="#0f2a42" />
+        <stop offset="60%" stopColor="#0a1c2e" />
+        <stop offset="100%" stopColor="#050e18" />
+      </radialGradient>
+      <pattern id="sonar" width={w} height={hh} patternUnits="userSpaceOnUse">
+        <circle cx={w / 2} cy={S} r={0.9} fill="#2a4a68" opacity="0.55" />
+        <circle cx={0} cy={S * 2.5} r={0.9} fill="#2a4a68" opacity="0.55" />
+        <circle cx={w} cy={S * 2.5} r={0.9} fill="#2a4a68" opacity="0.55" />
+      </pattern>
+      <linearGradient id="light" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#fff" stopOpacity="0.22" />
+        <stop offset="45%" stopColor="#fff" stopOpacity="0.02" />
+        <stop offset="100%" stopColor="#000" stopOpacity="0.3" />
+      </linearGradient>
+      <linearGradient id="tokenShine" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#fff" stopOpacity="0.45" />
+        <stop offset="55%" stopColor="#fff" stopOpacity="0" />
+      </linearGradient>
+      <marker id="arrow-attack" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#ff5b4f" />
+      </marker>
+      <marker id="arrow-fortify" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5fd39b" />
+      </marker>
+    </defs>
+  );
+});
+
+const StaticUnderlay = memo(function StaticUnderlay({ k }: { k: number }) {
+  return (
+    <g pointerEvents="none">
+      <path d={GEO.coast} className="coast-glow-2" style={{ strokeWidth: Math.max(10, 14 * k) }} />
+      <path d={GEO.coast} className="coast-glow" style={{ strokeWidth: Math.max(4, 5 * k) }} />
+      <path d={GEO.lanes} className="lanes" style={{ strokeWidth: 1.5 * k }} />
+      <path d={ALL_LAND} className="land-side" transform="translate(0 2.4)" />
+    </g>
+  );
+});
+
+const StaticOverlay = memo(function StaticOverlay({ k }: { k: number }) {
+  return (
+    <g pointerEvents="none">
+      <path d={ALL_LAND} fill="url(#light)" className="land-light" />
+      <path d={GEO.borders} className="borders" style={{ strokeWidth: Math.max(1.1, 1.5 * k) }} />
+      <path d={GEO.regionBorders} className="region-borders" style={{ strokeWidth: Math.max(1.8, 2.6 * k) }} />
+      <path d={GEO.coast} className="coast" />
+    </g>
+  );
+});
 
 const Territories = memo(function Territories({
   game,
@@ -251,36 +366,132 @@ const Territories = memo(function Territories({
       {GEO.paths.map((d, i) => {
         const o = game.territories[i].owner;
         const target = highlight.targets.has(i);
-        const cls = `terr ${target ? 'target' : ''} ${highlight.selected === i ? 'selected' : ''}`;
+        const cls = `terr ${target ? `target t-${highlight.mode}` : ''} ${highlight.selected === i ? 'selected' : ''}`;
         return <path key={i} d={d} data-t={i} fill={o ? POWER[o].color : NEUTRAL} className={cls} onClick={() => onPick(i)} />;
       })}
     </g>
   );
 });
 
+// ---------- tokens ----------
+
+function hexPoints(cx: number, cy: number, r: number, squash = 1): string {
+  const pts: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i;
+    pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a) * squash).toFixed(2)}`);
+  }
+  return pts.join(' ');
+}
+
+function shade(hex: string, f: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(Math.max(0, Math.min(255, v * f))));
+  return `rgb(${c.join(',')})`;
+}
+
+const Token = memo(function Token({
+  i,
+  armies,
+  owner,
+  size,
+  mine,
+  dim,
+  onPick,
+}: {
+  i: number;
+  armies: number;
+  owner: GameState['territories'][number]['owner'];
+  size: number;
+  mine: boolean;
+  dim: boolean;
+  onPick: (t: number) => void;
+}) {
+  const [x, y] = GEO.labels[i];
+  const color = owner ? POWER[owner].color : NEUTRAL;
+  const r = size / 2;
+  const depth = r * 0.34;
+  const layers = armies >= 12 ? 3 : armies >= 5 ? 2 : 1;
+  const cap = capitalOf(i);
+  const top = y - (layers - 1) * depth * 0.9;
+  return (
+    <g className={`token ${dim ? 'dim' : ''}`} data-t={i} onClick={() => onPick(i)}>
+      <ellipse cx={x} cy={y + depth + r * 0.55} rx={r * 1.05} ry={r * 0.38} className="token-shadow" />
+      {Array.from({ length: layers }, (_, l) => {
+        const cy = y - l * depth * 0.9;
+        return (
+          <g key={`${l}-${owner}`} className={l === layers - 1 ? 'token-top' : undefined}>
+            <polygon points={hexPoints(x, cy + depth, r, 0.9)} fill={shade(color, 0.45)} />
+            <polygon points={hexPoints(x, cy, r, 0.9)} fill={shade(color, l === layers - 1 ? 1 : 0.8)} stroke={shade(color, 0.35)} strokeWidth={r * 0.07} />
+          </g>
+        );
+      })}
+      <polygon points={hexPoints(x, top, r * 0.92, 0.9)} fill="url(#tokenShine)" className="token-shine" />
+      {mine && <polygon points={hexPoints(x, top, r * 1.14, 0.9)} fill="none" className="token-mine" style={{ strokeWidth: r * 0.1 }} />}
+      <text key={`n${armies}`} x={x} y={top + r * 0.42} textAnchor="middle" className="token-num" style={{ fontSize: r * 1.2, strokeWidth: r * 0.22 }}>
+        {armies}
+      </text>
+      {cap && <path d={star(x, top - r * 1.28, r * 0.55)} fill={POWER[cap].color} className="token-star" style={{ strokeWidth: r * 0.09 }} />}
+    </g>
+  );
+});
+
+function AimArrow({ from, to, k, mode, odds }: { from: number; to: number; k: number; mode: Highlight['mode']; odds: number | null }) {
+  const [x1, y1] = GEO.labels[from];
+  const [x2, y2] = GEO.labels[to];
+  if (Math.abs(x1 - x2) > MAP_W / 2) return null;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const trim = 16 * k;
+  const sx = x1 + (dx / len) * trim;
+  const sy = y1 + (dy / len) * trim;
+  const ex = x2 - (dx / len) * trim * 1.2;
+  const ey = y2 - (dy / len) * trim * 1.2;
+  const mx = (sx + ex) / 2 + (-dy / len) * len * 0.18;
+  const my = (sy + ey) / 2 + (dx / len) * len * 0.18 - len * 0.1;
+  const lx = 0.25 * sx + 0.5 * mx + 0.25 * ex;
+  const ly = 0.25 * sy + 0.5 * my + 0.25 * ey;
+  const attack = mode === 'attack';
+  const pct = odds !== null ? Math.round(odds * 100) : null;
+  const tone = pct === null ? '' : pct >= 65 ? 'good' : pct >= 40 ? 'even' : 'bad';
+  const d = `M${sx},${sy} Q${mx},${my} ${ex},${ey}`;
+  return (
+    <g className={`aim ${attack ? 'aim-attack' : 'aim-fortify'}`} pointerEvents="none">
+      <path d={d} className="aim-under" style={{ strokeWidth: 7 * k }} />
+      <path d={d} className="aim-line" style={{ strokeWidth: 3.2 * k, strokeDasharray: `${9 * k} ${6 * k}` }} markerEnd={`url(#arrow-${attack ? 'attack' : 'fortify'})`} />
+      {pct !== null && (
+        <g transform={`translate(${lx} ${ly})`}>
+          <rect x={-25 * k} y={-12 * k} width={50 * k} height={23 * k} rx={11.5 * k} className={`aim-chip ${tone}`} style={{ strokeWidth: 1.5 * k }} />
+          <text y={5 * k} textAnchor="middle" className="aim-text" style={{ fontSize: 14 * k }}>
+            {pct}%
+          </text>
+        </g>
+      )}
+    </g>
+  );
+}
+
 function TipBody({ game, t }: { game: GameState; t: number }) {
   const def = TERRITORIES[t];
   const st = game.territories[t];
   const region = REGIONS.find((r) => r.id === def.region)!;
+  const cap = capitalOf(t);
   return (
     <>
+      <span className="tip-region">
+        {region.name} · +{region.bonus}
+      </span>
       <span className="tip-name">{def.name}</span>
       <span className="tip-meta">
-        <i className="pdot" style={{ background: st.owner ? POWER[st.owner].color : NEUTRAL }} /> {st.owner ? POWER[st.owner].name : 'Minor state'} · <b>{st.armies}</b>
+        <i className="pdot" style={{ background: st.owner ? POWER[st.owner].color : NEUTRAL }} />
+        {st.owner ? POWER[st.owner].name : 'Minor state'}
+        <b>{st.armies}</b>
       </span>
-      <span className="tip-region">
-        {region.name} +{region.bonus}
-      </span>
+      {cap && <span className="tip-cap">★ Capital of {POWER[cap].name}</span>}
     </>
   );
 }
-
-const Graticule = memo(function Graticule() {
-  const lines: string[] = [];
-  for (let i = 1; i < 12; i++) lines.push(`M${(MAP_W / 12) * i},0V${MAP_H}`);
-  for (let i = 1; i < 6; i++) lines.push(`M0,${(MAP_H / 6) * i}H${MAP_W}`);
-  return <path d={lines.join('')} className="graticule" />;
-});
 
 function star(cx: number, cy: number, r: number): string {
   const pts: string[] = [];
