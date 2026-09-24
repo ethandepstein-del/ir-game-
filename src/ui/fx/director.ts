@@ -41,7 +41,9 @@ const ERA_TITLE: Record<Era, [string, string]> = {
 
 const WORLD_TITLE = {
   financial: ['Global Financial Crisis', 'Every power gets 2 fewer armies next turn.'],
-  oil: ['Oil Shock', 'Holders of Middle East oil territories profit.'],
+  oil: ['Oil Shock', 'Every oil field pays +2 armies next turn.'],
+  pandemic: ['Pandemic', 'Every power loses 6 legitimacy.'],
+  grain: ['Global Food Crisis', 'Breadbaskets gain legitimacy; importers riot.'],
   nationalism: ['Nationalist Awakening', 'Every minor state gains +1 army.'],
   talks: ['Arms Talks Succeed', 'The Doomsday Clock moves back a minute.'],
 } as const;
@@ -143,6 +145,21 @@ export function direct(events: FxEvent[], stage: Stage, opts: DirectOpts): numbe
         setTimeout(() => sfx.capitalFalls(panOf(e.at)), t + 150);
         stage.shake(2);
         stage.banner({ title: `${POWER[e.power].short} capital falls`, sub: `${TERRITORIES[e.at].name} is occupied.`, tone: 'alert', color: POWER[e.power].color });
+        break;
+      }
+      case 'base': {
+        const [x, y] = pos(e.at);
+        fx.explosion(x, y, 1.5, '#ec8a2f', t + 150);
+        setTimeout(() => sfx.capitalFalls(panOf(e.at)), t + 150);
+        stage.shake(2);
+        stage.banner({ title: 'Tripwire triggered', sub: `${POWER[e.by].short} overruns ${e.name}. ${POWER[e.power].name} will answer.`, tone: 'alert', color: POWER[e.power].color });
+        break;
+      }
+      case 'chipShock': {
+        const [x, y] = pos(e.at);
+        fx.explosion(x, y, 1.4, '#6f8fa6', t + 120);
+        stage.banner({ title: 'Global chip shock', sub: 'The fabs are wrecked. Every power gets 2 fewer armies next turn.', tone: 'alert' });
+        sfx.teletype();
         break;
       }
       case 'eliminated': {

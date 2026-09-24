@@ -57,6 +57,51 @@ export const CARDS: Record<CardId, CardDef> = {
     target: 'power',
     concept: 'detente',
   },
+  cyber: {
+    id: 'cyber',
+    name: 'Cyber Attack',
+    text: 'NotPetya-style wipers hit a rival: its two largest garrisons lose 2 armies each. Deniable: no reputation cost.',
+    target: 'power',
+    concept: 'grey-zone',
+  },
+  drone: {
+    id: 'drone',
+    name: 'Drone Strike',
+    text: 'Loitering munitions hit a territory next to yours: it loses 3 armies (never below 1). A homeland strike moves the clock.',
+    target: 'enemy-adjacent',
+    concept: 'grey-zone',
+  },
+  'energy-cutoff': {
+    id: 'energy-cutoff',
+    name: 'Energy Cutoff',
+    text: 'Needs an oil field. Turn off the taps: the target gets 3 fewer armies next turn and loses 5 legitimacy.',
+    target: 'power',
+    concept: 'energy-security',
+  },
+  'info-ops': {
+    id: 'info-ops',
+    name: 'Information Operations',
+    text: 'Bots, leaks and disinformation: the target loses 12 legitimacy (6 if it is an autocracy with censors ready).',
+    target: 'power',
+    concept: 'grey-zone',
+  },
 };
 
-export const DECK: CardId[] = ['arms-race', 'arms-race', 'sanctions', 'coup', 'coup', 'proxy-war', 'summit', 'carrier', 'blitzkrieg', 'detente'];
+export const DECK: CardId[] = [
+  'arms-race',
+  'arms-race',
+  'sanctions',
+  'coup',
+  'coup',
+  'proxy-war',
+  'summit',
+  'carrier',
+  'blitzkrieg',
+  'detente',
+  'cyber',
+  'cyber',
+  'drone',
+  'drone',
+  'energy-cutoff',
+  'info-ops',
+];

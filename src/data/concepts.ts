@@ -27,7 +27,13 @@ export type ConceptId =
   | 'democratic-peace'
   | 'audience-costs'
   | 'diversionary-war'
-  | 'public-opinion';
+  | 'public-opinion'
+  | 'chokepoints'
+  | 'energy-security'
+  | 'weaponized-interdependence'
+  | 'tripwire'
+  | 'grey-zone'
+  | 'food-security';
 
 export interface Concept {
   name: string;
@@ -211,6 +217,42 @@ export const CONCEPTS: Record<ConceptId, Concept> = {
     dispatch: 'An attack on the homeland rallies the public, but mounting losses wear democracies down.',
     body: 'External attacks briefly boost support for leaders (the rally-round-the-flag effect), but public support for war falls as casualties mount. Democracies are generally more casualty-sensitive than autocracies.',
     reading: 'John Mueller, War, Presidents and Public Opinion (1973); Christopher Gelpi, Peter Feaver & Jason Reifler, Paying the Human Costs of War (2009).',
+  },
+  chokepoints: {
+    name: 'Chokepoints & Sea Control',
+    dispatch: 'Whoever holds the narrow straits holds the world’s trade by the throat.',
+    body: 'Most seaborne trade and energy squeezes through a handful of straits: Hormuz, Malacca, Suez, Bab-el-Mandeb, the Turkish Straits, Panama. Naval strategists from Mahan to Corbett argued that controlling these points, rather than every stretch of ocean, is what sea power means in practice. The Houthi attacks on Red Sea shipping from 2023 showed how even a weak actor can hold a chokepoint hostage.',
+    reading: 'Alfred Thayer Mahan, The Influence of Sea Power upon History (1890); Julian Corbett, Some Principles of Maritime Strategy (1911); Rockford Weitz et al., chokepoint studies at the Fletcher School.',
+  },
+  'energy-security': {
+    name: 'Energy Security',
+    dispatch: 'Oil and gas are power: those who sell them can cut them off, and those who buy them are exposed.',
+    body: 'Energy security is the reliable supply of energy at an affordable price. Exporters can turn supplies into leverage, as the Arab oil embargo of 1973 and Russia’s gas cut-offs to Europe in 2022 showed; importers respond by diversifying suppliers, building stockpiles and switching fuels. Resource wealth can also be a curse, feeding corruption and conflict at home.',
+    reading: 'Daniel Yergin, The Prize (1991) and The New Map (2020); Michael Ross, The Oil Curse (2012).',
+  },
+  'weaponized-interdependence': {
+    name: 'Weaponized Interdependence',
+    dispatch: 'Global supply chains run through a few hubs, and whoever controls a hub can squeeze everyone else.',
+    body: 'Globalization did not spread power evenly: networks such as finance, the internet and chip manufacturing converge on a few hubs. States that control those hubs can watch and choke off others, as the US did with export controls on advanced chips to China from 2022. Taiwan’s dominance of advanced chipmaking is sometimes called a “silicon shield”: invading it would wreck the fabs everyone depends on.',
+    reading: 'Henry Farrell & Abraham Newman, "Weaponized Interdependence" (2019) and Underground Empire (2023); Chris Miller, Chip War (2022).',
+  },
+  tripwire: {
+    name: 'Tripwire Forces',
+    dispatch: 'A small garrison abroad cannot win a war, but attacking it guarantees a much bigger one.',
+    body: 'Great powers station troops in allies’ territory not to hold the line alone but to make their commitment credible: an attack on the garrison automatically involves the home country. Thomas Schelling called this “the threat that leaves something to chance”. US troops in South Korea, NATO’s battlegroups in the Baltic states and the old Berlin Brigade are classic tripwires.',
+    reading: 'Thomas Schelling, Arms and Influence (1966); Dan Reiter & Paul Poast, "The Truth about Tripwires" (2021).',
+  },
+  'grey-zone': {
+    name: 'Grey-Zone Conflict',
+    dispatch: 'Cyber attacks, drones and disinformation: coercion that stays below the threshold of open war.',
+    body: 'States increasingly compete in the space between peace and war: cyber operations like NotPetya (2017), election interference, militias and “little green men”, and cheap drones. Deniability and ambiguity make retaliation hard to justify, while cheap precision strikes are changing the balance between offense and defense, as the war in Ukraine showed.',
+    reading: 'Michael Mazarr, Mastering the Gray Zone (2015); Thomas Rid, Active Measures (2020); Michael Horowitz, "Battles of Precise Mass" (2024).',
+  },
+  'food-security': {
+    name: 'Food Security',
+    dispatch: 'Governments that cannot feed their people do not last: grain is a strategic asset.',
+    body: 'Food prices topple governments: the 2010–11 price spike fed the Arab Spring. Major exporters such as the US, Brazil, Argentina, Canada and Ukraine carry quiet influence, and Russia’s 2022 blockade of Ukrainian ports showed that grain can be weaponized like oil.',
+    reading: 'Amartya Sen, Poverty and Famines (1981); Christopher Barrett (ed.), Food Security and Sociopolitical Stability (2013).',
   },
 };
 

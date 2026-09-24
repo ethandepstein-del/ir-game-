@@ -18,6 +18,7 @@ import {
   type PowerId,
 } from '../data/world';
 import { DOCTRINE_ORDER } from '../data/doctrines';
+import { ASSETS, START_BASES, type Asset, type AssetKind } from '../data/geo';
 import { aiAllianceTarget, aiPactTarget, considerAlliance, considerPact, decideObligation, pickOfferToPlayer } from './diplomacy';
 import type { Action, BattleReport, Doctrine, Era, FxEvent, GameState, LogKind, Obligation, PowerState } from './types';
 
@@ -67,11 +68,37 @@ export function alliedSupport(s: GameState, to: number): PowerId | null {
   return null;
 }
 
+// ---------- Real-world stakes: assets and bases ----------
+
+/** The strategic assets in a territory that still work (fabs can be wrecked). */
+export function assetsOf(s: GameState, t: number): Asset[] {
+  const list = ASSETS[TERRITORIES[t].id] ?? [];
+  return s.wrecked.includes(t) ? list.filter((a) => a.kind !== 'chips') : list;
+}
+
+export function assetCount(s: GameState, p: PowerId, kind: AssetKind): number {
+  return ownedBy(s, p).reduce((n, t) => n + assetsOf(s, t).filter((a) => a.kind === kind).length, 0);
+}
+
+/** Rival bases in `to` whose garrisons would fight an attack by `attacker`. */
+export function tripwires(s: GameState, to: number, attacker: PowerId): [number, PowerId, string][] {
+  const owner = s.territories[to].owner;
+  return s.bases.filter(([t, y]) => t === to && y !== attacker && y !== owner && s.powers[y].alive);
+}
+
 /** Plain-language consequences of attacking `to` from `from`, for previews. */
 export function attackConsequences(s: GameState, from: number, to: number): { text: string; tone: 'bad' | 'warn' | 'info' }[] {
   const p = s.territories[from].owner!;
   const def = s.territories[to].owner;
   const out: { text: string; tone: 'bad' | 'warn' | 'info' }[] = [];
+  const host = s.bases.find(([t, y]) => t === to && y === p);
+  if (host) out.push({ text: `Invading your own host nation closes ${host[2]}: reputation −15`, tone: 'bad' });
+  for (const [, y, name] of tripwires(s, to, p)) {
+    out.push({ text: `Tripwire: ${POWER[y].short} garrison at ${name} fights back (+1 to their best die)`, tone: 'warn' });
+    out.push({ text: `Overrunning it: Doomsday Clock −1 and ${POWER[y].short} will retaliate`, tone: 'bad' });
+  }
+  if (TERRITORIES[to].id === 'taiwan' && !s.wrecked.includes(to))
+    out.push({ text: 'Taking it by force wrecks the chip fabs: every power gets 2 fewer armies next turn', tone: 'warn' });
   if (!def) return out;
   const pact = pactWith(s, p, def);
   if (pact) out.push({ text: pact.kind === 'alliance' ? 'Betrays your ally: reputation −40' : 'Breaks your pact: reputation −30', tone: 'bad' });
@@ -103,10 +130,18 @@ export function income(s: GameState, p: PowerId): { total: number; lines: Income
   const lines: IncomeLine[] = [{ label: `${n} territories ÷ 3`, value: Math.max(3, Math.floor(n / 3)) }];
   for (const r of regionsHeld(s, p)) lines.push({ label: r.name, value: r.bonus });
   if (p === 'chn') {
-    const g = Math.min(4, Math.floor((s.round - 1) / 4));
+    const g = Math.min(4, Math.floor((s.round - 1) / 3));
     if (g) lines.push({ label: 'Rising Power', value: g });
   }
-  if (p === 'ind') lines.push({ label: 'Strategic Autonomy', value: 1 });
+  if (p === 'ind') lines.push({ label: 'Strategic Autonomy', value: 2 });
+  const straits = assetCount(s, p, 'strait');
+  if (straits) lines.push({ label: 'Chokepoints', value: straits });
+  const oil = assetCount(s, p, 'oil');
+  if (oil) lines.push({ label: 'Oil & gas', value: oil });
+  const chips = assetCount(s, p, 'chips');
+  if (chips) lines.push({ label: 'Chip fabs', value: chips });
+  const minerals = Math.floor(assetCount(s, p, 'minerals') / 2);
+  if (minerals) lines.push({ label: 'Critical minerals', value: minerals });
   if (p === 'eu') {
     const k = Math.min(3, s.pacts.filter((x) => x.a === 'eu' || x.b === 'eu').length);
     if (k) lines.push({ label: 'Institutions', value: k });
@@ -335,6 +370,8 @@ export function newGame(player: PowerId, seed = Date.now() >>> 0): GameState {
     pendingObligation: null,
     turnKeys: [],
     guesses: {},
+    bases: START_BASES.map(([id, p, name]) => [T(id), p, name] as [number, PowerId, string]),
+    wrecked: [],
   };
   // Each rival secretly follows a different grand strategy.
   const doctrines: Doctrine[] = [...DOCTRINE_ORDER];
@@ -369,6 +406,12 @@ function leaderOf(s: GameState): PowerId {
 function startTurn(s: GameState) {
   const p = current(s);
   const ps = s.powers[p];
+  // Food security: breadbaskets keep the home front fed and calm .
+  const grain = assetCount(s, p, 'grain');
+  if (grain && ps.legitimacy < 100) {
+    legit(s, p, grain);
+    if (p === s.player) learn(s, 'food-security');
+  }
   const inc = income(s, p);
   s.reinforcements = inc.total;
   ps.incomeMod = 0;
@@ -457,19 +500,31 @@ function shiftEra(s: GameState) {
 }
 
 function globalEvent(s: GameState) {
-  const r = Math.floor(rand(s) * 4);
+  const r = Math.floor(rand(s) * 6);
   if (r === 0) {
     for (const p of alivePowers(s)) s.powers[p].incomeMod -= 2;
     fx(s, { t: 'world', kind: 'financial' });
     log(s, 'alert', 'Global financial crisis: every power gets 2 fewer armies next turn.');
   } else if (r === 1) {
-    const oil = ['arabia', 'persia', 'levant', 'maghreb'].map(T);
     for (const p of alivePowers(s)) {
-      const held = oil.filter((t) => s.territories[t].owner === p).length;
+      const held = assetCount(s, p, 'oil');
       if (held) s.powers[p].incomeMod += 2 * held;
     }
     fx(s, { t: 'world', kind: 'oil' });
-    log(s, 'alert', 'Oil shock: powers holding Arabia, Persia, the Levant or the Maghreb get +2 armies per oil territory.');
+    log(s, 'alert', 'Oil shock: prices spike. Every power gets +2 armies next turn for each oil field it holds.');
+    learn(s, 'energy-security');
+  } else if (r === 4) {
+    for (const p of alivePowers(s)) legit(s, p, -6);
+    fx(s, { t: 'world', kind: 'pandemic' });
+    log(s, 'alert', 'A pandemic sweeps the world. Lockdowns and funerals: every power loses 6 legitimacy.');
+  } else if (r === 5) {
+    for (const p of alivePowers(s)) {
+      const g = assetCount(s, p, 'grain');
+      legit(s, p, g ? 3 * g : -4);
+    }
+    fx(s, { t: 'world', kind: 'grain' });
+    log(s, 'alert', 'Drought and blockades send grain prices soaring. Breadbasket powers gain legitimacy; importers face bread riots.');
+    learn(s, 'food-security');
   } else if (r === 2) {
     for (const t of s.territories) if (!t.owner) t.armies++;
     fx(s, { t: 'world', kind: 'nationalism' });
@@ -567,6 +622,10 @@ function resolveRoll(s: GameState, from: number, to: number): BattleReport {
   else if (dEff.length && alliedSupport(s, to)) {
     dEff[0] += 1;
     learn(s, 'collective-defense');
+  } else if (dEff.length && tripwires(s, to, attacker).length) {
+    // A great power's garrison stands in the way.
+    dEff[0] += 1;
+    learn(s, 'tripwire');
   }
   const attackerWinsTies = s.era === 'offense' || s.blitz;
   let aLoss = 0;
@@ -613,6 +672,15 @@ function midnight(s: GameState) {
 function conquer(s: GameState, rep: BattleReport, diceUsed: number) {
   const { from, to, attacker } = rep;
   const loser = rep.defender;
+  const overrun = tripwires(s, to, attacker);
+  // Invading the country that hosts your own base ends the basing deal, and others notice.
+  const own = s.bases.find(([t, y]) => t === to && y === attacker);
+  if (own) {
+    s.bases = s.bases.filter((b) => b !== own);
+    s.powers[attacker].reputation = Math.max(0, s.powers[attacker].reputation - 15);
+    log(s, 'diplo', `${POWER[attacker].name} turns on its own host nation. ${own[2]} closes, and allies take note.`, attacker);
+    learn(s, 'reputation');
+  }
   s.territories[to].owner = attacker;
   s.territories[to].armies = 0;
   s.powers[attacker].conquered++;
@@ -636,6 +704,32 @@ function conquer(s: GameState, rep: BattleReport, diceUsed: number) {
     fx(s, { t: 'clock', minutes: s.clock, delta: -1 });
     log(s, 'alert', `${POWER[loser].name}'s capital has fallen. Doomsday Clock: ${s.clock} minutes.`);
   }
+  // Tripwires: overrunning a great power's garrison drags it into the war.
+  for (const [t, y, base] of overrun) {
+    s.bases = s.bases.filter((b) => !(b[0] === t && b[1] === y));
+    legit(s, y, 5);
+    s.aggression[`${attacker}>${y}`] = s.round;
+    s.quietRound = false;
+    fx(s, { t: 'base', at: to, power: y, by: attacker, name: base });
+    log(s, 'alert', `${POWER[attacker].name} overruns ${base}. ${POWER[y].name}'s garrison is killed and its public demands a response.`, attacker);
+    learn(s, 'tripwire');
+    if (!s.turnKeys.includes(`trip>${y}`)) {
+      s.turnKeys.push(`trip>${y}`);
+      s.clock = Math.max(0, s.clock - 1);
+      fx(s, { t: 'clock', minutes: s.clock, delta: -1 });
+    }
+  }
+  // Silicon shield: invading Taiwan wrecks the fabs the whole world depends on.
+  if (TERRITORIES[to].id === 'taiwan' && !s.wrecked.includes(to)) {
+    s.wrecked.push(to);
+    for (const q of alivePowers(s)) s.powers[q].incomeMod -= 2;
+    fx(s, { t: 'chipShock', at: to, by: attacker });
+    log(s, 'alert', `The chip fabs in ${TERRITORIES[to].name} are wrecked in the fighting. A global chip shock: every power gets 2 fewer armies next turn.`, attacker);
+    learn(s, 'weaponized-interdependence');
+  }
+  if (assetsOf(s, to).some((a) => a.kind === 'strait') && attacker === s.player) learn(s, 'chokepoints');
+  if (assetsOf(s, to).some((a) => a.kind === 'oil') && attacker === s.player) learn(s, 'energy-security');
+
   if (TERRITORIES[to].region === 'hl' && attacker !== 'rus') learn(s, 'heartland');
   if (regionsHeld(s, attacker).some((r) => r.id === 'hl')) learn(s, 'heartland');
   if (!loser && s.clock <= 4 && s.coreStrikes.length === 0) learn(s, 'stability-instability');
@@ -701,6 +795,8 @@ export function cloneState(p: GameState): GameState {
     pendingObligation: p.pendingObligation ? { ...p.pendingObligation } : null,
     turnKeys: p.turnKeys.slice(),
     guesses: { ...p.guesses },
+    bases: p.bases.slice(),
+    wrecked: p.wrecked.slice(),
   };
 }
 
@@ -951,6 +1047,43 @@ function playCard(s: GameState, p: PowerId, card: string, target?: number | Powe
       if (typeof target !== 'string' || !(target in s.powers) || target === p || !s.powers[target].alive || hasPact(s, p, target)) return false;
       addPact(s, p, target);
       log(s, 'card', `Détente: ${name} and ${POWER[target].name} sign a non-aggression pact.`, p);
+      return true;
+    }
+    case 'cyber': {
+      if (typeof target !== 'string' || !(target in s.powers) || target === p || !s.powers[target].alive) return false;
+      const hit = ownedBy(s, target)
+        .sort((a, b) => s.territories[b].armies - s.territories[a].armies)
+        .slice(0, 2);
+      for (const t of hit) s.territories[t].armies = Math.max(1, s.territories[t].armies - 2);
+      log(s, 'card', `Wiper malware cripples ${POWER[target].name}'s networks in ${hit.map((t) => TERRITORIES[t].name).join(' and ')}. Nobody claims it.`, p);
+      return true;
+    }
+    case 'drone': {
+      if (typeof target !== 'number' || !s.territories[target]) return false;
+      const t = s.territories[target];
+      if (t.owner === p || !TERRITORIES[target].adj.some((u) => s.territories[u].owner === p)) return false;
+      if (t.owner && hasPact(s, p, t.owner)) return false;
+      t.armies = Math.max(1, t.armies - 3);
+      if (t.owner) {
+        s.aggression[`${p}>${t.owner}`] = s.round;
+        s.quietRound = false;
+      }
+      log(s, 'card', `${name}'s drones strike ${TERRITORIES[target].name}.`, p);
+      if (t.owner) strikeCore(s, p, target);
+      return true;
+    }
+    case 'energy-cutoff': {
+      if (typeof target !== 'string' || !(target in s.powers) || target === p || !s.powers[target].alive) return false;
+      if (!assetCount(s, p, 'oil')) return false;
+      s.powers[target].incomeMod -= 3;
+      legit(s, target, -5);
+      log(s, 'card', `${name} cuts off oil and gas to ${POWER[target].name}. Prices soar there (−3 armies next turn, legitimacy −5).`, p);
+      return true;
+    }
+    case 'info-ops': {
+      if (typeof target !== 'string' || !(target in s.powers) || target === p || !s.powers[target].alive) return false;
+      legit(s, target, isDemocracy(target) ? -12 : -6);
+      log(s, 'card', `A disinformation campaign floods ${POWER[target].name}'s feeds. Its legitimacy falls.`, p);
       return true;
     }
   }

@@ -69,6 +69,16 @@ const RULES: { title: string; body: React.ReactNode; icon: string }[] = [
       </>
     ),
   },
+  {
+    title: 'Real-world stakes',
+    icon: 'M12 3v18M7 13q5 8 10 0M9 7h6M12 3a1.5 1.5 0 100 .1',
+    body: (
+      <>
+        Fight over what powers really fight over: <b>Hormuz, Malacca and Suez</b>, oil fields, Taiwan&rsquo;s chip fabs,
+        rare earths and grain. Real overseas bases like Camp Humphreys are <b>tripwires</b>.
+      </>
+    ),
+  },
 ];
 
 export function Start({ progress, onStart, onCodex }: { progress: Progress; onStart: (p: PowerId, tour: boolean) => void; onCodex: () => void }) {

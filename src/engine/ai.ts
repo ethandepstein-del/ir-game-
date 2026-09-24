@@ -1,7 +1,7 @@
 import { CARDS } from '../data/cards';
 import { REGION_MEMBERS, TERRITORIES, type PowerId } from '../data/world';
 import { mainThreat } from './diplomacy';
-import { alivePowers, attackBlocker, bordersPower, capitalOf, coreOf, current, hasPact, isDemocracy, ownedBy, pactWith, reachable, shares } from './game';
+import { alivePowers, assetCount, assetsOf, attackBlocker, bordersPower, capitalOf, coreOf, current, hasPact, isDemocracy, ownedBy, pactWith, reachable, shares, tripwires } from './game';
 import type { Action, GameState } from './types';
 
 /** Is `u` a legitimate target for `p` right now? AIs honour pacts and coalition solidarity. */
@@ -65,6 +65,14 @@ function targetValue(s: GameState, p: PowerId, u: number): number {
     if (s.coalition === owner) v += 2;
   }
   if (owner && capitalOf(u) === owner) v += 1;
+  // Real-world stakes: straits, oil, fabs and mines are worth fighting for...
+  for (const a of assetsOf(s, u)) v += a.kind === 'chips' ? (TERRITORIES[u].id !== 'taiwan' ? 1.3 : d === 'revisionist' ? 1 : -1.5) : a.kind === 'grain' ? 0.8 : 1.3;
+  // ...but a rival's garrison is a tripwire: deterrence usually works.
+  if (s.bases.some(([t, y]) => t === u && y === p)) v -= 1.5;
+  if (tripwires(s, u, p).length) {
+    if (s.clock <= 3) return -Infinity;
+    v -= d === 'revisionist' ? 1 : d === 'offensive' ? 2 : 3;
+  }
   // Denying a rival its region bonus is worth something too.
   if (owner && members.every((m) => s.territories[m].owner === owner)) v += 2;
   return v;
@@ -177,12 +185,23 @@ function pickCard(s: GameState, p: PowerId): Action | null {
           .find((u) => !s.territories[u].owner);
         if (t !== undefined) return { kind: 'play', card: i, target: t };
       }
+      if (c.id === 'cyber' && rival) return { kind: 'play', card: i, target: rival };
+      if (c.id === 'info-ops' && rival && (isDemocracy(rival) || s.powers[rival].legitimacy < 50)) return { kind: 'play', card: i, target: rival };
+      if (c.id === 'energy-cutoff' && rival && assetCount(s, p, 'oil') > 0) return { kind: 'play', card: i, target: rival };
       if (c.id === 'detente') {
         // Only when a real threat exists and no pact is in place.
 
         const threat = mainThreat(s, p);
         if (threat && threat !== s.coalition && !hasPact(s, p, threat) && bordersPower(s, p, threat)) return { kind: 'play', card: i, target: threat };
       }
+    }
+    if (s.phase === 'attack' && c.id === 'drone') {
+      // Soften the best target first.
+      const opt = attackOptions(s, p).find((o) => {
+        const q = s.territories[o.to].owner;
+        return s.territories[o.to].armies >= 3 && !(q && hasPact(s, p, q)) && !(q && coreOf(o.to) === q && s.clock <= 3);
+      });
+      if (opt) return { kind: 'play', card: i, target: opt.to };
     }
     if (s.phase === 'attack' && (c.id === 'carrier' || c.id === 'blitzkrieg') && !s.blitz && !s.carrier) {
       if (attackOptions(s, p).some((o) => o.odds >= nerve(s, p))) return { kind: 'play', card: i };

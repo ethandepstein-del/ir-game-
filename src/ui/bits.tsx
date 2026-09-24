@@ -1,5 +1,6 @@
 import { POWER, type PowerId } from '../data/world';
 import type { BattleReport, CardId } from '../engine/types';
+import type { AssetKind } from '../data/geo';
 
 export function PowerDot({ p }: { p: PowerId }) {
   return <i className="pdot" style={{ background: POWER[p].color }} aria-hidden="true" />;
@@ -79,12 +80,42 @@ const GLYPHS: Record<CardId, string> = {
   blitzkrieg: 'M13 3L5 13h6l-2 8 8-10h-6z',
   // Two linked rings: détente.
   detente: 'M9 8a5 5 0 100 8a5 5 0 100-8M15 8a5 5 0 100 8a5 5 0 100-8',
+  // Terminal with a lightning prompt: cyber attack.
+  cyber: 'M3 5h18v11H3z M9 20h6 M12 16v4 M7 9l2 2-2 2 M11 13h4',
+  // Quadcopter: drone strike.
+  drone: 'M10 11h4v3h-4z M6 7a2 2 0 104 0a2 2 0 10-4 0 M14 7a2 2 0 104 0a2 2 0 10-4 0 M6 18a2 2 0 104 0a2 2 0 10-4 0 M14 18a2 2 0 104 0a2 2 0 10-4 0 M9.5 8.5l1 2.5 M14.5 8.5l-1 2.5 M9.5 16.5l1-2.5 M14.5 16.5l-1-2.5',
+  // Oil drop, struck through: energy cutoff.
+  'energy-cutoff': 'M12 3c3 4 5 7 5 10a5 5 0 01-10 0c0-3 2-6 5-10z M4 4l16 16',
+  // Speech bubble full of noise: information operations.
+  'info-ops': 'M4 5h16v10H10l-5 4v-4H4z M8 9h8 M8 12h5',
 };
 
 export function CardGlyph({ id }: { id: CardId }) {
   return (
     <svg className="card-glyph" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
       <path d={GLYPHS[id]} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Tiny ink icons for strategic assets, drawn in a 12×12 box centred on 0,0. */
+export const ASSET_ICON: Record<AssetKind, string> = {
+  // Anchor: a chokepoint.
+  strait: 'M0,-4.2 V4.2 M-3.8,1.2 Q0,6.5 3.8,1.2 M-2.4,-2.2 H2.4 M0,-5.8 a1.3,1.3 0 1 0 0.01,0',
+  // Drop: oil and gas.
+  oil: 'M0,-5 C2.8,-1.2 4,0.8 4,2.2 A4,4 0 0 1 -4,2.2 C-4,0.8 -2.8,-1.2 0,-5 Z',
+  // Chip: a die with pins.
+  chips: 'M-3,-3 H3 V3 H-3 Z M-1.5,-4.6 V-3 M1.5,-4.6 V-3 M-1.5,3 V4.6 M1.5,3 V4.6 M-4.6,-1.5 H-3 M-4.6,1.5 H-3 M3,-1.5 H4.6 M3,1.5 H4.6',
+  // Gem: critical minerals.
+  minerals: 'M-4.5,-1 L-2.2,-4.2 H2.2 L4.5,-1 L0,4.8 Z M-4.5,-1 H4.5 M-1.2,-4.2 L-1.8,-1 L0,4.8 L1.8,-1 L1.2,-4.2',
+  // Wheat: a breadbasket.
+  grain: 'M0,5 V-5 M0,-3 L-2.6,-5 M0,-3 L2.6,-5 M0,0 L-2.6,-2 M0,0 L2.6,-2 M0,3 L-2.6,1 M0,3 L2.6,1',
+};
+
+export function AssetIcon({ kind, size = 16 }: { kind: AssetKind; size?: number }) {
+  return (
+    <svg className={`asset-icon a-${kind}`} viewBox="-6.5 -6.5 13 13" width={size} height={size} aria-hidden="true">
+      <path d={ASSET_ICON[kind]} />
     </svg>
   );
 }

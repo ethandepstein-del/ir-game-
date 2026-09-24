@@ -3,6 +3,8 @@ import { POWER, REGIONS, TERRITORIES } from '../data/world';
 import { capitalOf } from '../engine/game';
 import type { GameState } from '../engine/types';
 import type { FxEngine } from './fx/particles';
+import { ASSETS } from '../data/geo';
+import { ASSET_ICON } from './bits';
 import { GEO, INKED, MAP_H, MAP_W, S } from './geometry';
 
 export const NEUTRAL = '#f3f0e6';
@@ -253,6 +255,7 @@ export function WorldMap({ game, highlight, onPick, fx, odds, overlay, shakeKey 
         {highlight.selected !== null && aimTo !== null && (
           <AimArrow from={highlight.selected} to={aimTo} k={k} mode={highlight.mode} odds={aimOdds} />
         )}
+        <AssetMarks bases={game.bases} wrecked={game.wrecked} r={(tokenPx * k) / 2} k={k} />
         {game.territories.map((t, i) => (
           <Token
             key={i}
@@ -375,6 +378,49 @@ const Territories = memo(function Territories({
   );
 });
 
+// ---------- strategic assets and bases ----------
+
+/** A row of small paper chips under each token: straits, oil, fabs, minerals, grain, and foreign bases. */
+const AssetMarks = memo(function AssetMarks({ bases, wrecked, r, k }: { bases: GameState['bases']; wrecked: number[]; r: number; k: number }) {
+  const chip = 6.2 * k;
+  return (
+    <g className="asset-marks" pointerEvents="none">
+      {TERRITORIES.map((t, i) => {
+        const assets = ASSETS[t.id] ?? [];
+        const here = bases.filter(([b]) => b === i);
+        const n = assets.length + here.length;
+        if (!n) return null;
+        const [x, y] = GEO.labels[i];
+        const y0 = y + r * 0.82 + chip * 1.35;
+        return (
+          <g key={t.id}>
+            {assets.map((a, j) => {
+              const cx = x + (j - (n - 1) / 2) * chip * 2.3;
+              const dead = a.kind === 'chips' && wrecked.includes(i);
+              return (
+                <g key={a.name} transform={`translate(${cx} ${y0})`} className={`asset-mark a-${a.kind} ${dead ? 'dead' : ''}`}>
+                  <circle r={chip} />
+                  <path d={ASSET_ICON[a.kind]} transform={`scale(${chip / 7})`} />
+                  {dead && <path d={`M${-chip * 0.8},${-chip * 0.8}L${chip * 0.8},${chip * 0.8}M${chip * 0.8},${-chip * 0.8}L${-chip * 0.8},${chip * 0.8}`} className="asset-x" />}
+                </g>
+              );
+            })}
+            {here.map(([, p], j) => {
+              const cx = x + (assets.length + j - (n - 1) / 2) * chip * 2.3;
+              return (
+                <g key={p} transform={`translate(${cx} ${y0})`} className="asset-mark base-mark">
+                  <circle r={chip} style={{ fill: POWER[p].color }} />
+                  <path d={star(0, 0.3 * chip, chip * 0.62)} />
+                </g>
+              );
+            })}
+          </g>
+        );
+      })}
+    </g>
+  );
+});
+
 // ---------- tokens ----------
 
 function shade(hex: string, f: number): string {
@@ -488,6 +534,22 @@ function TipBody({ game, t }: { game: GameState; t: number }) {
         <b>{st.armies}</b>
       </span>
       {cap && <span className="tip-cap">★ Capital of {POWER[cap].name}</span>}
+      {(ASSETS[def.id] ?? []).map((a) => (
+        <span key={a.name} className={`tip-asset a-${a.kind} ${a.kind === 'chips' && game.wrecked.includes(t) ? 'dead' : ''}`}>
+          <svg viewBox="-6.5 -6.5 13 13" width="13" height="13" aria-hidden="true">
+            <path d={ASSET_ICON[a.kind]} />
+          </svg>
+          {a.name}
+        </span>
+      ))}
+      {game.bases
+        .filter(([b]) => b === t)
+        .map(([, p, name]) => (
+          <span key={p} className="tip-asset base">
+            <i className="pdot" style={{ background: POWER[p].color }} />
+            {POWER[p].short} base: {name}
+          </span>
+        ))}
     </>
   );
 }

@@ -25,7 +25,8 @@ import {
 } from '../engine/game';
 import type { Action, CardId, Doctrine, FxEvent, GameState } from '../engine/types';
 import { sfx } from './audio/sfx';
-import { CardGlyph, Clock, PowerDot, ShareRing } from './bits';
+import { ASSET_INFO, ASSETS, INTEL } from '../data/geo';
+import { AssetIcon, CardGlyph, Clock, PowerDot, ShareRing } from './bits';
 import { direct } from './fx/director';
 import { FxEngine } from './fx/particles';
 import { GEO, LANE_ENDS, MAP_W, OCEAN_SPOTS } from './geometry';
@@ -221,6 +222,13 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd, tutorial,
       mode = 'card';
       for (const m of ownedBy(game, me))
         for (const u of TERRITORIES[m].adj) if (!game.territories[u].owner && game.territories[u].armies <= 4) targets.add(u);
+    } else if (myTurn && cardTarget === 'enemy-adjacent') {
+      mode = 'card';
+      for (const m of ownedBy(game, me))
+        for (const u of TERRITORIES[m].adj) {
+          const o = game.territories[u].owner;
+          if (o !== me && !(o && hasPact(game, me, o))) targets.add(u);
+        }
     } else if (myTurn && game.phase === 'deploy') {
       mode = 'deploy';
     } else if (myTurn && game.phase === 'attack' && sel !== null && game.territories[sel].owner === me) {
@@ -915,6 +923,38 @@ function Dossier({ game, t, tgt, odds, onClose }: { game: GameState; t: number; 
           />
         ))}
       </div>
+      {((ASSETS[def.id] ?? []).length > 0 || game.bases.some(([b]) => b === focus)) && (
+        <ul className="dossier-assets">
+          {(ASSETS[def.id] ?? []).map((a) => {
+            const dead = a.kind === 'chips' && game.wrecked.includes(focus);
+            return (
+              <li key={a.name} className={dead ? 'dead' : ''}>
+                <AssetIcon kind={a.kind} />
+                <span>
+                  <b>{a.name}</b>
+                  <small>
+                    {dead
+                      ? 'Wrecked in the fighting'
+                      : `${ASSET_INFO[a.kind].label}: ${ASSET_INFO[a.kind].effect}${a.kind === 'chips' && def.id === 'taiwan' ? '. Invading Taiwan wrecks them and shocks every economy (the silicon shield)' : ''}`}
+                  </small>
+                </span>
+              </li>
+            );
+          })}
+          {game.bases
+            .filter(([b]) => b === focus)
+            .map(([, p, name]) => (
+              <li key={p} className="base">
+                <i className="pdot" style={{ background: POWER[p].color }} />
+                <span>
+                  <b>{name}</b>
+                  <small>{POWER[p].short} garrison: a tripwire. Rivals attacking here fight it too.</small>
+                </span>
+              </li>
+            ))}
+        </ul>
+      )}
+      {INTEL[def.id] && <p className="dossier-intel">{INTEL[def.id]}</p>}
       {odds !== null && tgt !== null && (
         <div className="dossier-odds">
           <div className="odds-bar">
@@ -1023,7 +1063,9 @@ function Hand({
                 ))}
               </div>
             )}
-            {cardMode === i && def.target !== 'power' && <span className="pick-hint">Pick a highlighted minor state</span>}
+            {cardMode === i && def.target !== 'power' && (
+              <span className="pick-hint">{def.target === 'enemy-adjacent' ? 'Pick a highlighted territory to strike' : 'Pick a highlighted minor state'}</span>
+            )}
           </div>
         );
       })}

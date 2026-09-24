@@ -73,6 +73,18 @@ const STEPS: Step[] = [
     ),
   },
   {
+    id: 'stakes',
+    target: () => ['.asset-mark.base-mark', '.asset-mark'],
+    title: 'Real-world stakes',
+    body: () => (
+      <>
+        The chips under the discs are what powers really fight over: <b>chokepoints</b> like Hormuz and Malacca, oil,
+        chip fabs, critical minerals and grain. Each one pays off. Coloured stars are overseas <b>bases</b>: attack a
+        rival&rsquo;s garrison and you fight it too, and its owner will retaliate.
+      </>
+    ),
+  },
+  {
     id: 'wait',
     target: (v) => (v.phone ? ['.speed-cycle'] : ['.g-top-right .seg']),
     title: 'Rivals move first',

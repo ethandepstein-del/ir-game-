@@ -59,6 +59,20 @@ When a concept first happens in play, a short "Theory in play" note appears. The
 - **Regime type and legitimacy.** Democracies (USA, EU, India) and autocracies (Russia, China) have a legitimacy meter that changes income. It covers audience costs, the democratic peace, rally effects, war weariness and diversionary war.
 - **Attack previews** list every consequence before you commit: broken pacts, Doomsday Clock, legitimacy costs, allies that will be obliged to respond.
 
+## Real-world geopolitics
+
+The map is drawn from real Natural Earth borders (50m), cut along the same lines the territory rules use, and the board carries what great powers actually compete over (`src/data/geo.ts`):
+
+- **Chokepoints** (+1 army a turn): Hormuz, Suez, Bab-el-Mandeb, Malacca, the Turkish Straits, Panama, Gibraltar, the Taiwan Strait, the GIUK gap, the Danish Straits, the Northern Sea Route and the Six Degree Channel.
+- **Oil and gas** (+1 a turn, more in an oil shock), **chip fabs** (+1), **critical minerals** (+1 per two) and **breadbaskets** (+1 legitimacy a turn).
+- **The silicon shield**: invading Taiwan wrecks TSMC's fabs, and every power gets 2 fewer armies next turn.
+- **Overseas bases as tripwires**: Camp Humphreys, Yokosuka, Ramstein, Al Udeid, Camp Lemonnier, Tartus, the 201st Base, Gyumri, China's Djibouti and Ream bases, and France's bases in Abu Dhabi and Djibouti. Attacking a territory with a rival's garrison means fighting it too (+1 to the defender's best die); overrunning it moves the Doomsday Clock and brings its owner into the war. Invading your own host country closes your base and costs reputation.
+- **Grey-zone cards**: Cyber Attack, Drone Strike, Energy Cutoff and Information Operations.
+- **World events**: pandemics and food crises join financial crises, oil shocks, nationalism and arms talks.
+- **Intel**: every territory carries a line of real-world military and geopolitical context.
+
+Six new Codex entries cover chokepoints, energy security, weaponized interdependence, tripwires, grey-zone conflict and food security. In 500 AI-only games, wins split USA 25%, China 18%, Russia 18%, EU 17% and India 15%.
+
 ## Code
 
 ```

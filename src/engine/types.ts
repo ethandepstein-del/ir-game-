@@ -4,8 +4,20 @@ import type { PowerId } from '../data/world';
 export type { PowerId };
 export type Owner = PowerId | null;
 
-export type CardId = 'arms-race' | 'sanctions' | 'coup' | 'proxy-war' | 'summit' | 'carrier' | 'blitzkrieg' | 'detente';
-export type CardTarget = 'none' | 'power' | 'neutral-adjacent' | 'neutral';
+export type CardId =
+  | 'arms-race'
+  | 'sanctions'
+  | 'coup'
+  | 'proxy-war'
+  | 'summit'
+  | 'carrier'
+  | 'blitzkrieg'
+  | 'detente'
+  | 'cyber'
+  | 'drone'
+  | 'energy-cutoff'
+  | 'info-ops';
+export type CardTarget = 'none' | 'power' | 'neutral-adjacent' | 'neutral' | 'enemy-adjacent';
 
 export interface CardDef {
   id: CardId;
@@ -97,7 +109,9 @@ export type FxEvent =
   | { t: 'bandwagon'; power: PowerId; leader: PowerId }
   | { t: 'transition'; power: PowerId }
   | { t: 'era'; era: Era }
-  | { t: 'world'; kind: 'financial' | 'oil' | 'nationalism' | 'talks' }
+  | { t: 'world'; kind: 'financial' | 'oil' | 'nationalism' | 'talks' | 'pandemic' | 'grain' }
+  | { t: 'base'; at: number; power: PowerId; by: PowerId; name: string }
+  | { t: 'chipShock'; at: number; by: PowerId }
   | { t: 'card'; card: CardId; power: PowerId; target?: number | PowerId }
   | { t: 'pact'; a: PowerId; b: PowerId }
   | { t: 'alliance'; a: PowerId; b: PowerId }
@@ -150,6 +164,10 @@ export interface GameState {
   turnKeys: string[];
   /** The player's guesses at each rival's doctrine. */
   guesses: Partial<Record<PowerId, Doctrine>>;
+  /** Overseas bases still standing: [territory, power, name]. */
+  bases: [number, PowerId, string][];
+  /** Territories whose chip fabs were wrecked in an invasion. */
+  wrecked: number[];
 }
 
 export type Action =

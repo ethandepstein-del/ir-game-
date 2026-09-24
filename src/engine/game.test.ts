@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TERRITORIES, T } from '../data/world';
 import { aiStep } from './ai';
-import { apply, attackDice, current, income, isOver, newGame, ownedBy } from './game';
+import { apply, assetsOf, attackDice, current, income, isOver, newGame, ownedBy, tripwires } from './game';
 import type { GameState } from './types';
 
 export function autoplay(s: GameState, maxSteps = 20000): GameState {
@@ -124,6 +124,59 @@ describe('rules', () => {
     s = apply(s, { kind: 'attack', from: T('us-east'), to: T('uk'), blitz: true });
     expect(s.powers.usa.reputation).toBe(rep - 30);
     expect(s.pacts).toHaveLength(0);
+  });
+});
+
+describe('real-world stakes', () => {
+  /** China's turn, attack phase, a big stack in `from` and a one-army minor state in `to`. */
+  function strike(from: string, to: string): GameState {
+    const s = newGame('chn', 11);
+    s.turn = s.order.indexOf('chn');
+    s.phase = 'attack';
+    s.offer = null;
+    s.pendingObligation = null;
+    s.territories[T(from)] = { owner: 'chn', armies: 60 };
+    s.territories[T(to)] = { owner: null, armies: 1 };
+    return s;
+  }
+
+  it('strategic assets pay income', () => {
+    const s = newGame('usa', 3);
+    s.territories[T('persia')] = { owner: 'usa', armies: 1 };
+    const lines = income(s, 'usa').lines.map((l) => l.label);
+    expect(lines).toContain('Chokepoints');
+    expect(lines).toContain('Oil & gas');
+  });
+
+  it('overrunning a rival garrison triggers the tripwire', () => {
+    let s = strike('north-china', 'korea');
+    const clock = s.clock;
+    expect(tripwires(s, T('korea'), 'chn').map((b) => b[1])).toContain('usa');
+    s = apply(s, { kind: 'attack', from: T('north-china'), to: T('korea'), blitz: true });
+    expect(s.territories[T('korea')].owner).toBe('chn');
+    expect(s.bases.some(([t, y]) => t === T('korea') && y === 'usa')).toBe(false);
+    expect(s.clock).toBe(clock - 1);
+    expect(s.aggression['chn>usa']).toBe(s.round);
+    expect(s.learned).toContain('tripwire');
+  });
+
+  it('invading Taiwan wrecks the fabs and shocks every economy', () => {
+    let s = strike('south-china', 'taiwan');
+    s = apply(s, { kind: 'attack', from: T('south-china'), to: T('taiwan'), blitz: true });
+    expect(s.wrecked).toContain(T('taiwan'));
+    expect(assetsOf(s, T('taiwan')).some((a) => a.kind === 'chips')).toBe(false);
+    for (const p of s.order) expect(s.powers[p].incomeMod).toBeLessThanOrEqual(-2);
+  });
+
+  it('drone strikes thin out a neighbour but never empty it', () => {
+    let s = strike('south-china', 'taiwan');
+    s.territories[T('taiwan')].armies = 5;
+    s.powers.chn.cards = ['drone'];
+    s = apply(s, { kind: 'play', card: 0, target: T('taiwan') });
+    expect(s.territories[T('taiwan')].armies).toBe(2);
+    s.powers.chn.cards = ['drone'];
+    s = apply(s, { kind: 'play', card: 0, target: T('taiwan') });
+    expect(s.territories[T('taiwan')].armies).toBe(1);
   });
 });
 
