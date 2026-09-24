@@ -1,0 +1,63 @@
+@font-face { font-family: "Cormorant"; font-weight: 300; src: url(/node_modules/@fontsource/cormorant-garamond/files/cormorant-garamond-latin-300-normal.woff2); }
+@font-face { font-family: "Cormorant"; font-weight: 500; src: url(/node_modules/@fontsource/cormorant-garamond/files/cormorant-garamond-latin-500-normal.woff2); }
+@font-face { font-family: "Cormorant"; font-weight: 400; font-style: italic; src: url(/node_modules/@fontsource/cormorant-garamond/files/cormorant-garamond-latin-400-italic.woff2); }
+@font-face { font-family: "Inter"; font-weight: 300; src: url(/node_modules/@fontsource/inter/files/inter-latin-300-normal.woff2); }
+@font-face { font-family: "Inter"; font-weight: 400; src: url(/node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2); }
+@font-face { font-family: "Inter"; font-weight: 500; src: url(/node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2); }
+
+:root {
+  --ink: #efe8da;
+  --dim: rgba(239, 232, 218, 0.62);
+  --ember: #e39a5b;
+}
+html, body { margin: 0; background: #000; overflow: hidden; }
+#stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; color: var(--ink); }
+#c { position: absolute; inset: 0; width: 1920px; height: 1080px; display: block; }
+#stage > div { position: absolute; opacity: 0; will-change: opacity, transform; }
+
+.rule { width: 56px; height: 1px; background: currentColor; opacity: 0.7; }
+.kicker { font: 500 15px/1 Inter, sans-serif; letter-spacing: 0.42em; text-transform: uppercase; color: var(--dim); }
+
+/* Location / date caption, bottom left */
+#caption { left: 110px; bottom: 150px; font-family: Inter, sans-serif; text-shadow: 0 1px 3px rgba(0,0,0,0.7), 0 0 20px rgba(0,0,0,0.5); }
+#caption .rule { margin-bottom: 18px; }
+#caption .place { font: 500 21px/1.2 Inter, sans-serif; letter-spacing: 0.26em; text-transform: uppercase; }
+#caption .date { margin-top: 9px; font: 300 19px/1.2 Inter, sans-serif; letter-spacing: 0.14em; color: var(--dim); }
+
+/* Citation, top right */
+#cite { right: 110px; top: 110px; text-align: right; max-width: 620px; text-shadow: 0 1px 3px rgba(0,0,0,0.7), 0 0 24px rgba(0,0,0,0.55); }
+#cite .who { font: 500 32px/1.2 Cormorant, serif; letter-spacing: 0.02em; }
+#cite .what { margin-top: 8px; font: 400 italic 24px/1.3 Cormorant, serif; color: var(--dim); }
+
+/* Dictionary entry */
+#define { left: 50%; top: 50%; width: 820px; transform: translate(-50%, -50%); text-align: center; }
+#define .word { font: 300 112px/1 Cormorant, serif; letter-spacing: 0.02em; }
+#define .pron { margin-top: 18px; font: 300 22px/1 Inter, sans-serif; color: var(--dim); letter-spacing: 0.06em; }
+#define .def { margin-top: 38px; font: 400 italic 38px/1.35 Cormorant, serif; }
+#define .ety { margin-top: 26px; font: 300 20px/1.4 Inter, sans-serif; color: var(--dim); letter-spacing: 0.04em; }
+
+/* Chapter card */
+#chapter { left: 0; right: 0; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; }
+#chapter .num { margin-top: 26px; font: 300 150px/0.9 Cormorant, serif; }
+#chapter .rule { margin: 30px 0 26px; }
+#chapter .name { font: 300 58px/1 Cormorant, serif; letter-spacing: 0.08em; }
+
+/* Title and end cards */
+#title, #end { left: 0; right: 0; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; }
+#title h1, #end h1 { margin: 22px 0 0; font: 300 168px/1 Cormorant, serif; letter-spacing: 0.34em; text-transform: uppercase; padding-left: 0.34em; }
+#title .rule, #end .rule { margin: 34px 0 28px; }
+#title p, #end p { margin: 0; font: 400 italic 36px/1.3 Cormorant, serif; color: var(--dim); }
+#end h1 { font-size: 120px; }
+
+/* Subtitles */
+#subs { left: 50%; bottom: 58px; transform: translateX(-50%); width: 1500px; text-align: center;
+  font: 400 30px/1.4 Inter, sans-serif; letter-spacing: 0.01em;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.85), 0 0 18px rgba(0,0,0,0.6); }
+
+/* Map labels anchored to 3D points */
+#labels { inset: 0; opacity: 1 !important; }
+.label { position: absolute; transform: translate(-50%, -100%); padding-bottom: 14px; white-space: nowrap;
+  font: 500 17px/1 Inter, sans-serif; letter-spacing: 0.24em; text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+.label::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 1px; height: 10px; background: currentColor; opacity: 0.7; }
+.label small { display: block; margin-top: 6px; font: 300 14px/1 Inter, sans-serif; letter-spacing: 0.16em; color: var(--dim); text-align: center; }

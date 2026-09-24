@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Anarchy</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "d3-geo": "/node_modules/d3-geo/src/index.js",
+    "d3-array": "/node_modules/d3-array/src/index.js",
+    "internmap": "/node_modules/internmap/src/index.js",
+    "topojson-client": "/node_modules/topojson-client/src/index.js"
+  }
+}
+</script>
+<link rel="stylesheet" href="/src/overlay.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="c" width="1920" height="1080"></canvas>
+  <div id="labels"></div>
+
+  <div id="caption"><div class="rule"></div><div class="place"></div><div class="date"></div></div>
+  <div id="cite"><div class="who"></div><div class="what"></div></div>
+
+  <div id="define">
+    <div class="word">an·ar·chy</div>
+    <div class="pron">/ ˈanərkē / &nbsp;<i>noun</i></div>
+    <div class="def">In international relations: the absence of any authority above states.</div>
+    <div class="ety">From Greek <i>anarkhia</i>, “without a ruler.”</div>
+  </div>
+
+  <div id="chapter"><div class="kicker">Chapter</div><div class="num"></div><div class="rule"></div><div class="name"></div></div>
+  <div id="title"><div class="kicker">A short documentary</div><h1>Anarchy</h1><div class="rule"></div><p></p></div>
+  <div id="end"><h1>Anarchy</h1><div class="rule"></div><p>A game of great-power politics</p></div>
+
+  <div id="subs"></div>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

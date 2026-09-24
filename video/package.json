@@ -1,0 +1,21 @@
+{
+  "name": "anarchy-documentary",
+  "private": true,
+  "type": "module",
+  "description": "A Fern-style animated mini-documentary about the anarchic international system, rendered frame by frame from a Three.js scene.",
+  "scripts": {
+    "narrate": "python3 narrate.py",
+    "score": "python3 score.py",
+    "render": "node render.mjs",
+    "build": "python3 narrate.py && python3 score.py && node render.mjs"
+  },
+  "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.0.0",
+    "@fontsource/inter": "^5.0.0",
+    "d3-geo": "^3.1.1",
+    "playwright-core": "^1.55.0",
+    "three": "^0.180.0",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  }
+}

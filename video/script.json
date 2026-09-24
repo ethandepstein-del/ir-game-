@@ -1,0 +1,97 @@
+{
+  "title": "Anarchy",
+  "subtitle": "Why great powers can never quite trust each other",
+  "scenes": [
+    {
+      "id": "open",
+      "lead": 3.0,
+      "tail": 1.2,
+      "lines": [
+        "Imagine a neighbourhood with no police.",
+        "No courts. No one to call if someone breaks down your door.",
+        "Every house must guard itself. And every house knows it.",
+        "This is not a thought experiment. It is the world stage. And it has been, for almost four hundred years."
+      ]
+    },
+    {
+      "id": "title",
+      "lead": 0.4,
+      "tail": 0.0,
+      "hold": 5.5,
+      "lines": []
+    },
+    {
+      "id": "westphalia",
+      "chapter": "I",
+      "chapterTitle": "No One Above",
+      "lead": 4.2,
+      "tail": 1.4,
+      "lines": [
+        "In 1648, after thirty years of war had emptied whole regions of Germany, the rulers of Europe signed a peace in Westphalia.",
+        "It settled borders. But it also settled something deeper.",
+        "There would be no emperor above them. No higher authority. Each state would be sovereign, and alone.",
+        "Political scientists have a word for that arrangement. Not chaos. Anarchy.",
+        "Simply, the absence of a ruler."
+      ]
+    },
+    {
+      "id": "dilemma",
+      "chapter": "II",
+      "chapterTitle": "The Dilemma",
+      "lead": 4.2,
+      "tail": 1.4,
+      "lines": [
+        "Anarchy sets a trap.",
+        "Suppose one state builds walls to feel safe.",
+        "Its neighbour cannot know whether those walls are for defence, or for the next war.",
+        "So it builds walls too. And now the first state feels less safe than before.",
+        "In 1978, Robert Jervis gave this a name. The security dilemma.",
+        "Every step toward safety makes everyone a little more afraid."
+      ]
+    },
+    {
+      "id": "balance",
+      "chapter": "III",
+      "chapterTitle": "The Balance",
+      "lead": 4.2,
+      "tail": 1.4,
+      "lines": [
+        "So states watch the scales.",
+        "When one power grows too strong, the others tend to band together against it.",
+        "Napoleon learned this. So did the Kaiser.",
+        "Kenneth Waltz called it the balance of power, and argued that it forms almost automatically, whether anyone intends it or not."
+      ]
+    },
+    {
+      "id": "midnight",
+      "chapter": "IV",
+      "chapterTitle": "Midnight",
+      "lead": 4.2,
+      "tail": 1.6,
+      "lines": [
+        "Then, in 1945, the stakes changed.",
+        "A war between great powers could now end them all.",
+        "Thomas Schelling saw that the bomb turned war into a contest of nerves. Not who is stronger, but who is more willing to risk the unthinkable.",
+        "The Doomsday Clock has stood near midnight ever since."
+      ]
+    },
+    {
+      "id": "close",
+      "lead": 1.6,
+      "tail": 2.0,
+      "lines": [
+        "No one designed this system. No one can leave it.",
+        "Every state is still a house with no one to call.",
+        "The question has never been whether they will compete.",
+        "Only whether they can compete, without destroying each other."
+      ]
+    },
+    {
+      "id": "end",
+      "lead": 0.0,
+      "tail": 0.0,
+      "hold": 7.0,
+      "lines": []
+    }
+  ]
+}
