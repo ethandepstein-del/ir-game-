@@ -1315,6 +1315,46 @@ button.stat:hover .stat-value {
   }
 }
 
+.map-tip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 11px;
+  background: rgba(8, 17, 27, 0.94);
+  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  animation: fade-in 0.12s ease-out;
+}
+[hidden] {
+  display: none !important;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.tip-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1.1;
+}
+.tip-meta {
+  font-size: 13.5px;
+}
+.tip-region {
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 /* Turn banner */
 .turn-banner {
   position: absolute;

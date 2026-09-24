@@ -144,6 +144,24 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
     setCardMode(null);
   }, [game.phase, game.turn]);
 
+  // Keyboard: Esc clears selection, Enter advances the phase.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as Element).closest('input, textarea')) return;
+      if (e.key === 'Escape') {
+        setSel(null);
+        setTgt(null);
+        setCardMode(null);
+      }
+      if (e.key === 'Enter' && myTurn && !game.pendingMove && !game.offer) {
+        if (game.phase === 'attack') act({ kind: 'endAttack' });
+        else if (game.phase === 'fortify') act({ kind: 'endTurn' });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [act, myTurn, game.phase, game.pendingMove, game.offer]);
+
   const cardTarget = cardMode !== null ? CARDS[game.powers[me].cards[cardMode]]?.target : undefined;
 
   const highlight: Highlight = useMemo(() => {

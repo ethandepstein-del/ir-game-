@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { POWER, TERRITORIES } from '../data/world';
+import { POWER, REGIONS, TERRITORIES } from '../data/world';
 import { capitalOf } from '../engine/game';
 import type { GameState } from '../engine/types';
 import type { FxEngine } from './fx/particles';
@@ -33,6 +33,8 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
   const [box, setBox] = useState<Box>(FULL);
   const [size, setSize] = useState({ w: 1000, h: 1000 * (MAP_H / MAP_W) });
   const drag = useRef<{ x: number; y: number; box: Box; moved: boolean } | null>(null);
+  const [hoverT, setHoverT] = useState<number | null>(null);
+  const tip = useRef<HTMLDivElement>(null);
   const px = size.w;
   const aspect = size.h / size.w;
   const h = box.w * aspect;
@@ -134,6 +136,20 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
   };
   const onMove = (e: React.PointerEvent) => {
     const d = drag.current;
+    if (e.pointerType === 'mouse' && wrap.current) {
+      const el = (e.target as Element).closest('[data-t]');
+      const next = el && !d?.moved ? Number(el.getAttribute('data-t')) : null;
+      if (next !== hoverT) setHoverT(next);
+      const r = wrap.current.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      if (tip.current) {
+        const flip = x > r.width - 240;
+        tip.current.style.left = `${flip ? x - 14 : x + 14}px`;
+        tip.current.style.top = `${y + 14}px`;
+        tip.current.style.transform = flip ? 'translateX(-100%)' : '';
+      }
+    }
     if (!d) return;
     const dx = e.clientX - d.x;
     const dy = e.clientY - d.y;
@@ -158,7 +174,10 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
-        onPointerLeave={onUp}
+        onPointerLeave={() => {
+          onUp();
+          setHoverT(null);
+        }}
         role="img"
         aria-label="World map"
       >
@@ -178,7 +197,7 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
           const color = t.owner ? POWER[t.owner].color : NEUTRAL;
           const cap = capitalOf(i);
           return (
-            <g key={i} className="badge" onClick={() => pick(i)}>
+            <g key={i} className="badge" data-t={i} onClick={() => pick(i)}>
               <circle key={`o${t.owner}`} cx={x} cy={y} r={r} fill="#0b1520" stroke={color} strokeWidth={2 * k} className="badge-ring" />
               <text key={`n${t.armies}`} x={x} y={y + 3.8 * k} textAnchor="middle" style={{ fontSize: 11 * k }} className="badge-num">
                 {t.armies}
@@ -200,6 +219,9 @@ export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = ''
       <canvas ref={canvas} className="fx-canvas" aria-hidden="true" />
       <div className="map-vignette" aria-hidden="true" />
       {overlay}
+      <div className="map-tip" ref={tip} hidden={hoverT === null}>
+        {hoverT !== null && <TipBody game={game} t={hoverT} />}
+      </div>
       <div className="map-zoom">
         <button type="button" onClick={() => zoom(1 / 1.4)} aria-label="Zoom in">
           +
@@ -230,11 +252,28 @@ const Territories = memo(function Territories({
         const o = game.territories[i].owner;
         const target = highlight.targets.has(i);
         const cls = `terr ${target ? 'target' : ''} ${highlight.selected === i ? 'selected' : ''}`;
-        return <path key={i} d={d} fill={o ? POWER[o].color : NEUTRAL} className={cls} onClick={() => onPick(i)} />;
+        return <path key={i} d={d} data-t={i} fill={o ? POWER[o].color : NEUTRAL} className={cls} onClick={() => onPick(i)} />;
       })}
     </g>
   );
 });
+
+function TipBody({ game, t }: { game: GameState; t: number }) {
+  const def = TERRITORIES[t];
+  const st = game.territories[t];
+  const region = REGIONS.find((r) => r.id === def.region)!;
+  return (
+    <>
+      <span className="tip-name">{def.name}</span>
+      <span className="tip-meta">
+        <i className="pdot" style={{ background: st.owner ? POWER[st.owner].color : NEUTRAL }} /> {st.owner ? POWER[st.owner].name : 'Minor state'} · <b>{st.armies}</b>
+      </span>
+      <span className="tip-region">
+        {region.name} +{region.bonus}
+      </span>
+    </>
+  );
+}
 
 const Graticule = memo(function Graticule() {
   const lines: string[] = [];
