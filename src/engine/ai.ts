@@ -1,7 +1,7 @@
 import { CARDS } from '../data/cards';
 import { REGION_MEMBERS, TERRITORIES, type PowerId } from '../data/world';
 import { mainThreat } from './diplomacy';
-import { alivePowers, attackBlocker, bordersPower, capitalOf, coreOf, current, hasPact, ownedBy, reachable, shares } from './game';
+import { alivePowers, attackBlocker, bordersPower, capitalOf, coreOf, current, hasPact, isDemocracy, ownedBy, pactWith, reachable, shares } from './game';
 import type { Action, GameState } from './types';
 
 /** Is `u` a legitimate target for `p` right now? AIs honour pacts and coalition solidarity. */
@@ -26,9 +26,22 @@ function exposure(s: GameState, p: PowerId, t: number): number {
   return enemy - s.territories[t].armies;
 }
 
+/** Minimum odds (attacking armies ÷ defenders) each doctrine accepts. */
+const NERVE = { offensive: 1.3, revisionist: 1.25, defensive: 1.75, liberal: 1.7 } as const;
+
+function nerve(s: GameState, p: PowerId): number {
+  const ps = s.powers[p];
+  let n = NERVE[ps.doctrine];
+  // Diversionary war: an embattled autocracy wants a quick win abroad.
+  if (!isDemocracy(p) && ps.legitimacy < 40) n -= 0.2;
+  return n;
+}
+
 function targetValue(s: GameState, p: PowerId, u: number): number {
   const t = TERRITORIES[u];
   const owner = s.territories[u].owner;
+  const d = s.powers[p].doctrine;
+  const struckUs = owner ? (s.aggression[`${owner}>${p}`] ?? -9) >= s.round - 1 : false;
   const members = REGION_MEMBERS[t.region];
   const mineAfter = members.filter((m) => m === u || s.territories[m].owner === p).length;
   let v = 1 + (mineAfter / members.length) * 3;
@@ -36,10 +49,19 @@ function targetValue(s: GameState, p: PowerId, u: number): number {
   if (!owner) v += 1;
   if (owner && s.coalition === owner && owner !== p) v += 5;
   if (owner && (s.aggression[`${owner}>${p}`] ?? -9) >= s.round - 1) v += 2;
+  // Doctrine shapes what is worth fighting for.
+  if (owner && owner !== p) {
+    if (d === 'offensive') v += 1.5;
+    if (d === 'revisionist' && owner === s.leader) v += 4;
+    if ((d === 'defensive' || d === 'liberal') && !struckUs && s.coalition !== owner) v -= d === 'liberal' ? 3.5 : 2.5;
+    if (isDemocracy(p) && isDemocracy(owner) && !struckUs) v -= 2.5;
+  }
+  if (!owner && d === 'defensive' && t.adj.some((a) => s.territories[a].owner === p && coreOf(a) === p)) v += 1.5;
   const core = coreOf(u);
   if (owner && core === owner) {
-    if (s.clock <= 2) return -Infinity;
-    v -= s.clock <= 4 ? 4 : 2;
+    const redline = 2;
+    if (s.clock <= redline) return -Infinity;
+    v -= s.clock <= 4 ? (d === 'revisionist' ? 3 : 4) : 2;
     if (s.coalition === owner) v += 2;
   }
   if (owner && capitalOf(u) === owner) v += 1;
@@ -61,10 +83,17 @@ function attackOptions(s: GameState, p: PowerId, extra = 0, extraAt = -1): Optio
     const a = s.territories[from].armies + (from === extraAt ? extra : 0);
     if (a < 2) continue;
     for (const to of TERRITORIES[from].adj) {
-      if (!hostile(s, p, to)) continue;
       const d = s.territories[to].armies;
       const odds = (a - 1) / Math.max(1, d);
-      const value = targetValue(s, p, to);
+      let value = targetValue(s, p, to);
+      if (!hostile(s, p, to)) {
+        // Opportunists will betray a pact (never an alliance) for an easy, valuable prize.
+        const o = s.territories[to].owner;
+        const doc = s.powers[p].doctrine;
+        const pact = o ? pactWith(s, p, o) : null;
+        if (!(pact && pact.kind === 'nap' && (doc === 'offensive' || doc === 'revisionist') && odds >= 3 && value >= 4)) continue;
+        value -= 2;
+      }
       if (value <= 0) continue;
       out.push({ from, to, odds, score: value * Math.min(odds, 3) - d * 0.15 });
     }
@@ -103,7 +132,7 @@ export function aiStep(s: GameState): Action {
   if (s.phase === 'attack') {
     const opt = attackOptions(s, p).find(
       (o) =>
-        o.odds >= 1.5 ||
+        o.odds >= nerve(s, p) ||
         (o.odds >= 1.15 && s.coalition !== null && s.territories[o.to].owner === s.coalition && s.coalition !== p) ||
         (s.territories[o.to].armies === 1 && s.territories[o.from].armies >= 3),
     );
@@ -156,7 +185,7 @@ function pickCard(s: GameState, p: PowerId): Action | null {
       }
     }
     if (s.phase === 'attack' && (c.id === 'carrier' || c.id === 'blitzkrieg') && !s.blitz && !s.carrier) {
-      if (attackOptions(s, p).some((o) => o.odds >= 1.5)) return { kind: 'play', card: i };
+      if (attackOptions(s, p).some((o) => o.odds >= nerve(s, p))) return { kind: 'play', card: i };
     }
   }
   return null;

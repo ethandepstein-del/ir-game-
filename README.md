@@ -46,6 +46,13 @@ npm run map           # regenerate the hex map from Natural Earth data
 
 When a concept first happens in play, a short "Theory in play" note appears. The **Codex** collects 19 concepts, each with a key reading, and unlocks them as you encounter them. The end screen charts every power's share of world strength, round by round.
 
+## Deeper IR systems
+
+- **Secret doctrines.** Each rival is secretly an offensive realist, defensive realist, liberal institutionalist or revisionist, and plays like one. Mark your guesses on the roster; the end screen reveals the truth with each rival's record.
+- **Alliances with obligations.** Defensive alliances give the defender +1 to its best die when an ally stands next door. When your ally is attacked you must honor the alliance (go to war) or abandon it (reputation and legitimacy losses): chain-ganging vs. buck-passing.
+- **Regime type and legitimacy.** Democracies (USA, EU, India) and autocracies (Russia, China) have a legitimacy meter that changes income. It covers audience costs, the democratic peace, rally effects, war weariness and diversionary war.
+- **Attack previews** list every consequence before you commit: broken pacts, Doomsday Clock, legitimacy costs, allies that will be obliged to respond.
+
 ## Code
 
 ```

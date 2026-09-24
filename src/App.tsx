@@ -71,6 +71,7 @@ export function App() {
       played: p.played + 1,
       wins: game.winner === game.player ? { ...p.wins, [game.player]: (p.wins[game.player] ?? 0) + 1 } : p.wins,
     }));
+    learn(['offensive-realism', 'defensive-realism', 'revisionism', 'institutions']);
     setScreen('end');
     window.scrollTo(0, 0);
   };

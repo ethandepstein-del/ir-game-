@@ -16,6 +16,8 @@ export interface CardDef {
 }
 
 export type Era = 'balanced' | 'defense' | 'offense';
+/** Hidden grand strategy each AI follows. */
+export type Doctrine = 'offensive' | 'defensive' | 'liberal' | 'revisionist';
 export type Phase = 'deploy' | 'attack' | 'fortify';
 
 export interface TerritoryState {
@@ -31,12 +33,27 @@ export interface PowerState {
   /** One-off modifier to next income (sanctions, events). */
   incomeMod: number;
   conquered: number;
+  doctrine: Doctrine;
+  /** Domestic legitimacy, 0–100. */
+  legitimacy: number;
+  /** Armies lost in battle this round (war weariness). */
+  bled: number;
+  stats: { gpAttacks: number; pacts: number; betrayals: number; honored: number; abandoned: number };
 }
 
 export interface Pact {
   a: PowerId;
   b: PowerId;
   until: number;
+  kind: 'nap' | 'alliance';
+}
+
+/** An ally was attacked; `ally` must honor or abandon the alliance on its next turn. */
+export interface Obligation {
+  ally: PowerId;
+  victim: PowerId;
+  aggressor: PowerId;
+  round: number;
 }
 
 export interface BattleReport {
@@ -83,6 +100,8 @@ export type FxEvent =
   | { t: 'world'; kind: 'financial' | 'oil' | 'nationalism' | 'talks' }
   | { t: 'card'; card: CardId; power: PowerId; target?: number | PowerId }
   | { t: 'pact'; a: PowerId; b: PowerId }
+  | { t: 'alliance'; a: PowerId; b: PowerId }
+  | { t: 'obligation'; ally: PowerId; victim: PowerId; aggressor: PowerId; honored: boolean }
   | { t: 'pactBroken'; a: PowerId; b: PowerId }
   | { t: 'pactRejected'; a: PowerId; b: PowerId }
   | { t: 'turn'; power: PowerId; round: number }
@@ -124,6 +143,13 @@ export interface GameState {
   fx: FxEvent[];
   /** Round in which `a` last attacked `b`, keyed "a>b". */
   aggression: Record<string, number>;
+  obligations: Obligation[];
+  /** The player's obligation awaiting an answer. */
+  pendingObligation: Obligation | null;
+  /** Per-turn keys so a penalty or rally applies once per target. */
+  turnKeys: string[];
+  /** The player's guesses at each rival's doctrine. */
+  guesses: Partial<Record<PowerId, Doctrine>>;
 }
 
 export type Action =
@@ -135,4 +161,7 @@ export type Action =
   | { kind: 'endTurn' }
   | { kind: 'play'; card: number; target?: number | PowerId }
   | { kind: 'propose'; to: PowerId }
+  | { kind: 'proposeAlliance'; to: PowerId }
+  | { kind: 'answerObligation'; honor: boolean }
+  | { kind: 'guess'; power: PowerId; doctrine: Doctrine | null }
   | { kind: 'answerOffer'; accept: boolean };

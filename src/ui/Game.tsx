@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { CARDS } from '../data/cards';
 import { CONCEPTS, type ConceptId } from '../data/concepts';
-import { HEGEMONY, MAX_ROUNDS, POWER, POWERS, REGION_MEMBERS, REGIONS, TERRITORIES, type PowerId } from '../data/world';
+import { DOCTRINE_ORDER, DOCTRINES } from '../data/doctrines';
+import { HEGEMONY, MAX_ALLIANCES, MAX_ROUNDS, POWER, POWERS, REGION_MEMBERS, REGIONS, TERRITORIES, type PowerId } from '../data/world';
 import { aiStep } from '../engine/ai';
 import {
+  alliesOf,
   apply,
   attackBlocker,
+  attackConsequences,
   attackDice,
   capitalOf,
   coreOf,
@@ -20,7 +23,7 @@ import {
   shares,
   winChance,
 } from '../engine/game';
-import type { Action, CardId, FxEvent, GameState } from '../engine/types';
+import type { Action, CardId, Doctrine, FxEvent, GameState } from '../engine/types';
 import { sfx } from './audio/sfx';
 import { CardGlyph, Clock, PowerDot, ShareRing } from './bits';
 import { direct } from './fx/director';
@@ -337,6 +340,10 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
           </button>
           <Stat label="Era" value={ERA_LABEL[game.era]} onClick={() => onCodex('offense-defense')} hideOnPhone />
           <Stat label="System" value={pol} onClick={() => onCodex('polarity')} hideOnPhone />
+          <div className="stat" title="Your domestic legitimacy">
+            <span className="stat-label">Legitimacy</span>
+            <span className="stat-value">{game.powers[me].legitimacy}</span>
+          </div>
           <div className="stat heg" title={`Hold ${HEGEMONY} territories for hegemony`}>
             <span className="stat-label">Hegemony</span>
             <span className="stat-value">
@@ -417,21 +424,60 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
                     </span>
                   </div>
                   <ShareRing share={sh[p.id]} color={p.color} />
+                  <div className="legit" title={`Legitimacy ${ps.legitimacy}: domestic support. High adds armies, low costs them.`}>
+                    <span className="legit-label">{p.regime === 'democracy' ? 'Democracy' : 'Autocracy'}</span>
+                    <span className="legit-track">
+                      <i style={{ width: `${ps.legitimacy}%` }} className={ps.legitimacy <= 35 ? 'low' : ''} />
+                    </span>
+                    <span className="legit-num">{ps.legitimacy}</span>
+                  </div>
+                  {p.id !== me && ps.alive && (
+                    <label className="guess">
+                      <span>Doctrine</span>
+                      <select
+                        value={game.guesses[p.id] ?? ''}
+                        onChange={(e) => act({ kind: 'guess', power: p.id, doctrine: (e.target.value || null) as Doctrine | null })}
+                        aria-label={`Your guess at ${p.name}'s doctrine`}
+                      >
+                        <option value="">Unknown</option>
+                        {DOCTRINE_ORDER.map((d) => (
+                          <option key={d} value={d}>
+                            {DOCTRINES[d].name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <div className="plaque-tags">
                     {!ps.alive && <span className="tag">Eliminated</span>}
                     {game.coalition === p.id && <span className="tag hot">Coalition target</span>}
-                    {pact && <span className="tag good">Pact · {pact.until - game.round + 1}r</span>}
+                    {pact && pact.kind === 'alliance' && <span className="tag good">Allied</span>}
+                    {pact && pact.kind === 'nap' && <span className="tag good">Pact · {pact.until - game.round + 1}r</span>}
                     {others.length > 0 && <span className="tag muted">⟷ {others.map((x) => POWER[x.a === p.id ? x.b : x.a].short).join(' ')}</span>}
                   </div>
-                  {canPropose && (
-                    <button
-                      type="button"
-                      className="plaque-action"
-                      onClick={() => act({ kind: 'propose', to: p.id })}
-                      title={game.coalition === p.id ? 'Signing with the coalition target forfeits your coalition aid.' : 'Offer a 5-round non-aggression pact'}
-                    >
-                      Propose pact
-                    </button>
+                  {myTurn && p.id !== me && ps.alive && !game.proposedThisRound.includes(p.id) && (
+                    <div className="plaque-actions">
+                      {canPropose && (
+                        <button
+                          type="button"
+                          className="plaque-action"
+                          onClick={() => act({ kind: 'propose', to: p.id })}
+                          title={game.coalition === p.id ? 'Signing with the coalition target forfeits your coalition aid.' : 'Offer a 5-round non-aggression pact'}
+                        >
+                          Pact
+                        </button>
+                      )}
+                      {pact?.kind !== 'alliance' && alliesOf(game, me).length < MAX_ALLIANCES && (
+                        <button
+                          type="button"
+                          className="plaque-action"
+                          onClick={() => act({ kind: 'proposeAlliance', to: p.id })}
+                          title="Defensive alliance: each side must come to the other's aid, or abandon it at a cost."
+                        >
+                          Alliance
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </li>
@@ -681,7 +727,29 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
         </div>
       </section>
 
-      {game.offer && myTurn && (
+      {game.pendingObligation && myTurn && (
+        <Modal>
+          <span className="modal-kicker hot">Alliance obligation</span>
+          <h2>
+            {POWER[game.pendingObligation.aggressor].name} attacked your ally, {POWER[game.pendingObligation.victim].name}
+          </h2>
+          <p>
+            <b>Honor</b> the alliance and you are at war with {POWER[game.pendingObligation.aggressor].name}: any pact with them ends and
+            you mobilize +3 armies. <b>Abandon</b> your ally and the alliance dies: reputation −25, and legitimacy −
+            {POWER[me].regime === 'democracy' ? 12 : 4} as your public sees a broken promise.
+          </p>
+          <div className="row">
+            <button type="button" className="btn primary" onClick={() => act({ kind: 'answerObligation', honor: true })}>
+              Honor the alliance
+            </button>
+            <button type="button" className="btn" onClick={() => act({ kind: 'answerObligation', honor: false })}>
+              Abandon them
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {game.offer && myTurn && !game.pendingObligation && (
         <Modal>
           <span className="modal-kicker">Diplomatic cable · {POWER[game.offer.from].name}</span>
           <h2>A non-aggression pact is offered</h2>
@@ -822,6 +890,15 @@ function Dossier({ game, t, tgt, odds, onClose }: { game: GameState; t: number; 
             <b>{Math.round(odds * 100)}%</b> chance an all-out attack takes it
           </span>
           <DiceNote game={game} from={t} to={tgt} />
+          {attackConsequences(game, t, tgt).length > 0 && (
+            <ul className="consequences">
+              {attackConsequences(game, t, tgt).map((c) => (
+                <li key={c.text} className={`cq-${c.tone}`}>
+                  {c.text}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       <p className="dossier-borders">Borders {def.adj.map((u) => TERRITORIES[u].name).join(' · ')}</p>

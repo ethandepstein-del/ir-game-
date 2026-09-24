@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
 import { CONCEPTS, type ConceptId } from '../data/concepts';
+import { DOCTRINES } from '../data/doctrines';
 import { POWER, POWERS } from '../data/world';
 import { ownedBy, prestige } from '../engine/game';
 import type { GameState } from '../engine/types';
@@ -137,6 +138,33 @@ export function End({ game, onAgain, onMenu, onCodex }: { game: GameState; onAga
         <section className="card">
           <h3>The balance of power, round by round</h3>
           <ShareChart game={game} />
+        </section>
+
+        <section className="card end-concepts">
+          <h3>The rivals, unmasked</h3>
+          <ul className="reveal">
+            {POWERS.filter((p) => p.id !== me).map((p) => {
+              const ps = game.powers[p.id];
+              const d = DOCTRINES[ps.doctrine];
+              const guess = game.guesses[p.id];
+              return (
+                <li key={p.id}>
+                  <button type="button" className="learned" onClick={() => onCodex(d.concept)}>
+                    <b>
+                      <PowerDot p={p.id} /> {p.name}: {d.name}
+                    </b>
+                    <span>
+                      {guess ? (guess === ps.doctrine ? '✓ You read them correctly.' : `✗ You guessed ${DOCTRINES[guess].name}.`) : 'You made no guess.'} {d.summary}
+                    </span>
+                    <span>
+                      Record: {ps.stats.gpAttacks} attacks on great powers · {ps.stats.pacts} agreements · {ps.stats.betrayals} betrayals · honored allies{' '}
+                      {ps.stats.honored}×, abandoned {ps.stats.abandoned}×
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </section>
 
         <section className="card end-concepts">

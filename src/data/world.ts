@@ -40,11 +40,13 @@ export interface PowerDef {
   capital: string;
   doctrine: string;
   doctrineText: string;
+  regime: 'democracy' | 'autocracy';
 }
 
 export const POWERS: PowerDef[] = [
   {
     id: 'usa',
+    regime: 'democracy',
     name: 'United States',
     short: 'USA',
     color: '#1f5fbf',
@@ -55,6 +57,7 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'eu',
+    regime: 'democracy',
     name: 'European Union',
     short: 'EU',
     color: '#e0a800',
@@ -65,6 +68,7 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'rus',
+    regime: 'autocracy',
     name: 'Russia',
     short: 'RUS',
     color: '#c42e2e',
@@ -75,6 +79,7 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'chn',
+    regime: 'autocracy',
     name: 'China',
     short: 'CHN',
     color: '#6b3fa0',
@@ -85,6 +90,7 @@ export const POWERS: PowerDef[] = [
   },
   {
     id: 'ind',
+    regime: 'democracy',
     name: 'India',
     short: 'IND',
     color: '#16875a',
@@ -108,3 +114,5 @@ export const MAX_ROUNDS = 20;
 export const PACT_LENGTH = 5;
 export const START_CLOCK = 6;
 export const MAX_CLOCK = 9;
+
+export const MAX_ALLIANCES = 2;

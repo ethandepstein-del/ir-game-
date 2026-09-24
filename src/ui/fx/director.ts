@@ -195,6 +195,22 @@ export function direct(events: FxEvent[], stage: Stage, opts: DirectOpts): numbe
             stage.banner({ title: 'Pact signed', sub: `${POWER[e.a].name} and ${POWER[e.b].name}: 5 rounds of non-aggression.`, tone: 'good' });
         }
         break;
+      case 'alliance':
+        sfx.pact();
+        stage.banner({ title: 'Alliance formed', sub: `${POWER[e.a].name} and ${POWER[e.b].name} pledge mutual defense.`, tone: 'good' });
+        break;
+      case 'obligation':
+        if (e.honored) sfx.pact();
+        else sfx.betrayal();
+        stage.banner({
+          title: e.honored ? 'Alliance honored' : 'Ally abandoned',
+          sub: e.honored
+            ? `${POWER[e.ally].name} goes to war with ${POWER[e.aggressor].name} for ${POWER[e.victim].name}.`
+            : `${POWER[e.ally].name} leaves ${POWER[e.victim].name} to face ${POWER[e.aggressor].name} alone.`,
+          tone: e.honored ? 'info' : 'alert',
+          color: POWER[e.ally].color,
+        });
+        break;
       case 'pactBroken':
         sfx.betrayal();
         stage.banner({ title: 'Pact broken', sub: `${POWER[e.a].name} betrays ${POWER[e.b].name}.`, tone: 'alert', color: POWER[e.a].color });

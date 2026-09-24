@@ -17,7 +17,17 @@ export type ConceptId =
   | 'arms-control'
   | 'detente'
   | 'institutions'
-  | 'hegemony';
+  | 'hegemony'
+  | 'offensive-realism'
+  | 'defensive-realism'
+  | 'revisionism'
+  | 'collective-defense'
+  | 'chain-ganging'
+  | 'buck-passing'
+  | 'democratic-peace'
+  | 'audience-costs'
+  | 'diversionary-war'
+  | 'public-opinion';
 
 export interface Concept {
   name: string;
@@ -141,6 +151,66 @@ export const CONCEPTS: Record<ConceptId, Concept> = {
     dispatch: 'One power now dominates the system.',
     body: 'Hegemonic stability theory argues that a single dominant power can provide order: open trade, a reserve currency, security guarantees. Realists warn that hegemons provoke balancing and overextend themselves.',
     reading: 'Robert Gilpin, War and Change in World Politics (1981); Paul Kennedy, The Rise and Fall of the Great Powers (1987).',
+  },
+  'offensive-realism': {
+    name: 'Offensive Realism',
+    dispatch: 'Great powers maximize relative power, because under anarchy you can never be sure you have enough.',
+    body: 'John Mearsheimer argues that uncertainty about others\' intentions drives great powers to seek hegemony whenever the opportunity arises. Status quo powers are rare, and every great power is a potential revisionist.',
+    reading: 'John Mearsheimer, The Tragedy of Great Power Politics (2001).',
+  },
+  'defensive-realism': {
+    name: 'Defensive Realism',
+    dispatch: 'Expansion usually backfires, so sensible states seek security, not domination.',
+    body: 'Defensive realists hold that the system punishes aggression: expansion triggers balancing, and defense is often easier than offense. States should aim for an appropriate amount of power, and overexpansion comes from domestic pathologies, not systemic logic.',
+    reading: 'Kenneth Waltz, Theory of International Politics (1979); Jack Snyder, Myths of Empire (1991); Charles Glaser, Rational Theory of International Politics (2010).',
+  },
+  revisionism: {
+    name: 'Revisionist vs. Status Quo Powers',
+    dispatch: 'Some states want security. Others want to change the rules of the system itself.',
+    body: 'Randall Schweller argues that realism went wrong by assuming all states are security-seekers. Revisionist states value what they could gain more than what they already have, and are willing to take risks to overturn the order. Power transition theory expects them to challenge a declining leader.',
+    reading: 'Randall Schweller, "Neorealism\'s Status-Quo Bias" (1996); A. F. K. Organski, World Politics (1958).',
+  },
+  'collective-defense': {
+    name: 'Alliances & Collective Defense',
+    dispatch: 'An ally next door makes an attack costlier, provided the promise to help is believed.',
+    body: 'Alliances aggregate capabilities and deter attack, but only if commitments are credible. States ally mainly against threats, weighing power, proximity, offensive capability and perceived intentions (Walt\'s balance of threat), rather than against power alone.',
+    reading: 'Stephen Walt, The Origins of Alliances (1987); Glenn Snyder, Alliance Politics (1997).',
+  },
+  'chain-ganging': {
+    name: 'Chain-Ganging',
+    dispatch: 'You honored an alliance, and it dragged you into a war with a stronger power.',
+    body: 'In multipolar systems with tight alliances, states can be chained to reckless allies. 1914 is the classic case: each power felt it could not let its partner be defeated. The alliance security dilemma is choosing between entrapment in an ally\'s war and abandonment by the ally.',
+    reading: 'Thomas Christensen & Jack Snyder, "Chain Gangs and Passed Bucks" (1990); Glenn Snyder, "The Security Dilemma in Alliance Politics" (1984).',
+  },
+  'buck-passing': {
+    name: 'Buck-Passing',
+    dispatch: 'You left your ally to fend for itself and let someone else pay the cost of balancing.',
+    body: 'When defense looks easy, states may pass the buck: stay out and let others check an aggressor. The 1930s are the classic case, when Britain, France and the USSR each hoped another would stop Germany. Abandoned allies remember.',
+    reading: 'Thomas Christensen & Jack Snyder, "Chain Gangs and Passed Bucks" (1990); John Mearsheimer, The Tragedy of Great Power Politics, ch. 8.',
+  },
+  'democratic-peace': {
+    name: 'The Democratic Peace',
+    dispatch: 'Democracies rarely fight each other, and their publics punish leaders who try.',
+    body: 'Established democracies have almost never fought wars with one another. Explanations include shared norms of peaceful dispute resolution, institutional constraints on leaders, and the transparency that makes threats and commitments credible. Critics question the definitions and the causal story.',
+    reading: 'Michael Doyle, "Kant, Liberal Legacies, and Foreign Affairs" (1983); Bruce Russett, Grasping the Democratic Peace (1993); Sebastian Rosato, "The Flawed Logic of Democratic Peace Theory" (2003).',
+  },
+  'audience-costs': {
+    name: 'Audience Costs',
+    dispatch: 'Leaders who break public commitments pay for it at home, which is what makes their commitments believable.',
+    body: 'Democratic leaders who make threats or promises and then back down face punishment from domestic audiences. That cost is what makes their commitments credible abroad. Autocrats face audience costs too, but usually from elites rather than voters.',
+    reading: 'James Fearon, "Domestic Political Audiences and the Escalation of International Disputes" (1994); Jessica Weeks, "Autocratic Audience Costs" (2008).',
+  },
+  'diversionary-war': {
+    name: 'Diversionary War',
+    dispatch: 'A regime in trouble at home looks for a victory abroad.',
+    body: 'Leaders facing domestic unrest may start foreign conflicts to rally support and distract the public. The evidence is mixed. The Falklands war (1982) is the textbook case, but many embattled regimes avoid war precisely because they are weak.',
+    reading: 'Jack Levy, "The Diversionary Theory of War" (1989); Amy Oakes, Diversionary War (2012).',
+  },
+  'public-opinion': {
+    name: 'Rally & War Weariness',
+    dispatch: 'An attack on the homeland rallies the public, but mounting losses wear democracies down.',
+    body: 'External attacks briefly boost support for leaders (the rally-round-the-flag effect), but public support for war falls as casualties mount. Democracies are generally more casualty-sensitive than autocracies.',
+    reading: 'John Mueller, War, Presidents and Public Opinion (1973); Christopher Gelpi, Peter Feaver & Jason Reifler, Paying the Human Costs of War (2009).',
   },
 };
 

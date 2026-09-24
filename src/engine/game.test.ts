@@ -85,9 +85,39 @@ describe('rules', () => {
     if (pact) expect(pact.until - s.round + 1).toBe(5);
   });
 
+  it('gives each rival a different secret doctrine', () => {
+    const s = newGame('usa', 12);
+    const ds = s.order.filter((p) => p !== 'usa').map((p) => s.powers[p].doctrine);
+    expect(new Set(ds).size).toBe(4);
+  });
+
+  it('alliances oblige the ally and add collective defense', () => {
+    let s = newGame('rus', 21);
+    s.pacts.push({ a: 'eu', b: 'ind', until: 9999, kind: 'alliance' });
+    // USA attacks an EU territory next to an Indian one? Use direct setup: EU owns levant, India owns pakistan? Keep it simple:
+    s.territories[T('persia')] = { owner: 'eu', armies: 2 };
+    s.territories[T('pakistan')] = { owner: 'ind', armies: 3 };
+    s.territories[T('arabia')] = { owner: 'usa', armies: 12 };
+    s = apply(s, { kind: 'deploy', t: T('us-east'), n: s.reinforcements });
+    s = apply(s, { kind: 'attack', from: T('arabia'), to: T('persia'), blitz: false });
+    expect(s.obligations.some((o) => o.ally === 'ind' && o.victim === 'eu' && o.aggressor === 'usa')).toBe(true);
+    expect(s.learned).toContain('collective-defense');
+  });
+
+  it('democracies pay a legitimacy cost for attacking democracies', () => {
+    let s = newGame('rus', 8);
+    s = apply(s, { kind: 'deploy', t: T('us-east'), n: s.reinforcements });
+    s.territories[T('greenland')] = { owner: 'usa', armies: 10 };
+    s.territories[T('uk')] = { owner: 'eu', armies: 30 };
+    const before = s.powers.usa.legitimacy;
+    s = apply(s, { kind: 'attack', from: T('greenland'), to: T('uk'), blitz: false });
+    expect(s.powers.usa.legitimacy).toBe(before - 8);
+    expect(s.learned).toContain('democratic-peace');
+  });
+
   it('breaking a pact costs reputation', () => {
     let s = newGame('usa', 4);
-    s.pacts.push({ a: 'usa', b: 'eu', until: 9 });
+    s.pacts.push({ a: 'usa', b: 'eu', until: 9, kind: 'nap' });
     s.territories[T('uk')] = { owner: 'eu', armies: 1 };
     s = apply(s, { kind: 'deploy', t: T('us-east'), n: s.reinforcements });
     const rep = s.powers.usa.reputation;
