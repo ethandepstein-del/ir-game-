@@ -671,9 +671,42 @@ export function attackBlocker(s: GameState, from: number, to: number): string | 
 
 // ---------- The reducer ----------
 
+/**
+ * Copy exactly the parts of the state a reducer step can mutate. Several times
+ * faster than structuredClone, which matters when the AI plays a whole round at once.
+ */
+export function cloneState(p: GameState): GameState {
+  const powers = {} as GameState['powers'];
+  for (const k in p.powers) {
+    const ps = p.powers[k as PowerId];
+    powers[k as PowerId] = { ...ps, cards: ps.cards.slice(), stats: { ...ps.stats } };
+  }
+  return {
+    ...p,
+    order: p.order.slice(),
+    territories: p.territories.map((t) => ({ ...t })),
+    powers,
+    pacts: p.pacts.map((x) => ({ ...x })),
+    log: p.log.slice(),
+    pendingMove: p.pendingMove ? { ...p.pendingMove } : null,
+    coreStrikes: p.coreStrikes.slice(),
+    proposedThisRound: p.proposedThisRound.slice(),
+    offer: p.offer ? { ...p.offer } : null,
+    learned: p.learned.slice(),
+    dispatches: p.dispatches.slice(),
+    history: p.history.slice(),
+    fx: p.fx.slice(),
+    aggression: { ...p.aggression },
+    obligations: p.obligations.map((o) => ({ ...o })),
+    pendingObligation: p.pendingObligation ? { ...p.pendingObligation } : null,
+    turnKeys: p.turnKeys.slice(),
+    guesses: { ...p.guesses },
+  };
+}
+
 export function apply(prev: GameState, action: Action): GameState {
   if (isOver(prev)) return prev;
-  const s: GameState = structuredClone(prev);
+  const s: GameState = cloneState(prev);
   s.dispatches = [];
   s.fx = [];
   const p = current(s);

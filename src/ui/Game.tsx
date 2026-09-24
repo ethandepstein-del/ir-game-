@@ -28,7 +28,7 @@ import { sfx } from './audio/sfx';
 import { CardGlyph, Clock, PowerDot, ShareRing } from './bits';
 import { direct } from './fx/director';
 import { FxEngine } from './fx/particles';
-import { GEO, MAP_W } from './geometry';
+import { GEO, LANE_ENDS, MAP_W, OCEAN_SPOTS } from './geometry';
 import { SoundControls } from './SoundControls';
 import { useStage } from './Stage';
 import { Tutorial, tutorialHolds } from './Tutorial';
@@ -122,6 +122,23 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd, tutorial,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => () => fxEngine.clear(), [fxEngine]);
+
+  // Life at sea: now and then a paper boat sails a lane or a whale surfaces, when the board is quiet.
+  useEffect(() => {
+    if (fxEngine.reduced) return;
+    const id = setInterval(() => {
+      if (document.hidden || fxEngine.busy > 2) return;
+      if (Math.random() < 0.6 && LANE_ENDS.length) {
+        const [a, b] = LANE_ENDS[Math.floor(Math.random() * LANE_ENDS.length)];
+        const flip = Math.random() < 0.5;
+        fxEngine.boat(...(flip ? b : a), ...(flip ? a : b));
+      } else if (OCEAN_SPOTS.length) {
+        const [x, y] = OCEAN_SPOTS[Math.floor(Math.random() * OCEAN_SPOTS.length)];
+        fxEngine.whale(x, y);
+      }
+    }, 7000);
+    return () => clearInterval(id);
+  }, [fxEngine]);
   useEffect(() => {
     (window as unknown as { __anarchy?: unknown }).__anarchy = { state: game, speed, fx: fxEngine };
   }, [game, speed, fxEngine]);

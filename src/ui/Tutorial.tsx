@@ -244,8 +244,8 @@ export function Tutorial({ view, index, setIndex, onClose }: { view: TutorialVie
   // Follow the target as the map pans and panels move.
   const sels = step?.target?.(view) ?? [];
   const key = sels.join('|');
+  // Polled ~8 times a second rather than every frame: layout reads are not free.
   useEffect(() => {
-    let raf = 0;
     let last = '';
     const tick = () => {
       const r = findTarget(key ? key.split('|') : []);
@@ -254,10 +254,10 @@ export function Tutorial({ view, index, setIndex, onClose }: { view: TutorialVie
         last = sig;
         setRect(r);
       }
-      raf = requestAnimationFrame(tick);
     };
     tick();
-    return () => cancelAnimationFrame(raf);
+    const id = setInterval(tick, 120);
+    return () => clearInterval(id);
   }, [key]);
 
   useLayoutEffect(() => {

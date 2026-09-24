@@ -201,10 +201,15 @@ export function WorldMap({ game, highlight, onPick, fx, odds, overlay, shakeKey 
     }, 0);
   };
 
-  const pick = (t: number) => {
+  // A stable handler, so panning and hovering don't re-render every territory and token.
+  const onPickRef = useRef(onPick);
+  useEffect(() => {
+    onPickRef.current = onPick;
+  }, [onPick]);
+  const pick = useCallback((t: number) => {
     if (drag.current?.moved) return;
-    onPick(t);
-  };
+    onPickRef.current(t);
+  }, []);
 
   // ---------- derived visuals ----------
 
@@ -326,6 +331,8 @@ const StaticUnderlay = memo(function StaticUnderlay({ k }: { k: number }) {
   return (
     <g pointerEvents="none">
       <path d={GEO.coast} className="coast-halo" style={{ strokeWidth: Math.max(6, 8 * k) }} />
+      {/* The land is cut paper lying on the sea: it casts a small hard shadow. */}
+      <path d={GEO.land} className="land-shadow" transform="translate(1.8 2.8)" />
       <path d={GEO.lanes} className="lanes" style={{ strokeWidth: 1.4 * k }} />
     </g>
   );
@@ -360,7 +367,7 @@ const Territories = memo(function Territories({
         return (
           <g key={i}>
             <path d={d} data-t={i} fill={o ? POWER[o].color : NEUTRAL} className={cls} onClick={() => onPick(i)} />
-            <path d={d} fill={o ? 'url(#pencil)' : 'url(#halftone)'} pointerEvents="none" />
+            <path d={d} fill={o ? 'url(#pencil)' : 'url(#halftone)'} className="terr-tex" pointerEvents="none" />
           </g>
         );
       })}

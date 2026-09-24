@@ -19,12 +19,17 @@ export interface View {
 
 type Pt = [number, number];
 type ToScreen = (x: number, y: number) => Pt;
-/** `t` is time since start, quantised to whole frames; `f` is the global frame number (for boil). */
-type Draw = (ctx: CanvasRenderingContext2D, t: number, P: ToScreen, f: number) => boolean;
+/**
+ * `t` is time since start, quantised to whole frames (for stop-motion poses);
+ * `r` is the raw time (for smooth motion); `f` is the global frame number (for boil).
+ */
+type Draw = (ctx: CanvasRenderingContext2D, t: number, P: ToScreen, f: number, r: number) => boolean;
 
 interface Item {
   start: number;
   draw: Draw;
+  /** Moves every display frame, not just every stop-motion frame. */
+  smooth: boolean;
 }
 
 /** Screen size of one cut-out unit: bigger on desktops, where the whole world is on screen. */
@@ -177,11 +182,12 @@ function cut(ctx: CanvasRenderingContext2D, shapes: Pt[] | Pt[][], color: string
   ctx.scale(s * (o.sx ?? 1), s * (o.sy ?? 1));
   ctx.beginPath();
   list.forEach((pts, i) => tracePath(ctx, pts, o.seed + i * 31, o.f, boil));
+  // A hard, unblurred shadow: cheaper than a blur, and it reads as paper lifted off the board.
   const sh = o.shadow ?? 1;
-  ctx.shadowColor = `rgba(55,40,20,${0.34 * sh})`;
-  ctx.shadowBlur = 3 * sh;
-  ctx.shadowOffsetX = 1.5 * sh;
-  ctx.shadowOffsetY = 2.5 * sh;
+  ctx.shadowColor = `rgba(55,40,20,${0.26 * Math.min(sh, 1.6)})`;
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 1.4 * sh;
+  ctx.shadowOffsetY = 2.2 * sh;
   ctx.fillStyle = color;
   ctx.fill('nonzero');
   ctx.shadowColor = 'transparent';
@@ -215,6 +221,27 @@ const quad = (a: Pt, m: Pt, b: Pt, q: number): Pt => [
   (1 - q) * (1 - q) * a[1] + 2 * (1 - q) * q * m[1] + q * q * b[1],
 ];
 
+
+const easeOut = (x: number) => 1 - Math.pow(1 - x, 3);
+const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+
+const COMIC_SMALL = ['POW!', 'BAM!', 'WHAM!', 'BONK!', 'KRAK!', 'THWACK!', 'ZOK!'];
+
+// Little paper props for the whimsical bits.
+const DOVE_BODY: Pt[] = [[-10, 0], [-5, -3], [4, -3], [9, -6], [13, -5], [11, -2], [6, 2], [-2, 3], [-9, 3], [-14, -1]];
+const DOVE_WING_UP: Pt[] = [[-3, -2], [1, -15], [7, -2]];
+const DOVE_WING_DOWN: Pt[] = [[-3, 0], [1, 10], [7, 0]];
+const BEAK: Pt[] = [[12.5, -5.5], [16, -4.2], [12, -3.2]];
+const HULL: Pt[] = [[-13, 0], [13, 0], [8, 6], [-8, 6]];
+const SAIL: Pt[] = [[0, -1], [0, -17], [10, -2]];
+const JIB: Pt[] = [[-2, -1], [-2, -12], [-10, -1]];
+const WHALE: Pt[] = [[-16, 3], [-10, -5], [2, -8], [12, -5], [18, 1], [12, 6], [-6, 7]];
+const FLUKE: Pt[] = [[-15, 2], [-24, -6], [-21, 1], [-26, 7]];
+const CANOPY: Pt[] = Array.from({ length: 9 }, (_, i) => {
+  const a = Math.PI + (i / 8) * Math.PI;
+  return [Math.cos(a) * 10, Math.sin(a) * 7] as Pt;
+});
+
 export class FxEngine {
   private items: Item[] = [];
   private canvas: HTMLCanvasElement | null = null;
@@ -234,8 +261,13 @@ export class FxEngine {
     this.items = [];
   }
 
-  private add(delayMs: number, draw: Draw) {
-    this.items.push({ start: performance.now() + delayMs, draw });
+  /** How many effects are in flight (the ambient scheduler stays quiet when the board is busy). */
+  get busy(): number {
+    return this.items.length;
+  }
+
+  private add(delayMs: number, draw: Draw, smooth = false) {
+    this.items.push({ start: performance.now() + delayMs, draw, smooth });
     this.kick();
   }
 
@@ -250,14 +282,15 @@ export class FxEngine {
     const v = this.view();
     const f = Math.floor(now / FRAME);
     const viewSig = `${v.x.toFixed(1)},${v.y.toFixed(1)},${v.k.toFixed(4)},${c.clientWidth},${c.clientHeight}`;
-    // Stop-motion: only a new frame (or a pan of the map) redraws.
-    if (f === this.lastFrame && viewSig === this.lastView) {
+    const moving = this.items.some((it) => it.smooth && now >= it.start);
+    // Stop-motion pieces only need a new frame 12 times a second; smooth motion or a pan redraws every frame.
+    if (!moving && f === this.lastFrame && viewSig === this.lastView) {
       this.raf = requestAnimationFrame(this.frame);
       return;
     }
     this.lastFrame = f;
     this.lastView = viewSig;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = c.clientWidth;
     const h = c.clientHeight;
     U = w < 760 ? 1.15 : 1.5;
@@ -269,11 +302,15 @@ export class FxEngine {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const toScreen: ToScreen = (x, y) => [(x - v.x) / v.k, (y - v.y) / v.k];
-    this.items = this.items.filter((it) => {
+    // Effects can spawn effects mid-frame (an arrow's hit sets off a burst), so collect those separately.
+    const running = this.items;
+    this.items = [];
+    const kept = running.filter((it) => {
       if (now < it.start) return true;
-      const t = Math.floor((now - it.start) / FRAME) * FRAME;
-      return it.draw(ctx, t, toScreen, f);
+      const r = now - it.start;
+      return it.draw(ctx, Math.floor(r / FRAME) * FRAME, toScreen, f, r);
     });
+    this.items = kept.concat(this.items);
     if (this.items.length) this.raf = requestAnimationFrame(this.frame);
     else {
       ctx.clearRect(0, 0, w, h);
@@ -283,7 +320,7 @@ export class FxEngine {
 
   // ---------- building blocks ----------
 
-  /** Paper scraps flung out from a point, tumbling under gravity. */
+  /** Paper scraps flung out from a point, tumbling smoothly under gravity. */
   scraps(x: number, y: number, colors: string[], n: number, power = 1, delay = 0) {
     if (this.reduced) return;
     for (let i = 0; i < n; i++) {
@@ -294,44 +331,88 @@ export class FxEngine {
       const shape = blob(4 + Math.floor(hash(seed, 4) * 3), 3 + hash(seed, 5) * 3.5, 0.6, seed);
       const color = colors[i % colors.length];
       const spin = (hash(seed, 6) - 0.5) * 14;
-      this.add(delay, (ctx, t, P, f) => {
-        if (t > life) return false;
-        const s = t / 1000;
-        const [sx, sy] = P(x, y);
-        cut(ctx, shape, color, {
-          x: sx + Math.cos(a) * v * s,
-          y: sy + Math.sin(a) * v * s - 70 * power * U * s + 200 * U * s * s,
-          rot: spin * s,
-          sy: Math.cos(spin * s * 1.3) * 0.8 + 0.2,
-          seed,
-          f,
-          shadow: 0.6,
-          edge: false,
-          boil: 0.4,
-        });
-        return true;
-      });
+      this.add(
+        delay,
+        (ctx, _t, P, f, r) => {
+          if (r > life) return false;
+          const s = r / 1000;
+          const [sx, sy] = P(x, y);
+          cut(ctx, shape, color, {
+            x: sx + Math.cos(a) * v * s,
+            y: sy + Math.sin(a) * v * s - 70 * power * U * s + 200 * U * s * s,
+            rot: spin * s,
+            sy: Math.cos(spin * s * 1.3) * 0.8 + 0.2,
+            alpha: r > life - 120 ? (life - r) / 120 : 1,
+            seed,
+            f,
+            shadow: 0.6,
+            edge: false,
+            boil: 0.4,
+          });
+          return true;
+        },
+        true,
+      );
     }
   }
 
-  /** A grey paper cloud that bobs upward and shrinks away in steps. */
+  /** A grey paper cloud that drifts up while its shape pops in held frames. */
   puff(x: number, y: number, size = 1, delay = 0, dark = false) {
     const seed = newSeed();
     const shapes = cloud(12 * size, seed);
     const life = 1000 + hash(seed) * 500;
     const drift = (hash(seed, 2) - 0.5) * 18;
+    this.add(
+      delay,
+      (ctx, t, P, f, r) => {
+        if (r > life) return false;
+        const p = r / life;
+        const [sx, sy] = P(x, y);
+        cut(ctx, shapes, dark ? PAPER.smokeDark : PAPER.smoke, {
+          x: sx + drift * easeOut(p),
+          y: sy - 34 * size * U * easeOut(p),
+          scale: keys(t, [0.4, 0.8, 1, 1.05]) * (1 - p * 0.55),
+          seed,
+          f,
+          shadow: 0.7,
+        });
+        return true;
+      },
+      true,
+    );
+  }
+
+  /** A comic-book sound effect, cut out of yellow card and slapped on. */
+  comic(x: number, y: number, word: string, delay = 0, big = false) {
+    if (this.reduced) return;
+    const seed = newSeed();
+    const size = big ? 1.5 : 1;
+    const burst = starburst(11, 30 * size, 20 * size, seed);
+    const tilt = (hash(seed, 1) - 0.5) * 0.5;
+    const ox = (hash(seed, 2) - 0.5) * 26;
+    const scales = [0.3, 1.3, 0.92, 1.06, 1, 1, 1, 1, 1, 1.04, 0.8, 0.45];
+    const life = scales.length * FRAME;
     this.add(delay, (ctx, t, P, f) => {
-      if (t > life) return false;
-      const p = t / life;
+      if (t >= life) return false;
       const [sx, sy] = P(x, y);
-      cut(ctx, shapes, dark ? PAPER.smokeDark : PAPER.smoke, {
-        x: sx + drift * p,
-        y: sy - 34 * size * U * p,
-        scale: keys(t, [0.4, 0.8, 1, 1.05]) * (1 - p * 0.55),
-        seed,
-        f,
-        shadow: 0.7,
-      });
+      const k = keys(t, scales);
+      const cx = sx + ox * U;
+      const cy = sy - 34 * U * size;
+      cut(ctx, burst, PAPER.yellow, { x: cx, y: cy, rot: tilt, scale: k, seed, f, shadow: 1.2 });
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(tilt + (hash(seed, f) - 0.5) * 0.04);
+      ctx.scale(k * U, k * U);
+      ctx.font = `italic 900 ${big ? 17 : 13}px Archivo, "Arial Black", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = PAPER.cream;
+      ctx.strokeText(word, 0, 1);
+      ctx.fillStyle = '#c0392b';
+      ctx.fillText(word, 0, 1);
+      ctx.restore();
       return true;
     });
   }
@@ -358,71 +439,102 @@ export class FxEngine {
       cut(ctx, core, PAPER.cream, { ...o, seed: seed + 2, shadow: 0.4 });
       return true;
     });
+    if (s >= 0.85) this.comic(x, y, s > 1.6 ? 'KA-BOOM!' : COMIC_SMALL[seed % COMIC_SMALL.length], delay + FRAME, s > 1.6);
     this.scraps(x, y, [color, PAPER.yellow, PAPER.ink], Math.round(7 * s), s, delay + FRAME * 5);
     this.puff(x + 6 * s, y - 4, 0.8 * s, delay + FRAME * 5);
     if (s > 1.2) this.puff(x - 10 * s, y + 2, s, delay + FRAME * 6, true);
   }
 
-  /** A pencil circle drawn around a point, growing a step at a time. */
+  /** A pencil circle drawn around a point, growing smoothly while its line boils. */
   ring(x: number, y: number, r0: number, r1: number, color: string, dur = 600, width = 2, delay = 0) {
     const seed = newSeed();
-    this.add(delay, (ctx, t, P, f) => {
-      if (t > dur) return false;
-      const p = t / dur;
-      const [sx, sy] = P(x, y);
-      const r = (r0 + (r1 - r0) * Math.sqrt(p)) * U;
-      ctx.save();
-      ctx.globalAlpha = 1 - p * p;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      const n = Math.max(16, Math.min(64, Math.round(r / 5)));
-      // A loop that overshoots its start, as a hand would; smoothed through midpoints.
-      const pts: Pt[] = [];
-      for (let i = 0; i <= n + 3; i++) {
-        const a = (i / n) * Math.PI * 2 + hash(seed) * 6;
-        const rr = r * (1 + (hash(seed, i % n, f) - 0.5) * 0.07 + i * 0.003);
-        pts.push([sx + Math.cos(a) * rr, sy + Math.sin(a) * rr * 0.92]);
-      }
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      for (let i = 1; i < pts.length - 1; i++) {
-        const mx = (pts[i][0] + pts[i + 1][0]) / 2;
-        const my = (pts[i][1] + pts[i + 1][1]) / 2;
-        ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
-      }
-      ctx.stroke();
-      ctx.restore();
-      return true;
-    });
+    this.add(
+      delay,
+      (ctx, _t, P, f, rt) => {
+        if (rt > dur) return false;
+        const p = rt / dur;
+        const [sx, sy] = P(x, y);
+        const r = (r0 + (r1 - r0) * easeOut(p)) * U;
+        ctx.save();
+        ctx.globalAlpha = 1 - p * p;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        const n = Math.max(16, Math.min(64, Math.round(r / 5)));
+        // A loop that overshoots its start, as a hand would; smoothed through midpoints.
+        const pts: Pt[] = [];
+        for (let i = 0; i <= n + 3; i++) {
+          const a = (i / n) * Math.PI * 2 + hash(seed) * 6;
+          const rr = r * (1 + (hash(seed, i % n, f) - 0.5) * 0.07 + i * 0.003);
+          pts.push([sx + Math.cos(a) * rr, sy + Math.sin(a) * rr * 0.92]);
+        }
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length - 1; i++) {
+          ctx.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
+        }
+        ctx.stroke();
+        ctx.restore();
+        return true;
+      },
+      true,
+    );
   }
 
-  /** A paper arrow that hops from one territory to another. Calls onHit on arrival. */
+  /**
+   * A paper arrow thrown from one territory to another: a little wind-up, then a
+   * smooth, stretching flight with a dotted pencil trail. Calls onHit on arrival.
+   */
   projectile(x1: number, y1: number, x2: number, y2: number, color: string, delay = 0, dur = 380, onHit?: () => void) {
     const seed = newSeed();
     const bend = (0.25 + hash(seed) * 0.3) * (hash(seed, 1) < 0.5 ? -1 : 1);
-    const hops = Math.max(4, Math.round(dur / FRAME));
+    const windup = 130;
+    const flight = Math.max(260, dur);
     const shape = arrowShape(30, 9);
     let hit = false;
-    this.add(delay, (ctx, t, P, f) => {
-      const p = Math.min(1, t / (hops * FRAME));
-      const a = P(x1, y1);
-      const b = P(x2, y2);
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      const m: Pt = [(a[0] + b[0]) / 2 - (b[1] - a[1]) * bend, (a[1] + b[1]) / 2 + (b[0] - a[0]) * bend - len * 0.2];
-      // Slow out of the gate, fast into the target.
-      const q = p * p * 0.6 + p * 0.4;
-      const [hx, hy] = quad(a, m, b, q);
-      const [nx, ny] = quad(a, m, b, Math.min(1, q + 0.05));
-      const rot = Math.atan2(ny - hy, nx - hx);
-      cut(ctx, shape, color, { x: hx, y: hy, rot, scale: 0.8 + 0.3 * Math.sin(p * Math.PI), seed, f, shadow: 1.4 });
-      if (p >= 1 && !hit) {
-        hit = true;
-        onHit?.();
-      }
-      return p < 1;
-    });
+    this.add(
+      delay,
+      (ctx, _t, P, f, r) => {
+        const a = P(x1, y1);
+        const b = P(x2, y2);
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const m: Pt = [(a[0] + b[0]) / 2 - (b[1] - a[1]) * bend, (a[1] + b[1]) / 2 + (b[0] - a[0]) * bend - len * 0.2];
+        const aim = Math.atan2(quad(a, m, b, 0.05)[1] - a[1], quad(a, m, b, 0.05)[0] - a[0]);
+        if (r < windup) {
+          // Anticipation: draw back and squash, like a pulled bowstring.
+          const w = Math.sin((r / windup) * Math.PI * 0.5);
+          cut(ctx, shape, color, { x: a[0] - Math.cos(aim) * 9 * U * w, y: a[1] - Math.sin(aim) * 9 * U * w, rot: aim, sx: 1 - 0.3 * w, sy: 1 + 0.25 * w, scale: 0.85, seed, f, shadow: 1 });
+          return true;
+        }
+        const p = Math.min(1, (r - windup) / flight);
+        const q = easeInOut(p);
+        // Dotted pencil trail.
+        ctx.save();
+        ctx.fillStyle = 'rgba(42,39,35,0.55)';
+        for (let d = 0.04; d < 0.34; d += 0.045) {
+          const qq = q - d;
+          if (qq <= 0) break;
+          const [tx, ty] = quad(a, m, b, qq);
+          ctx.globalAlpha = 1 - d / 0.34;
+          ctx.beginPath();
+          ctx.arc(tx, ty, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        const [hx, hy] = quad(a, m, b, q);
+        const [nx, ny] = quad(a, m, b, Math.min(1, q + 0.04));
+        const rot = Math.atan2(ny - hy, nx - hx);
+        const speed = Math.sin(p * Math.PI);
+        cut(ctx, shape, color, { x: hx, y: hy, rot, sx: 1 + 0.35 * speed, sy: 1 - 0.2 * speed, scale: 0.85 + 0.35 * speed, seed, f, shadow: 1 + speed });
+        if (p >= 1 && !hit) {
+          hit = true;
+          onHit?.();
+        }
+        return p < 1;
+      },
+      true,
+    );
   }
 
   /** A little paper star where an attack sets out. */
@@ -437,66 +549,73 @@ export class FxEngine {
     });
   }
 
-  /** Paper chits hopping along a route, for troop movements. */
+  /** Paper chits bouncing along a route in little hops, for troop movements. */
   stream(x1: number, y1: number, x2: number, y2: number, color: string, count = 6, delay = 0) {
-    const hops = 7;
+    const dur = 650;
     for (let i = 0; i < Math.min(count, 6); i++) {
       const seed = newSeed();
       const shape = blob(6, 5, 0.35, seed);
-      this.add(delay + i * FRAME * 1.5, (ctx, t, P, f) => {
-        const step = Math.floor(t / FRAME);
-        if (step > hops) return false;
-        const a = P(x1, y1);
-        const b = P(x2, y2);
-        const q = step / hops;
-        const hop = step % 2 ? 6 * U : 0;
-        cut(ctx, shape, color, { x: a[0] + (b[0] - a[0]) * q, y: a[1] + (b[1] - a[1]) * q - hop, rot: step * 0.4, seed, f, shadow: 0.8 + hop / 8 });
-        return true;
-      });
+      this.add(
+        delay + i * 70,
+        (ctx, _t, P, f, r) => {
+          if (r > dur) return false;
+          const a = P(x1, y1);
+          const b = P(x2, y2);
+          const q = easeInOut(r / dur);
+          const hop = Math.abs(Math.sin(q * Math.PI * 3)) * 8 * U;
+          cut(ctx, shape, color, { x: a[0] + (b[0] - a[0]) * q, y: a[1] + (b[1] - a[1]) * q - hop, rot: q * 4, sy: hop < 1.5 ? 0.75 : 1, seed, f, shadow: 0.8 + hop / 10 });
+          return true;
+        },
+        true,
+      );
     }
   }
 
-  /** A strip of paper with a handwritten label, popped onto the board. */
+  /** A strip of paper with a handwritten label, floated up onto the board. */
   text(x: number, y: number, text: string, color: string, delay = 0, big = false) {
     const seed = newSeed();
     const dur = 1300;
     const fontSize = big ? 21 : 19;
     const rise = big ? 40 : 26;
-    this.add(delay, (ctx, t, P, f) => {
-      if (t > dur) return false;
-      const [sx, sy] = P(x, y);
-      ctx.save();
-      ctx.font = `700 ${fontSize}px Caveat, "Segoe Print", cursive`;
-      const w = ctx.measureText(text).width + 18;
-      const h = fontSize + 8;
-      const lift = keys(t, [0, 10, 14, 16, 17, 18]);
-      const scale = keys(t, [0.6, 1.12, 1]);
-      const y0 = sy - (rise + lift) * U;
-      const strip: Pt[] = [
-        [-w / 2, -h / 2 + 1],
-        [-w / 4, -h / 2 - 1],
-        [w / 4, -h / 2 + 1],
-        [w / 2, -h / 2 - 1],
-        [w / 2 - 2, 0],
-        [w / 2 + 1, h / 2],
-        [0, h / 2 + 1],
-        [-w / 2 + 1, h / 2 - 1],
-        [-w / 2 - 1, 0],
-      ];
-      const fade = t > dur - FRAME * 3 ? keys(t - (dur - FRAME * 3), [0.7, 0.4, 0.15]) : 1;
-      const rot = (hash(seed) - 0.5) * 0.12;
-      cut(ctx, strip, PAPER.cream, { x: sx, y: y0, rot, scale, seed, f, alpha: fade, boil: 0.5 });
-      ctx.translate(sx, y0);
-      ctx.rotate(rot);
-      ctx.scale(scale * U, scale * U);
-      ctx.globalAlpha = fade;
-      ctx.fillStyle = color;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(text, 0, 1);
-      ctx.restore();
-      return true;
-    });
+    this.add(
+      delay,
+      (ctx, t, P, f, r) => {
+        if (r > dur) return false;
+        const [sx, sy] = P(x, y);
+        ctx.save();
+        ctx.font = `700 ${fontSize}px Caveat, "Segoe Print", cursive`;
+        const w = ctx.measureText(text).width + 18;
+        const h = fontSize + 8;
+        const lift = 18 * easeOut(Math.min(1, r / 500));
+        const scale = keys(t, [0.6, 1.12, 1]);
+        const y0 = sy - (rise + lift) * U;
+        const strip: Pt[] = [
+          [-w / 2, -h / 2 + 1],
+          [-w / 4, -h / 2 - 1],
+          [w / 4, -h / 2 + 1],
+          [w / 2, -h / 2 - 1],
+          [w / 2 - 2, 0],
+          [w / 2 + 1, h / 2],
+          [0, h / 2 + 1],
+          [-w / 2 + 1, h / 2 - 1],
+          [-w / 2 - 1, 0],
+        ];
+        const fade = r > dur - 250 ? (dur - r) / 250 : 1;
+        const rot = (hash(seed) - 0.5) * 0.12 + Math.sin(r / 180) * 0.03;
+        cut(ctx, strip, PAPER.cream, { x: sx, y: y0, rot, scale, seed, f, alpha: fade, boil: 0.5 });
+        ctx.translate(sx, y0);
+        ctx.rotate(rot);
+        ctx.scale(scale * U, scale * U);
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 0, 1);
+        ctx.restore();
+        return true;
+      },
+      true,
+    );
   }
 
   /** Territory changes hands: a paper flag is planted, with confetti in the new colour. */
@@ -529,31 +648,61 @@ export class FxEngine {
       cut(ctx, flap, color, { ...base, seed: seed + 1 });
       return true;
     });
-    this.scraps(x, y, [color, color, PAPER.cream], 10, 1.1, delay + FRAME);
+    this.scraps(x, y, [color, color, PAPER.cream, PAPER.yellow], 12, 1.2, delay + FRAME);
     this.ring(x, y, 10, 34, PAPER.ink, 520, 1.6, delay);
   }
 
-  /** Reinforcements: paper chits fall onto the territory and land with a bounce. */
+  /** Reinforcements parachute in on little paper canopies, then land with a squash. */
   drop(x: number, y: number, color: string, n: number) {
     const chits = Math.min(6, Math.max(1, Math.ceil(n / 2)));
+    const fallMs = 520;
+    const life = 900;
     for (let i = 0; i < chits; i++) {
       const seed = newSeed();
       const shape = blob(7, 5.5, 0.3, seed);
       const ox = (hash(seed) - 0.5) * 22;
       const oy = (hash(seed, 1) - 0.5) * 12;
-      const fall = [-60, -34, -12, 0, 2, 0, 0, 0];
-      const squash = [1, 1, 1, 0.6, 1.15, 1, 1, 0.5];
-      this.add(i * FRAME, (ctx, t, P, f) => {
-        if (t >= fall.length * FRAME) return false;
-        const [sx, sy] = P(x, y);
-        cut(ctx, shape, color, { x: sx + ox * U, y: sy + oy * U + keys(t, fall) * U, sy: keys(t, squash), rot: hash(seed, 2) * 3, seed, f, shadow: 1.2 });
-        return true;
-      });
+      const sway = hash(seed, 3) * 6;
+      this.add(
+        i * 60,
+        (ctx, _t, P, f, r) => {
+          if (r > life) return false;
+          const [sx, sy] = P(x, y);
+          const cx = sx + ox * U;
+          const cy = sy + oy * U;
+          if (r < fallMs) {
+            const p = r / fallMs;
+            const dy = -70 * (1 - easeOut(p)) * U;
+            const dx = Math.sin(p * 6 + sway) * 5 * U * (1 - p);
+            const rock = Math.sin(p * 6 + sway) * 0.25 * (1 - p);
+            // Strings, then the canopy, then the chit dangling below.
+            ctx.save();
+            ctx.strokeStyle = 'rgba(42,39,35,0.6)';
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(cx + dx - 9 * U, cy + dy - 14 * U);
+            ctx.lineTo(cx + dx, cy + dy);
+            ctx.lineTo(cx + dx + 9 * U, cy + dy - 14 * U);
+            ctx.stroke();
+            ctx.restore();
+            cut(ctx, CANOPY, PAPER.cream, { x: cx + dx, y: cy + dy - 14 * U, rot: rock, seed: seed + 1, f, shadow: 1.6 });
+            cut(ctx, shape, color, { x: cx + dx, y: cy + dy, rot: rock, seed, f, shadow: 1.6 });
+          } else {
+            const p = (r - fallMs) / (life - fallMs);
+            const squash = p < 0.2 ? 0.6 : p < 0.35 ? 1.15 : 1;
+            cut(ctx, shape, color, { x: cx, y: cy, sy: squash, alpha: p > 0.7 ? (1 - p) / 0.3 : 1, seed, f, shadow: 0.9 });
+            // The canopy drifts off on its own.
+            cut(ctx, CANOPY, PAPER.cream, { x: cx + 14 * U * p, y: cy - 14 * U - 18 * U * p, rot: 0.5 * p, alpha: 1 - p, seed: seed + 1, f, shadow: 1 });
+          }
+          return true;
+        },
+        true,
+      );
     }
-    this.text(x, y, `+${n}`, color, FRAME * 3);
+    this.text(x, y, `+${n}`, color, 420);
   }
 
-  /** Two powers sign: a wax seal is stamped down between their capitals. */
+  /** Two powers sign: a wax seal is stamped down, and a paper dove flies off it. */
   seal(x: number, y: number, label: string, color = PAPER.wax, delay = 0) {
     const seed = newSeed();
     const scallop: Pt[] = Array.from({ length: 28 }, (_, i) => {
@@ -587,6 +736,87 @@ export class FxEngine {
       return true;
     });
     this.scraps(x, y, [color, PAPER.cream], 5, 0.7, delay + FRAME * 2);
+    this.dove(x, y, delay + FRAME * 4);
+  }
+
+  /** A paper dove: a smooth flight path, wings flapping in two stop-motion poses. */
+  dove(x: number, y: number, delay = 0) {
+    if (this.reduced) return;
+    const seed = newSeed();
+    const dir = hash(seed) < 0.5 ? -1 : 1;
+    const dur = 1500;
+    this.add(
+      delay,
+      (ctx, _t, P, f, r) => {
+        if (r > dur) return false;
+        const p = r / dur;
+        const [sx, sy] = P(x, y);
+        const dx = dir * 90 * U * p;
+        const dy = -80 * U * easeOut(p) + Math.sin(p * 14) * 3 * U;
+        const alpha = p > 0.75 ? (1 - p) / 0.25 : 1;
+        const o = { x: sx + dx, y: sy + dy, sx: dir, rot: -0.2 * dir, seed, f, alpha, shadow: 2.4 };
+        const up = Math.floor(r / (FRAME * 1.5)) % 2 === 0;
+        cut(ctx, up ? DOVE_WING_DOWN : DOVE_WING_UP, '#ecebe4', { ...o, seed: seed + 2 });
+        cut(ctx, DOVE_BODY, '#fbfaf5', o);
+        cut(ctx, BEAK, PAPER.orange, { ...o, seed: seed + 3, shadow: 0, edge: false });
+        cut(ctx, up ? DOVE_WING_UP : DOVE_WING_DOWN, '#ffffff', { ...o, seed: seed + 1 });
+        return true;
+      },
+      true,
+    );
+  }
+
+  /** Ambient: a folded-paper boat bobbing along a sea lane. */
+  boat(x1: number, y1: number, x2: number, y2: number) {
+    if (this.reduced) return;
+    const seed = newSeed();
+    const dur = 16000;
+    const flag = ['#c42e2e', '#1f5fbf', '#e0a800', '#16875a', '#6b3fa0'][seed % 5];
+    this.add(0, (ctx, t, P, f) => {
+      if (t > dur) return false;
+      const p = t / dur;
+      const [ax, ay] = P(x1, y1);
+      const [bx, by] = P(x2, y2);
+      const bob = Math.sin(t / 380) * 1.5 * U;
+      const alpha = Math.min(1, p * 8, (1 - p) * 8);
+      const dir = bx >= ax ? 1 : -1;
+      const o = { x: ax + (bx - ax) * p, y: ay + (by - ay) * p + bob, sx: dir * 1.15, sy: 1.15, rot: Math.sin(t / 520) * 0.08, seed, f, alpha, shadow: 0.9 };
+      cut(ctx, JIB, '#f3efe4', { ...o, seed: seed + 1 });
+      cut(ctx, SAIL, '#fbfaf5', { ...o, seed: seed + 2 });
+      cut(ctx, [[0, -17], [6, -15], [0, -13]], flag, { ...o, seed: seed + 3, shadow: 0, edge: false });
+      cut(ctx, HULL, '#e8dfc9', o);
+      return true;
+    });
+  }
+
+  /** Ambient: a paper whale surfaces, spouts, and dives again. */
+  whale(x: number, y: number) {
+    if (this.reduced) return;
+    const seed = newSeed();
+    const dir = hash(seed) < 0.5 ? -1 : 1;
+    const dur = 4200;
+    this.add(0, (ctx, t, P, f) => {
+      if (t > dur) return false;
+      const [sx, sy] = P(x, y);
+      const up = t < 700 ? t / 700 : t > dur - 900 ? (dur - t) / 900 : 1;
+      const o = { x: sx + dir * (t / dur) * 16 * U, y: sy + (1 - up) * 8 * U, sx: dir * 1.3, sy: 1.3 * up, seed, f, alpha: Math.min(1, up * 1.5), shadow: 0.7 };
+      cut(ctx, FLUKE, '#5d7c93', { ...o, seed: seed + 1, rot: Math.sin(t / 300) * 0.1 * dir });
+      cut(ctx, WHALE, '#6f8fa6', o);
+      cut(ctx, ellipsePts(1.3, 1.3, 6), PAPER.ink, { ...o, x: o.x + dir * 9 * 1.3 * U, y: o.y - 2 * U, seed: seed + 2, shadow: 0, edge: false });
+      return true;
+    });
+    // The spout: a fountain of pale blue scraps.
+    this.add(1200, (ctx, t, P, f) => {
+      if (t > 900) return false;
+      const [sx, sy] = P(x, y);
+      const h = keys(t, [0.3, 0.7, 1, 1.1, 1, 0.9, 0.7, 0.5, 0.3, 0.2, 0.1]);
+      const top = sy - 22 * U * h;
+      for (let i = -1; i <= 1; i++) {
+        cut(ctx, blob(5, 3.5, 0.5, seed + 10 + i), '#cfe4ee', { x: sx + dir * 6 * U + i * 5 * U * h, y: top + Math.abs(i) * 4 * U, seed: seed + 10 + i, f, shadow: 0.5, edge: false });
+      }
+      cut(ctx, [[-1.5, 0], [1.5, 0], [1, -22], [-1, -22]], '#cfe4ee', { x: sx + dir * 6 * U, y: sy - 4 * U, sy: h, seed: seed + 20, f, shadow: 0.3, edge: false });
+      return true;
+    });
   }
 
   /** The end of the world, in cut paper: a mushroom cloud built up a layer at a time. */
@@ -616,6 +846,7 @@ export class FxEngine {
       cut(ctx, capHot, t < 1400 ? PAPER.orange : PAPER.smokeDark, { x: sx, y: capY + 4, scale: 0.5 + grow, seed: seed + 3, f, alpha: fade, shadow: 0.5 });
       return true;
     });
+    this.comic(x, y - 60, 'KA-BOOM!', FRAME * 3, true);
     for (let i = 0; i < 3; i++) this.ring(x, y, 20, 420, PAPER.ink, 1700, 3, i * FRAME * 4);
     this.scraps(x, y, [PAPER.orange, PAPER.smoke, PAPER.yellow, PAPER.ink], 26, 2.4, FRAME * 2);
   }

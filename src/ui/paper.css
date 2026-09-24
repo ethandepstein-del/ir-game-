@@ -191,9 +191,9 @@ body {
 /* ---------- the board ---------- */
 
 .map-vignette {
+  /* Plain alpha blending: a multiply layer over the whole map costs a full-screen blend every frame. */
   background-image: var(--grain), var(--mottle);
-  mix-blend-mode: multiply;
-  opacity: 0.85;
+  opacity: 0.7;
   box-shadow:
     inset 0 0 120px rgba(90, 70, 40, 0.18),
     inset 0 0 22px rgba(90, 70, 40, 0.12);
@@ -1172,30 +1172,200 @@ body {
 .tut-note {
   animation-timing-function: steps(4, jump-end);
 }
-.die3d-wrap,
-.die3d {
-  animation-timing-function: steps(9, jump-end);
-}
-.token-num {
-  animation-timing-function: steps(3, jump-end);
-}
 .tut-loop,
 .tut-arrow {
   animation-timing-function: steps(7, jump-end);
 }
-.aim-line:not(.aim-head) {
-  animation-timing-function: steps(4, jump-end);
-}
 .tut-waiting {
   animation-timing-function: steps(2, jump-none);
 }
-/* Buttons snap between two poses rather than gliding. */
-.btn,
-.icon-btn,
-.sound-btn,
-.chip-btn,
-.plaque-action,
-.tut-next,
-.power-card {
-  transition-timing-function: steps(2, jump-end);
+/* =====================================================================
+   Whimsy: small things that respond when you touch them.
+   ===================================================================== */
+
+/* Army discs hop when you point at them. */
+.token {
+  transition: transform 0.28s cubic-bezier(0.3, 1.8, 0.5, 1);
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+.token:hover {
+  transform: translateY(-3px) scale(1.06);
+}
+/* Capital stars twinkle now and then. */
+.token-star {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: twinkle 4.2s steps(1, jump-end) infinite;
+}
+@keyframes twinkle {
+  0%,
+  86%,
+  100% {
+    transform: none;
+  }
+  88% {
+    transform: rotate(18deg) scale(1.25);
+  }
+  91% {
+    transform: rotate(-10deg) scale(1.1);
+  }
+  94% {
+    transform: rotate(4deg);
+  }
+}
+/* The clock number jolts when it changes. */
+.doom-num {
+  display: inline-block;
+  animation: jolt 0.5s steps(5, jump-end);
+}
+@keyframes jolt {
+  0% {
+    transform: scale(1.6) rotate(-12deg);
+    color: var(--red);
+  }
+  40% {
+    transform: scale(0.9) rotate(6deg);
+  }
+  70% {
+    transform: scale(1.08) rotate(-3deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+/* Buttons tilt a little on hover, like picking up a card. */
+.btn:hover:not(:disabled),
+.plaque-action:hover {
+  animation: wiggle 0.42s ease-in-out;
+}
+@keyframes wiggle {
+  25% {
+    rotate: -2deg;
+  }
+  60% {
+    rotate: 1.5deg;
+  }
+  100% {
+    rotate: -0.6deg;
+  }
+}
+/* Start screen: the stamped letters jump when you poke them. */
+.stamp-letter {
+  transition: translate 0.25s cubic-bezier(0.3, 1.9, 0.5, 1), rotate 0.25s cubic-bezier(0.3, 1.9, 0.5, 1);
+  cursor: default;
+}
+.stamp-letter:hover {
+  translate: 0 -10px;
+  rotate: -8deg;
+}
+.power-card:hover .homeland {
+  animation: wiggle 0.5s ease-in-out;
+}
+/* The active phase chip bounces when it's your move. */
+.g-dock.mine .phase.on {
+  animation: nudge-up 1.6s ease-in-out infinite;
+}
+@keyframes nudge-up {
+  0%,
+  70%,
+  100% {
+    translate: 0 0;
+  }
+  80% {
+    translate: 0 -3px;
+  }
+  90% {
+    translate: 0 1px;
+  }
+}
+/* The "Your move" strip gets a little paper star on either side. */
+.turn-banner.mine::before,
+.turn-banner.mine::after {
+  content: '✦';
+  position: absolute;
+  font-size: 22px;
+  color: var(--pc);
+  animation: pop-star 1.5s steps(6, jump-end) both;
+}
+.turn-banner.mine::before {
+  left: 10px;
+  top: 2px;
+}
+.turn-banner.mine::after {
+  right: 12px;
+  top: auto;
+  bottom: 0;
+  animation-delay: 0.12s;
+}
+@keyframes pop-star {
+  0% {
+    transform: scale(0) rotate(-90deg);
+  }
+  25% {
+    transform: scale(1.4) rotate(20deg);
+  }
+  45%,
+  85% {
+    transform: scale(1) rotate(0);
+  }
+  100% {
+    transform: scale(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .token-star,
+  .doom-num,
+  .g-dock.mine .phase.on,
+  .btn:hover:not(:disabled),
+  .plaque-action:hover {
+    animation: none !important;
+  }
+}
+
+/* =====================================================================
+   Countries as cut paper: smooth organic shapes (built from the hex grid
+   in geometry.ts), each piece separated by a thin paper-white gap and
+   lifted off the sea by a hard shadow.
+   ===================================================================== */
+
+.terr,
+.terr-tex,
+.land-shadow,
+.poster svg path,
+.homeland path {
+  fill-rule: evenodd;
+}
+.land-shadow {
+  fill: rgba(70, 55, 30, 0.22);
+  pointer-events: none;
+}
+.terr {
+  stroke: #fbf8f0;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+.borders {
+  stroke: #6f695e;
+  stroke-opacity: 0.45;
+  stroke-linecap: round;
+}
+.region-borders {
+  stroke: #3b3833;
+  stroke-opacity: 0.55;
+  stroke-dasharray: 5 3;
+}
+.region-borders.ghost {
+  stroke-dasharray: none;
+  opacity: 0.25;
+}
+.coast {
+  stroke: #4a463f;
+  stroke-width: 1;
+  stroke-opacity: 0.8;
+}
+.coast-halo {
+  stroke: #e3eef3;
+  opacity: 0.8;
 }
