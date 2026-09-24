@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { POWER, TERRITORIES } from '../data/world';
 import { capitalOf } from '../engine/game';
-import type { BattleReport, GameState } from '../engine/types';
+import type { GameState } from '../engine/types';
+import type { FxEngine } from './fx/particles';
 import { GEO, MAP_H, MAP_W } from './geometry';
 
 const NEUTRAL = '#56606d';
@@ -16,14 +17,19 @@ interface Props {
   game: GameState;
   highlight: Highlight;
   onPick: (t: number) => void;
-  battle: BattleReport | null;
+  fx: FxEngine;
+  overlay?: ReactNode;
+  shakeClass?: string;
+  shakeKey?: number;
 }
 
 type Box = { x: number; y: number; w: number };
 const FULL: Box = { x: 0, y: 0, w: MAP_W };
 
-export function WorldMap({ game, highlight, onPick, battle }: Props) {
+export function WorldMap({ game, highlight, onPick, fx, overlay, shakeClass = '', shakeKey = 0 }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const view = useRef({ x: 0, y: 0, k: 1 });
   const [box, setBox] = useState<Box>(FULL);
   const [size, setSize] = useState({ w: 1000, h: 1000 * (MAP_H / MAP_W) });
   const drag = useRef<{ x: number; y: number; box: Box; moved: boolean } | null>(null);
@@ -97,6 +103,31 @@ export function WorldMap({ game, highlight, onPick, battle }: Props) {
 
   const k = box.w / px; // SVG units per screen pixel
   const r = (px < 700 ? 11 : 9.5) * k;
+  view.current = { x: box.x, y: box.y, k };
+
+  useEffect(() => {
+    fx.attach(canvas.current, () => view.current);
+    return () => fx.attach(null, () => view.current);
+  }, [fx]);
+
+  useEffect(() => {
+    if (!shakeKey || !wrap.current || fx.reduced) return;
+    const level = Number(shakeClass.replace('shake-', '')) || 1;
+    const a = 3 * level;
+    wrap.current.animate(
+      [
+        { transform: 'translate(0,0)' },
+        { transform: `translate(${-a}px,${a * 0.6}px)` },
+        { transform: `translate(${a}px,${-a * 0.4}px)` },
+        { transform: `translate(${-a * 0.6}px,${-a * 0.6}px)` },
+        { transform: `translate(${a * 0.4}px,${a * 0.3}px)` },
+        { transform: 'translate(0,0)' },
+      ],
+      { duration: 380 + level * 120, easing: 'ease-out' },
+    );
+  }, [shakeKey, shakeClass, fx]);
+
+  const radar = { left: (home[0] - box.x) / k, top: (home[1] - box.y) / k };
 
   const onDown = (e: React.PointerEvent) => {
     drag.current = { x: e.clientX, y: e.clientY, box, moved: false };
@@ -142,15 +173,14 @@ export function WorldMap({ game, highlight, onPick, battle }: Props) {
           <path key={t} d={GEO.outlines[t]} className={`target-outline target-${highlight.mode}`} style={{ strokeWidth: 2 * k }} />
         ))}
         {highlight.selected !== null && <path d={GEO.outlines[highlight.selected]} className="sel-outline" style={{ strokeWidth: 2.5 * k }} />}
-        {battle && <BattleArrow battle={battle} k={k} />}
         {game.territories.map((t, i) => {
           const [x, y] = GEO.labels[i];
           const color = t.owner ? POWER[t.owner].color : NEUTRAL;
           const cap = capitalOf(i);
           return (
             <g key={i} className="badge" onClick={() => pick(i)}>
-              <circle cx={x} cy={y} r={r} fill="#0b1520" stroke={color} strokeWidth={2 * k} />
-              <text x={x} y={y + 3.8 * k} textAnchor="middle" style={{ fontSize: 11 * k }} className="badge-num">
+              <circle key={`o${t.owner}`} cx={x} cy={y} r={r} fill="#0b1520" stroke={color} strokeWidth={2 * k} className="badge-ring" />
+              <text key={`n${t.armies}`} x={x} y={y + 3.8 * k} textAnchor="middle" style={{ fontSize: 11 * k }} className="badge-num">
                 {t.armies}
               </text>
               {cap && (
@@ -166,6 +196,10 @@ export function WorldMap({ game, highlight, onPick, battle }: Props) {
           );
         })}
       </svg>
+      <div className="radar" style={{ left: radar.left, top: radar.top }} aria-hidden="true" />
+      <canvas ref={canvas} className="fx-canvas" aria-hidden="true" />
+      <div className="map-vignette" aria-hidden="true" />
+      {overlay}
       <div className="map-zoom">
         <button type="button" onClick={() => zoom(1 / 1.4)} aria-label="Zoom in">
           +
@@ -208,19 +242,6 @@ const Graticule = memo(function Graticule() {
   for (let i = 1; i < 6; i++) lines.push(`M0,${(MAP_H / 6) * i}H${MAP_W}`);
   return <path d={lines.join('')} className="graticule" />;
 });
-
-function BattleArrow({ battle, k }: { battle: BattleReport; k: number }) {
-  const [x1, y1] = GEO.labels[battle.from];
-  const [x2, y2] = GEO.labels[battle.to];
-  if (Math.abs(x1 - x2) > MAP_W / 2) return null;
-  const color = POWER[battle.attacker].color;
-  return (
-    <g className="battle" key={`${battle.from}-${battle.to}-${battle.aDice.join('')}`}>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={3 * k} strokeLinecap="round" />
-      <circle cx={x2} cy={y2} r={16 * k} fill="none" stroke={color} strokeWidth={2 * k} className="battle-ring" />
-    </g>
-  );
-}
 
 function star(cx: number, cy: number, r: number): string {
   const pts: string[] = [];

@@ -10,7 +10,9 @@ function hostile(s: GameState, p: PowerId, u: number): boolean {
   if (o === p) return false;
   if (!o) return true;
   if (hasPact(s, p, o)) return false;
-  if (s.coalition && s.coalition !== p && o !== s.coalition && !hasPact(s, o, s.coalition)) return false;
+  // Coalition solidarity, unless the other power has attacked us recently.
+  const struck = (s.aggression[`${o}>${p}`] ?? -9) >= s.round - 1;
+  if (!struck && s.coalition && s.coalition !== p && o !== s.coalition && !hasPact(s, o, s.coalition)) return false;
   return true;
 }
 
@@ -32,7 +34,8 @@ function targetValue(s: GameState, p: PowerId, u: number): number {
   let v = 1 + (mineAfter / members.length) * 3;
   if (mineAfter === members.length) v += 4;
   if (!owner) v += 1;
-  if (owner && s.coalition === owner && owner !== p) v += 3;
+  if (owner && s.coalition === owner && owner !== p) v += 5;
+  if (owner && (s.aggression[`${owner}>${p}`] ?? -9) >= s.round - 1) v += 2;
   const core = coreOf(u);
   if (owner && core === owner) {
     if (s.clock <= 2) return -Infinity;
@@ -99,7 +102,10 @@ export function aiStep(s: GameState): Action {
 
   if (s.phase === 'attack') {
     const opt = attackOptions(s, p).find(
-      (o) => o.odds >= 1.5 || (s.territories[o.to].armies === 1 && s.territories[o.from].armies >= 3),
+      (o) =>
+        o.odds >= 1.5 ||
+        (o.odds >= 1.15 && s.coalition !== null && s.territories[o.to].owner === s.coalition && s.coalition !== p) ||
+        (s.territories[o.to].armies === 1 && s.territories[o.from].armies >= 3),
     );
     if (opt && me.conquered < 8 && !attackBlocker(s, opt.from, opt.to)) {
       return { kind: 'attack', from: opt.from, to: opt.to, blitz: true, stopAt: Math.max(1, Math.ceil(s.territories[opt.from].armies / 4)) };

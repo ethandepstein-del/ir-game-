@@ -49,6 +49,8 @@ export interface BattleReport {
   aLoss: number;
   dLoss: number;
   conquered: boolean;
+  /** For each compared die pair, did the attacker win it? */
+  wins: boolean[];
 }
 
 export type LogKind = 'info' | 'war' | 'diplo' | 'alert' | 'card';
@@ -63,6 +65,28 @@ export interface Offer {
   from: PowerId;
   to: PowerId;
 }
+
+/** Structured events emitted by each action, consumed by animation and sound. */
+export type FxEvent =
+  | { t: 'deploy'; at: number; n: number; power: PowerId }
+  | { t: 'roll'; from: number; to: number; attacker: PowerId; aDice: number[]; dDice: number[]; aLoss: number; dLoss: number; wins: boolean[] }
+  | { t: 'conquer'; at: number; from: number; power: PowerId; loser: Owner }
+  | { t: 'move'; from: number; to: number; n: number; fortify: boolean; power: PowerId }
+  | { t: 'clock'; minutes: number; delta: number }
+  | { t: 'capital'; at: number; power: PowerId }
+  | { t: 'eliminated'; power: PowerId; by: PowerId }
+  | { t: 'coalition'; against: PowerId }
+  | { t: 'coalitionEnd' }
+  | { t: 'bandwagon'; power: PowerId; leader: PowerId }
+  | { t: 'transition'; power: PowerId }
+  | { t: 'era'; era: Era }
+  | { t: 'world'; kind: 'financial' | 'oil' | 'nationalism' | 'talks' }
+  | { t: 'card'; card: CardId; power: PowerId; target?: number | PowerId }
+  | { t: 'pact'; a: PowerId; b: PowerId }
+  | { t: 'pactBroken'; a: PowerId; b: PowerId }
+  | { t: 'pactRejected'; a: PowerId; b: PowerId }
+  | { t: 'turn'; power: PowerId; round: number }
+  | { t: 'end'; winner: PowerId | null; reason: NonNullable<GameState['endReason']> };
 
 export interface GameState {
   seed: number;
@@ -96,6 +120,10 @@ export interface GameState {
   /** Concepts triggered but not yet shown as dispatches. */
   dispatches: ConceptId[];
   history: { round: number; share: Record<PowerId, number> }[];
+  /** Events produced by the most recent action. */
+  fx: FxEvent[];
+  /** Round in which `a` last attacked `b`, keyed "a>b". */
+  aggression: Record<string, number>;
 }
 
 export type Action =

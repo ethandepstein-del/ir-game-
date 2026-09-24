@@ -16,8 +16,8 @@ import {
   TERRITORIES,
   type PowerId,
 } from '../data/world';
-import { considerPact, pickOfferToPlayer } from './diplomacy';
-import type { Action, BattleReport, Era, GameState, LogKind, PowerState } from './types';
+import { aiPactTarget, considerPact, pickOfferToPlayer } from './diplomacy';
+import type { Action, BattleReport, Era, FxEvent, GameState, LogKind, PowerState } from './types';
 
 // ---------- Static lookups ----------
 
@@ -76,7 +76,10 @@ export function income(s: GameState, p: PowerId): { total: number; lines: Income
     const k = Math.min(3, s.pacts.filter((x) => x.a === 'eu' || x.b === 'eu').length);
     if (k) lines.push({ label: 'Institutions', value: k });
   }
-  if (s.coalition && s.coalition !== p && !hasPact(s, p, s.coalition)) lines.push({ label: 'Coalition aid', value: 3 });
+  if (s.coalition && s.coalition !== p && !hasPact(s, p, s.coalition)) {
+    const leaderShare = shares(s)[s.coalition];
+    lines.push({ label: 'Coalition aid', value: leaderShare >= 0.42 ? 5 : leaderShare >= 0.37 ? 4 : 3 });
+  }
   const mod = s.powers[p].incomeMod;
   if (mod) lines.push({ label: mod < 0 ? 'Sanctions & shocks' : 'Windfall', value: mod });
   const total = Math.max(1, lines.reduce((a, l) => a + l.value, 0));
@@ -154,6 +157,10 @@ export function learn(s: GameState, id: ConceptId) {
   }
 }
 
+function fx(s: GameState, e: FxEvent) {
+  s.fx.push(e);
+}
+
 function drawCard(s: GameState, p: PowerState) {
   const card = DECK[Math.floor(rand(s) * DECK.length)];
   p.cards.push(card);
@@ -162,13 +169,15 @@ function drawCard(s: GameState, p: PowerState) {
 
 function addPact(s: GameState, a: PowerId, b: PowerId) {
   if (hasPact(s, a, b)) return;
-  s.pacts.push({ a, b, until: s.round + PACT_LENGTH });
+  s.pacts.push({ a, b, until: s.round + PACT_LENGTH - 1 });
+  fx(s, { t: 'pact', a, b });
   if (a === 'eu' || b === 'eu') learn(s, 'institutions');
 }
 
 function breakPact(s: GameState, a: PowerId, b: PowerId) {
   s.pacts = s.pacts.filter((p) => !((p.a === a && p.b === b) || (p.a === b && p.b === a)));
   s.powers[a].reputation = Math.max(0, s.powers[a].reputation - 30);
+  fx(s, { t: 'pactBroken', a, b });
   log(s, 'diplo', `${POWER[a].name} tears up its pact with ${POWER[b].name}. Its word is worth less now.`, a);
   learn(s, 'reputation');
 }
@@ -209,6 +218,8 @@ export function newGame(player: PowerId, seed = Date.now() >>> 0): GameState {
     learned: [],
     dispatches: [],
     history: [],
+    fx: [],
+    aggression: {},
   };
   s.territories.forEach((t, i) => {
     t.armies = 1 + Math.floor(rand(s) * 3) + (MIDDLE_POWERS[TERRITORIES[i].id] ?? 0);
@@ -248,6 +259,14 @@ function startTurn(s: GameState) {
   s.pendingMove = null;
   s.lastBattle = null;
   s.offer = p === s.player ? pickOfferToPlayer(s) : null;
+  if (p !== s.player) {
+    const partner = aiPactTarget(s, p);
+    if (partner) {
+      addPact(s, p, partner);
+      log(s, 'diplo', `${POWER[p].name} and ${POWER[partner].name} sign a non-aggression pact.`, p);
+    }
+  }
+  fx(s, { t: 'turn', power: p, round: s.round });
 }
 
 function endRound(s: GameState) {
@@ -263,6 +282,7 @@ function endRound(s: GameState) {
 
   if (s.quietRound && s.clock < MAX_CLOCK) {
     s.clock++;
+    fx(s, { t: 'clock', minutes: s.clock, delta: 1 });
     log(s, 'info', `A quiet round between the great powers. The Doomsday Clock eases back to ${s.clock} minutes.`);
   }
   s.quietRound = true;
@@ -288,6 +308,7 @@ function shiftEra(s: GameState) {
   const options = (['balanced', 'defense', 'offense'] as Era[]).filter((e) => e !== s.era);
   s.era = options[Math.floor(rand(s) * options.length)];
   log(s, 'alert', `Military technology shifts. ${ERA_TEXT[s.era]}`);
+  fx(s, { t: 'era', era: s.era });
   learn(s, 'offense-defense');
 }
 
@@ -295,6 +316,7 @@ function globalEvent(s: GameState) {
   const r = Math.floor(rand(s) * 4);
   if (r === 0) {
     for (const p of alivePowers(s)) s.powers[p].incomeMod -= 2;
+    fx(s, { t: 'world', kind: 'financial' });
     log(s, 'alert', 'Global financial crisis: every power gets 2 fewer armies next turn.');
   } else if (r === 1) {
     const oil = ['arabia', 'persia', 'levant', 'maghreb'].map(T);
@@ -302,12 +324,16 @@ function globalEvent(s: GameState) {
       const held = oil.filter((t) => s.territories[t].owner === p).length;
       if (held) s.powers[p].incomeMod += 2 * held;
     }
+    fx(s, { t: 'world', kind: 'oil' });
     log(s, 'alert', 'Oil shock: powers holding Arabia, Persia, the Levant or the Maghreb get +2 armies per oil territory.');
   } else if (r === 2) {
     for (const t of s.territories) if (!t.owner) t.armies++;
+    fx(s, { t: 'world', kind: 'nationalism' });
     log(s, 'alert', 'Nationalist awakening: every minor state gains +1 army.');
   } else {
     s.clock = Math.min(MAX_CLOCK, s.clock + 1);
+    fx(s, { t: 'world', kind: 'talks' });
+    fx(s, { t: 'clock', minutes: s.clock, delta: 1 });
     log(s, 'alert', `Back-channel arms talks succeed. The Doomsday Clock moves back to ${s.clock} minutes.`);
     learn(s, 'arms-control');
   }
@@ -319,6 +345,7 @@ function updateBalance(s: GameState) {
   if (s.leader && lead !== s.leader && s.round > 3) {
     log(s, 'alert', `Power transition: ${POWER[lead].name} overtakes ${POWER[s.leader].name} as the strongest power.`);
     learn(s, 'power-transition');
+    fx(s, { t: 'transition', power: lead });
   }
   s.leader = lead;
   if (polarity(s) !== 'Multipolar') learn(s, 'polarity');
@@ -328,6 +355,7 @@ function updateBalance(s: GameState) {
     s.coalition = lead;
     log(s, 'alert', `Balancing coalition: the other powers close ranks against ${POWER[lead].name}.`);
     learn(s, 'balancing');
+    fx(s, { t: 'coalition', against: lead });
     // The weakest exposed power may bandwagon with the leader instead.
     const weak = alivePowers(s)
       .filter((p) => p !== lead && sh[p] < 0.13 && bordersPower(s, p, lead) && p !== s.player)
@@ -336,20 +364,24 @@ function updateBalance(s: GameState) {
       addPact(s, weak, lead);
       log(s, 'diplo', `${POWER[weak].name} bandwagons: it signs a pact with ${POWER[lead].name} rather than resist.`);
       learn(s, 'bandwagoning');
+      fx(s, { t: 'bandwagon', power: weak, leader: lead });
     }
   } else if (s.coalition && (sh[s.coalition] < 0.27 || !s.powers[s.coalition].alive)) {
     log(s, 'info', `The coalition against ${POWER[s.coalition].name} dissolves: the balance is restored.`);
+    fx(s, { t: 'coalitionEnd' });
     s.coalition = null;
-  } else if (s.coalition && s.coalition !== lead && sh[lead] >= 0.33) {
+  } else if (s.coalition && s.coalition !== lead && sh[lead] >= 0.33 && leadTerritories >= 13) {
     s.coalition = lead;
     log(s, 'alert', `The coalition turns on the new leader, ${POWER[lead].name}.`);
+    fx(s, { t: 'coalition', against: lead });
   }
   if (sh[lead] >= 0.42) learn(s, 'hegemony');
 }
 
-function finish(s: GameState, winner: PowerId | null, reason: GameState['endReason']) {
+function finish(s: GameState, winner: PowerId | null, reason: NonNullable<GameState['endReason']>) {
   s.winner = winner;
   s.endReason = reason;
+  fx(s, { t: 'end', winner, reason });
 }
 
 export function isOver(s: GameState) {
@@ -391,13 +423,16 @@ function resolveRoll(s: GameState, from: number, to: number): BattleReport {
   const attackerWinsTies = s.era === 'offense' || s.blitz;
   let aLoss = 0;
   let dLoss = 0;
+  const wins: boolean[] = [];
   for (let i = 0; i < Math.min(a, d); i++) {
-    if (aDice[i] > dEff[i] || (aDice[i] === dEff[i] && attackerWinsTies)) dLoss++;
+    const win = aDice[i] > dEff[i] || (aDice[i] === dEff[i] && attackerWinsTies);
+    wins.push(win);
+    if (win) dLoss++;
     else aLoss++;
   }
   A.armies -= aLoss;
   D.armies -= dLoss;
-  return { from, to, attacker, defender: D.owner, aDice, dDice, aLoss, dLoss, conquered: D.armies <= 0 };
+  return { from, to, attacker, defender: D.owner, aDice, dDice, aLoss, dLoss, conquered: D.armies <= 0, wins };
 }
 
 function strikeCore(s: GameState, attacker: PowerId, to: number) {
@@ -407,9 +442,17 @@ function strikeCore(s: GameState, attacker: PowerId, to: number) {
   s.quietRound = false;
   if (s.coreStrikes.includes(key)) return;
   s.coreStrikes.push(key);
-  s.clock--;
+  s.clock = Math.max(0, s.clock - 1);
+  fx(s, { t: 'clock', minutes: s.clock, delta: -1 });
   log(s, 'alert', `${POWER[attacker].name} strikes the ${POWER[def].name} homeland. Doomsday Clock: ${s.clock} minutes to midnight.`, attacker);
   learn(s, 'mad');
+  if (s.clock <= 0) midnight(s);
+}
+
+function midnight(s: GameState) {
+  if (isOver(s)) return;
+  log(s, 'alert', 'Midnight. The great-power war has gone nuclear.');
+  finish(s, null, 'nuclear');
 }
 
 function conquer(s: GameState, rep: BattleReport, diceUsed: number) {
@@ -420,11 +463,14 @@ function conquer(s: GameState, rep: BattleReport, diceUsed: number) {
   s.powers[attacker].conquered++;
   const max = s.territories[from].armies - 1;
   s.pendingMove = { from, to, min: Math.min(diceUsed, max), max };
+  fx(s, { t: 'conquer', at: to, from, power: attacker, loser });
   const name = TERRITORIES[to].name;
   log(s, 'war', loser ? `${POWER[attacker].name} takes ${name} from ${POWER[loser].name}.` : `${POWER[attacker].name} takes ${name}.`, attacker);
 
   if (loser && capitalOf(to) === loser) {
-    s.clock--;
+    s.clock = Math.max(0, s.clock - 1);
+    fx(s, { t: 'capital', at: to, power: loser });
+    fx(s, { t: 'clock', minutes: s.clock, delta: -1 });
     log(s, 'alert', `${POWER[loser].name}'s capital has fallen. Doomsday Clock: ${s.clock} minutes.`);
   }
   if (TERRITORIES[to].region === 'hl' && attacker !== 'rus') learn(s, 'heartland');
@@ -432,8 +478,7 @@ function conquer(s: GameState, rep: BattleReport, diceUsed: number) {
   if (!loser && s.clock <= 4 && s.coreStrikes.length === 0) learn(s, 'stability-instability');
 
   if (s.clock <= 0) {
-    log(s, 'alert', 'Midnight. The great-power war has gone nuclear.');
-    finish(s, null, 'nuclear');
+    midnight(s);
     return;
   }
   if (loser && ownedBy(s, loser).length === 0) {
@@ -443,6 +488,7 @@ function conquer(s: GameState, rep: BattleReport, diceUsed: number) {
     s.powers[loser].cards = [];
     s.pacts = s.pacts.filter((p) => p.a !== loser && p.b !== loser);
     log(s, 'alert', `${POWER[loser].name} has been eliminated as a great power.`, attacker);
+    fx(s, { t: 'eliminated', power: loser, by: attacker });
     if (loser === s.player) finish(s, null, 'eliminated');
     else if (alivePowers(s).length === 1) finish(s, attacker, 'last-standing');
   }
@@ -466,25 +512,30 @@ export function apply(prev: GameState, action: Action): GameState {
   if (isOver(prev)) return prev;
   const s: GameState = structuredClone(prev);
   s.dispatches = [];
+  s.fx = [];
   const p = current(s);
   const me = s.powers[p];
 
   if (s.pendingMove && action.kind !== 'move') return prev;
+  const validT = (t: unknown): t is number => Number.isInteger(t) && (t as number) >= 0 && (t as number) < s.territories.length;
+  const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? Math.floor(n) : NaN);
 
   switch (action.kind) {
     case 'deploy': {
-      if (s.phase !== 'deploy' || s.territories[action.t].owner !== p) return prev;
-      const n = Math.min(action.n, s.reinforcements);
-      if (n <= 0) return prev;
+      if (s.phase !== 'deploy' || !validT(action.t) || s.territories[action.t].owner !== p) return prev;
+      const n = Math.min(count(action.n), s.reinforcements);
+      if (!(n > 0)) return prev;
       s.territories[action.t].armies += n;
+      fx(s, { t: 'deploy', at: action.t, n, power: p });
       s.reinforcements -= n;
       if (s.reinforcements === 0) s.phase = 'attack';
       return s;
     }
 
     case 'attack': {
-      if (attackBlocker(s, action.from, action.to)) return prev;
+      if (!validT(action.from) || !validT(action.to) || attackBlocker(s, action.from, action.to)) return prev;
       const def = s.territories[action.to].owner;
+      if (def) s.aggression[`${p}>${def}`] = s.round;
       if (def && hasPact(s, p, def)) breakPact(s, p, def);
       strikeCore(s, p, action.to);
       if (isOver(s)) return s;
@@ -494,6 +545,7 @@ export function apply(prev: GameState, action: Action): GameState {
       do {
         const dice = attackDice(s, action.from, action.to).a;
         rep = resolveRoll(s, action.from, action.to);
+        fx(s, { t: 'roll', from: rep.from, to: rep.to, attacker: p, aDice: rep.aDice, dDice: rep.dDice, aLoss: rep.aLoss, dLoss: rep.dLoss, wins: rep.wins });
         totals = { aLoss: totals.aLoss + rep.aLoss, dLoss: totals.dLoss + rep.dLoss };
         if (rep.conquered) {
           conquer(s, rep, dice);
@@ -512,10 +564,12 @@ export function apply(prev: GameState, action: Action): GameState {
     case 'move': {
       const m = s.pendingMove;
       if (!m) return prev;
-      const n = Math.max(m.min, Math.min(m.max, action.n));
+      const req = count(action.n);
+      const n = Math.max(m.min, Math.min(m.max, Number.isNaN(req) ? m.max : req));
       s.territories[m.from].armies -= n;
       s.territories[m.to].armies += n;
       s.pendingMove = null;
+      fx(s, { t: 'move', from: m.from, to: m.to, n, fortify: false, power: p });
       return s;
     }
 
@@ -528,12 +582,12 @@ export function apply(prev: GameState, action: Action): GameState {
     case 'fortify': {
       if (s.phase === 'deploy' && s.reinforcements > 0) return prev;
       const { from, to } = action;
-      if (s.territories[from].owner !== p || !reachable(s, from).has(to)) return prev;
-      const n = Math.min(action.n, s.territories[from].armies - 1);
-      if (n > 0) {
-        s.territories[from].armies -= n;
-        s.territories[to].armies += n;
-      }
+      if (!validT(from) || !validT(to) || s.territories[from].owner !== p || !reachable(s, from).has(to)) return prev;
+      const n = Math.min(count(action.n), s.territories[from].armies - 1);
+      if (!(n > 0)) return prev;
+      s.territories[from].armies -= n;
+      s.territories[to].armies += n;
+      fx(s, { t: 'move', from, to, n, fortify: true, power: p });
       nextTurn(s);
       return s;
     }
@@ -546,22 +600,24 @@ export function apply(prev: GameState, action: Action): GameState {
 
     case 'play': {
       const card = me.cards[action.card];
-      if (!card || (card === 'arms-race' && s.phase !== 'deploy')) return prev;
+      if (!card || (card === 'arms-race' && s.phase !== 'deploy') || s.phase === 'fortify') return prev;
       if (!playCard(s, p, card, action.target)) return prev;
       me.cards.splice(action.card, 1);
+      fx(s, { t: 'card', card, power: p, target: action.target });
       learn(s, CARDS[card].concept);
       return s;
     }
 
     case 'propose': {
       const to = action.to;
-      if (p !== s.player || to === p || !s.powers[to].alive || hasPact(s, p, to) || s.proposedThisRound.includes(to)) return prev;
+      if (p !== s.player || !(to in s.powers) || to === p || !s.powers[to].alive || hasPact(s, p, to) || s.proposedThisRound.includes(to)) return prev;
       s.proposedThisRound.push(to);
       const verdict = considerPact(s, p, to);
       if (verdict.accept) {
         addPact(s, p, to);
         log(s, 'diplo', `${POWER[to].name} signs a ${PACT_LENGTH}-round non-aggression pact with you. "${verdict.reason}"`, to);
       } else {
+        fx(s, { t: 'pactRejected', a: p, b: to });
         log(s, 'diplo', `${POWER[to].name} rejects your pact. "${verdict.reason}"`, to);
       }
       if (verdict.concept) learn(s, verdict.concept);
@@ -572,7 +628,7 @@ export function apply(prev: GameState, action: Action): GameState {
       const o = s.offer;
       if (!o) return prev;
       s.offer = null;
-      if (action.accept) {
+      if (action.accept && s.powers[o.from].alive) {
         addPact(s, o.from, o.to);
         log(s, 'diplo', `You accept ${POWER[o.from].name}'s offer of a non-aggression pact.`, o.from);
       } else {
@@ -602,47 +658,49 @@ function playCard(s: GameState, p: PowerId, card: string, target?: number | Powe
       return true;
     }
     case 'sanctions': {
-      if (typeof target !== 'string' || target === p || !s.powers[target].alive) return false;
+      if (typeof target !== 'string' || !(target in s.powers) || target === p || !s.powers[target].alive) return false;
       s.powers[target].incomeMod -= 4;
       log(s, 'card', `${name} imposes sanctions on ${POWER[target].name} (−4 armies next turn).`, p);
       return true;
     }
     case 'coup': {
-      if (typeof target !== 'number') return false;
+      if (typeof target !== 'number' || !s.territories[target]) return false;
       const t = s.territories[target];
       const adj = TERRITORIES[target].adj.some((u) => s.territories[u].owner === p);
       if (t.owner || t.armies > 4 || !adj) return false;
       t.owner = p;
       t.armies = Math.max(1, Math.floor(t.armies / 2));
       s.powers[p].reputation = Math.max(0, s.powers[p].reputation - 10);
-      s.powers[p].conquered++;
       log(s, 'card', `A coup in ${TERRITORIES[target].name} installs a government friendly to ${name}.`, p);
       return true;
     }
     case 'proxy-war': {
-      if (typeof target !== 'number' || s.territories[target].owner) return false;
+      if (typeof target !== 'number' || !s.territories[target] || s.territories[target].owner) return false;
       s.territories[target].armies += 4;
       log(s, 'card', `${name} arms ${TERRITORIES[target].name} (+4 armies).`, p);
       return true;
     }
     case 'summit': {
       s.clock = Math.min(MAX_CLOCK, s.clock + 2);
+      fx(s, { t: 'clock', minutes: s.clock, delta: 2 });
       s.powers[p].reputation = Math.min(100, s.powers[p].reputation + 10);
       log(s, 'card', `${name} hosts an arms control summit. Doomsday Clock: ${s.clock} minutes.`, p);
       return true;
     }
     case 'carrier': {
+      if (s.carrier) return false;
       s.carrier = true;
       log(s, 'card', `${name} deploys a carrier strike group. Defenders roll 1 die this turn.`, p);
       return true;
     }
     case 'blitzkrieg': {
+      if (s.blitz) return false;
       s.blitz = true;
       log(s, 'card', `${name} launches a blitzkrieg and wins ties this turn.`, p);
       return true;
     }
     case 'detente': {
-      if (typeof target !== 'string' || target === p || !s.powers[target].alive || hasPact(s, p, target)) return false;
+      if (typeof target !== 'string' || !(target in s.powers) || target === p || !s.powers[target].alive || hasPact(s, p, target)) return false;
       addPact(s, p, target);
       log(s, 'card', `Détente: ${name} and ${POWER[target].name} sign a non-aggression pact.`, p);
       return true;

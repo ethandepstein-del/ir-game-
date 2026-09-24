@@ -61,3 +61,14 @@ export function pickOfferToPlayer(s: GameState): Offer | null {
   }
   return null;
 }
+
+/** AIs court a neighbour when their main threat lies elsewhere, so EU and Indian doctrines matter for AIs too. */
+export function aiPactTarget(s: GameState, p: PowerId): PowerId | null {
+  if (s.round < 2 || rand(s) > 0.35) return null;
+  const threat = mainThreat(s, p);
+  const candidates = alivePowers(s).filter(
+    (q) => q !== p && q !== s.player && q !== threat && q !== s.coalition && p !== s.coalition && !hasPact(s, p, q) && bordersPower(s, p, q),
+  );
+  for (const q of candidates) if (considerPact(s, p, q).accept) return q;
+  return null;
+}

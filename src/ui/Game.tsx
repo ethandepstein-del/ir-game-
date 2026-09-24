@@ -20,12 +20,21 @@ import {
   shares,
   winChance,
 } from '../engine/game';
-import type { Action, GameState } from '../engine/types';
-import { Clock, DiceRow, PowerDot } from './bits';
+import type { Action, FxEvent, GameState } from '../engine/types';
+import { sfx } from './audio/sfx';
+import { Clock, PowerDot } from './bits';
+import { direct } from './fx/director';
+import { FxEngine } from './fx/particles';
+import { GEO, MAP_W } from './geometry';
+import { SoundControls } from './SoundControls';
+import { useStage } from './Stage';
 import { WorldMap, type Highlight } from './WorldMap';
 
 type Speed = 'normal' | 'fast' | 'instant';
-const DELAY: Record<Speed, number> = { normal: 420, fast: 90, instant: 0 };
+const MIN_DELAY: Record<Speed, number> = { normal: 280, fast: 70, instant: 0 };
+
+/** Events worth surfacing even when the AI plays instantly. */
+const MAJOR = new Set<FxEvent['t']>(['coalition', 'coalitionEnd', 'bandwagon', 'transition', 'era', 'world', 'eliminated', 'capital', 'clock', 'end', 'pactBroken']);
 
 interface Props {
   game: GameState;
@@ -52,6 +61,9 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
   const [speed, setSpeed] = useState<Speed>('normal');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastKey = useRef(0);
+  const fxEngine = useMemo(() => new FxEngine(), []);
+  const { stage, mapOverlay, screenOverlay, shakeClass, shakeKey } = useStage(fxEngine);
+  const busyUntil = useRef(0);
 
   const me = game.player;
   const turnOf = current(game);
@@ -59,14 +71,16 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
   const over = isOver(game);
 
   const commit = useCallback(
-    (next: GameState) => {
+    (next: GameState, detail: 'full' | 'brief' | 'silent' = 'full') => {
+      const span = direct(next.fx, stage, { player: next.player, detail });
+      busyUntil.current = performance.now() + span;
       if (next.dispatches.length) {
         onLearn(next.dispatches);
         setToasts((t) => [...t, ...next.dispatches.map((id) => ({ id, key: ++toastKey.current }))].slice(-1));
       }
       setGame(next);
     },
-    [onLearn, setGame],
+    [onLearn, setGame, stage],
   );
 
   const act = useCallback(
@@ -78,11 +92,18 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
     [game, commit],
   );
 
-  // Seed the first dispatches (anarchy) once.
+  // Play the opening beats (first turn, first dispatch) once.
   useEffect(() => {
-    if (game.dispatches.length && game.round === 1 && game.log.length <= 2) commit({ ...game });
+    commit({ ...game });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => () => fxEngine.clear(), [fxEngine]);
+
+  // Expose read-only state for automated playtesting.
+  useEffect(() => {
+    (window as unknown as { __anarchy?: unknown }).__anarchy = { state: game, speed };
+  }, [game, speed]);
 
   // Drive AI turns.
   useEffect(() => {
@@ -91,16 +112,19 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
       let s = game;
       let guard = 0;
       const learned: ConceptId[] = [];
+      const events: FxEvent[] = [];
       do {
         const a = aiStep(s);
         let next = apply(s, a);
         if (next === s) next = apply(s, s.phase === 'attack' ? { kind: 'endAttack' } : { kind: 'endTurn' });
         learned.push(...next.dispatches);
+        events.push(...next.fx.filter((e) => speed !== 'instant' || MAJOR.has(e.t) || (e.t === 'turn' && e.power === me) || (e.t === 'pact' && (e.a === me || e.b === me)) || (e.t === 'conquer' && e.loser === me)));
         s = next;
       } while (speed === 'instant' && !isOver(s) && current(s) !== me && guard++ < 5000);
-      commit({ ...s, dispatches: learned });
+      commit({ ...s, dispatches: learned, fx: events }, speed === 'normal' ? 'full' : speed === 'fast' ? 'brief' : 'silent');
     };
-    const id = setTimeout(run, DELAY[speed]);
+    const wait = Math.max(MIN_DELAY[speed], speed === 'instant' ? 0 : busyUntil.current - performance.now());
+    const id = setTimeout(run, wait);
     return () => clearTimeout(id);
   }, [game, speed, over, turnOf, me, commit]);
 
@@ -145,13 +169,15 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
 
   const onPick = (t: number) => {
     const T = game.territories[t];
+    const pan = ((GEO.labels[t][0] / MAP_W) * 2 - 1) * 0.7;
     if (myTurn && cardMode !== null) {
       if (highlight.targets.has(t)) {
         act({ kind: 'play', card: cardMode, target: t });
         setCardMode(null);
-      }
+      } else sfx.deny();
       return;
     }
+    if (!(myTurn && game.phase === 'deploy' && T.owner === me)) sfx.select(pan);
     if (!myTurn || game.pendingMove) {
       setSel(t);
       setTgt(null);
@@ -233,12 +259,28 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
             onClick={() => onCodex('offense-defense')}
           />
           <Stat label="Hegemony" value={`${myTerr}/${HEGEMONY}`} />
-          <button type="button" className="clock-stat" onClick={() => onCodex('mad')} title="Doomsday Clock: attacks on great-power homelands move it toward midnight.">
-            <Clock minutes={game.clock} />
+          <button
+            type="button"
+            className={`clock-stat ${game.clock <= 3 ? 'hot' : ''}`}
+            onClick={() => onCodex('mad')}
+            title="Doomsday Clock: attacks on great-power homelands move it toward midnight."
+          >
+            <Clock minutes={game.clock} size={38} />
             <span>
-              <b>{game.clock}</b> min to midnight
+              <b key={game.clock} className="clock-num">
+                {game.clock}
+              </b>{' '}
+              min to midnight
             </span>
           </button>
+          <div className="speed hud-speed" role="group" aria-label="AI speed">
+            {(['normal', 'fast', 'instant'] as Speed[]).map((sp) => (
+              <button key={sp} type="button" className={speed === sp ? 'on' : ''} onClick={() => setSpeed(sp)} title={`AI speed: ${sp}`}>
+                {sp === 'normal' ? '▶' : sp === 'fast' ? '▶▶' : '▶▶▶'}
+              </button>
+            ))}
+          </div>
+          <SoundControls />
         </div>
       </header>
 
@@ -255,7 +297,15 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
 
       <div className="board">
         <section className="map-col">
-          <WorldMap game={game} highlight={highlight} onPick={onPick} battle={game.lastBattle} />
+          <WorldMap
+            game={game}
+            highlight={highlight}
+            onPick={onPick}
+            fx={fxEngine}
+            overlay={mapOverlay}
+            shakeClass={shakeClass}
+            shakeKey={shakeKey}
+          />
           <div className="toasts" aria-live="polite">
             {toasts.map((t) => (
               <div key={t.key} className="toast">
@@ -324,16 +374,16 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
               </>
             ) : !myTurn ? (
               <>
-                <p className="kicker">
-                  <PowerDot p={turnOf} /> {POWER[turnOf].name} is moving
-                </p>
-                <div className="speed" role="group" aria-label="AI speed">
-                  {(['normal', 'fast', 'instant'] as Speed[]).map((sp) => (
-                    <button key={sp} type="button" className={speed === sp ? 'on' : ''} onClick={() => setSpeed(sp)}>
-                      {sp}
-                    </button>
-                  ))}
+                <p className="kicker">Round {game.round} · Enemy turn</p>
+                <h2 className="thinking">
+                  <PowerDot p={turnOf} /> {POWER[turnOf].name}
+                </h2>
+                <div className="scan" aria-hidden="true">
+                  <i />
                 </div>
+                <p className="hint">
+                  {game.phase === 'deploy' ? 'Mobilizing reserves…' : game.phase === 'attack' ? 'Conducting operations…' : 'Repositioning forces…'} Speed up with the ▶▶ controls.
+                </p>
               </>
             ) : game.pendingMove ? (
               <>
@@ -404,7 +454,6 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
                 ) : (
                   <p className="hint">Select one of your territories with 2+ armies, then a highlighted neighbour.</p>
                 )}
-                {game.lastBattle && game.lastBattle.attacker === me && <DiceRow battle={game.lastBattle} />}
                 <button type="button" className="btn btn-ghost" onClick={() => act({ kind: 'endAttack' })}>
                   End attacks → fortify
                 </button>
@@ -567,6 +616,7 @@ export function Game({ game, setGame, onLearn, onCodex, onQuit, onEnd }: Props) 
           </div>
         </Modal>
       )}
+      {screenOverlay}
     </div>
   );
 }

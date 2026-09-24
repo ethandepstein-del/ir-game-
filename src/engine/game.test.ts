@@ -58,6 +58,33 @@ describe('rules', () => {
     expect(s.learned).toContain('mad');
   });
 
+  it('ends the game at midnight even when the homeland strike fails', () => {
+    let s = newGame('usa', 42);
+    s = apply(s, { kind: 'deploy', t: T('us-east'), n: s.reinforcements });
+    s.clock = 1;
+    s.territories[T('kazakhstan')] = { owner: 'usa', armies: 2 };
+    s.territories[T('urals')].armies = 30;
+    s = apply(s, { kind: 'attack', from: T('kazakhstan'), to: T('urals'), blitz: true });
+    expect(s.clock).toBe(0);
+    expect(s.endReason).toBe('nuclear');
+  });
+
+  it('rejects malformed actions', () => {
+    const s = newGame('usa', 5);
+    expect(apply(s, { kind: 'deploy', t: T('us-east'), n: NaN })).toBe(s);
+    expect(apply(s, { kind: 'deploy', t: 999, n: 1 })).toBe(s);
+    const s2 = { ...s, powers: { ...s.powers, usa: { ...s.powers.usa, cards: ['sanctions' as const, 'coup' as const] } } };
+    expect(apply(s2, { kind: 'play', card: 0, target: 'nope' as never })).toBe(s2);
+    expect(apply(s2, { kind: 'play', card: 1, target: 999 })).toBe(s2);
+  });
+
+  it('pacts last exactly PACT_LENGTH rounds', () => {
+    let s = newGame('usa', 6);
+    s = apply(s, { kind: 'propose', to: 'ind' });
+    const pact = s.pacts.find((p) => p.a === 'usa' && p.b === 'ind');
+    if (pact) expect(pact.until - s.round + 1).toBe(5);
+  });
+
   it('breaking a pact costs reputation', () => {
     let s = newGame('usa', 4);
     s.pacts.push({ a: 'usa', b: 'eu', until: 9 });

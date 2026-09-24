@@ -68,10 +68,10 @@ export const POWERS: PowerDef[] = [
     name: 'Russia',
     short: 'RUS',
     color: '#d9483b',
-    core: ['moscow', 'urals', 'siberia'],
+    core: ['moscow', 'urals', 'siberia', 'far-east'],
     capital: 'moscow',
     doctrine: 'Defense in Depth',
-    doctrineText: 'You defend with 3 dice anywhere in the Heartland. Invaders have learned this the hard way.',
+    doctrineText: 'You start with four territories and defend with 3 dice anywhere in the Heartland. Invaders have learned this the hard way.',
   },
   {
     id: 'chn',

@@ -1,8 +1,84 @@
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { CONCEPTS, type ConceptId } from '../data/concepts';
 import { POWER, POWERS } from '../data/world';
 import { ownedBy, prestige } from '../engine/game';
 import type { GameState } from '../engine/types';
+import { sfx } from './audio/sfx';
 import { PowerDot } from './bits';
+
+/** Falling hex confetti for a win, drifting ash for a loss. */
+function Weather({ mode, color }: { mode: 'won' | 'lost' | 'nuked'; color: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const ctx = c.getContext('2d')!;
+    const dpr = window.devicePixelRatio || 1;
+    let w = 0;
+    let h = 0;
+    const size = () => {
+      w = c.clientWidth;
+      h = c.clientHeight;
+      c.width = w * dpr;
+      c.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    size();
+    const palette = mode === 'won' ? [color, '#ffffff', '#ffd76a'] : mode === 'nuked' ? ['#b9b3a8', '#8a847a', '#d8cfc0'] : ['#6d7684', '#9aa3ae'];
+    const n = mode === 'won' ? 140 : 90;
+    const parts = Array.from({ length: n }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * -h,
+      vy: mode === 'won' ? 60 + Math.random() * 90 : 12 + Math.random() * 20,
+      vx: (Math.random() - 0.5) * (mode === 'won' ? 60 : 16),
+      r: mode === 'won' ? 3 + Math.random() * 4 : 1 + Math.random() * 2.2,
+      rot: Math.random() * 6,
+      vr: (Math.random() - 0.5) * 6,
+      c: palette[Math.floor(Math.random() * palette.length)],
+      a: 0.5 + Math.random() * 0.5,
+    }));
+    let last = performance.now();
+    let raf = 0;
+    const started = last;
+    const frame = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      ctx.clearRect(0, 0, w, h);
+      const fade = mode === 'won' ? Math.max(0, 1 - (now - started - 6000) / 3000) : 1;
+      for (const p of parts) {
+        p.y += p.vy * dt;
+        p.x += p.vx * dt + Math.sin(now / 900 + p.rot) * 0.3;
+        p.rot += p.vr * dt;
+        if (p.y > h + 10) {
+          if (mode === 'won' && now - started > 5000) continue;
+          p.y = -10;
+          p.x = Math.random() * w;
+        }
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = p.a * fade;
+        ctx.fillStyle = p.c;
+        ctx.beginPath();
+        for (let k = 0; k < 6; k++) {
+          const a = (Math.PI / 3) * k;
+          if (k === 0) ctx.moveTo(Math.cos(a) * p.r, Math.sin(a) * p.r);
+          else ctx.lineTo(Math.cos(a) * p.r, Math.sin(a) * p.r);
+        }
+        ctx.fill();
+        ctx.restore();
+      }
+      if (fade > 0) raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    window.addEventListener('resize', size);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', size);
+    };
+  }, [mode, color]);
+  return <canvas ref={ref} className="weather" aria-hidden="true" />;
+}
 
 const REASON: Record<NonNullable<GameState['endReason']>, string> = {
   hegemony: 'Hegemony',
@@ -25,9 +101,17 @@ export function End({ game, onAgain, onMenu, onCodex }: { game: GameState; onAga
           ? `${POWER[me].name} has been wiped from the map.`
           : `${POWER[game.winner!].name} prevails.`;
 
+  const mode = won ? 'won' : game.endReason === 'nuclear' ? 'nuked' : 'lost';
+  useEffect(() => {
+    sfx.unlock();
+    const id = setTimeout(() => (mode === 'won' ? sfx.victory() : mode === 'lost' ? sfx.defeat() : sfx.defeat()), 250);
+    return () => clearTimeout(id);
+  }, [mode]);
+
   return (
-    <main className="end">
-      <header className={`end-hero ${won ? 'won' : game.endReason === 'nuclear' ? 'nuked' : 'lost'}`}>
+    <main className={`end end-${mode}`}>
+      <Weather mode={mode} color={POWER[me].color} />
+      <header className={`end-hero ${mode}`}>
         <p className="kicker">{REASON[game.endReason!]} · Round {Math.min(game.round, 20)}</p>
         <h1>{won ? 'Victory' : game.endReason === 'nuclear' ? 'Midnight' : 'Defeat'}</h1>
         <p className="lede">{headline}</p>
@@ -37,8 +121,8 @@ export function End({ game, onAgain, onMenu, onCodex }: { game: GameState; onAga
         <section className="card">
           <h3>Final standings</h3>
           <ol className="ranking">
-            {ranking.map((r) => (
-              <li key={r.p} className={r.p === me ? 'me' : ''}>
+            {ranking.map((r, i) => (
+              <li key={r.p} className={`rise ${r.p === me ? 'me' : ''}`} style={{ '--d': `${400 + i * 110}ms` } as CSSProperties}>
                 <PowerDot p={r.p} />
                 <span>{POWER[r.p].name}</span>
                 <span className="num">{r.terr} terr.</span>
@@ -123,6 +207,8 @@ function ShareChart({ game }: { game: GameState }) {
               stroke={p.color}
               strokeWidth={p.id === game.player ? 3 : 2}
               strokeLinejoin="round"
+              pathLength={1}
+              className="draw-line"
               points={hist.map((h) => `${x(h.round)},${y(h.share[p.id] ?? 0)}`).join(' ')}
             >
               <title>{p.name}</title>
