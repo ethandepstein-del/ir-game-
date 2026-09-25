@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ball Test</title>
+<style>
+  :root { --bg: #0e0e0d; --fg: #f0eee6; --muted: #8d8b82; --accent: #d97757; color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 500 15px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+  body { display: grid; place-items: center; overflow: hidden; }
+  .stage { position: relative; width: min(100vw - 32px, (100vh - 96px) * 16 / 9); aspect-ratio: 16 / 9; }
+  canvas { width: 100%; height: 100%; display: block; border-radius: 6px; background: #000; }
+  .play { position: absolute; inset: 0; display: grid; place-items: center; border: 0; cursor: pointer;
+    background: rgba(10,10,9,.55); color: var(--fg); font: inherit; border-radius: 6px; }
+  .play span { display: inline-flex; align-items: center; gap: 12px; padding: 14px 24px; border-radius: 999px;
+    background: var(--fg); color: #141413; font-weight: 600; letter-spacing: .02em; }
+  .play span::before { content: ""; border-left: 14px solid var(--accent); border-top: 9px solid transparent; border-bottom: 9px solid transparent; }
+  .play[hidden] { display: none; }
+  .play:focus-visible span { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .bar { position: absolute; left: 0; right: 0; bottom: -28px; display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; }
+  body.render .bar, body.render .play { display: none; }
+  body.render { display: block; }
+  body.render .stage { width: 1920px; height: 1080px; }
+  body.render canvas { border-radius: 0; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <canvas id="c" width="1920" height="1080"></canvas>
+  <button class="play" id="play" hidden><span>Play with sound</span></button>
+  <div class="bar"><span>Ball Test · 15 s · sound on</span><span id="time">0.00</span></div>
+</div>
+<script type="module">
+  import './src/main.js';
+  const render = new URLSearchParams(location.search).has('render');
+  if (render) document.body.classList.add('render');
+  const canvas = document.getElementById('c');
+  await window.BT.init(canvas);
+  window.BT.ready = true;
+  if (!render) {
+    const btn = document.getElementById('play'), time = document.getElementById('time');
+    window.BT.renderFrame(2.25, { motionBlur: false });
+    btn.hidden = false;
+    btn.focus({ preventScroll: true });
+    btn.onclick = async () => {
+      btn.hidden = true;
+      const clock = await window.BT.playAudio();
+      const tick = () => {
+        const t = clock();
+        const tt = Math.min(t, window.BT.T.END - 1e-3);
+        window.BT.renderFrame(Math.max(0, tt), { motionBlur: false });
+        time.textContent = tt.toFixed(2);
+        if (t < window.BT.T.END) requestAnimationFrame(tick);
+        else btn.hidden = false;
+      };
+      requestAnimationFrame(tick);
+    };
+  }
+</script>
+</body>
+</html>
