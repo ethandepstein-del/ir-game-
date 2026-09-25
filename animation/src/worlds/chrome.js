@@ -37,8 +37,8 @@ const vlerp = (a, b, u) => [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2],
 // Ball state in 3D, plus the inverse shape matrix for the shader (squash along the contact normal).
 export function ball3D(tt) {
   const b = ballChrome(tt);
-  const q = b.q;
-  const k = clamp(1 - q * 0.55, 0.5, 1.25);   // axis scale along the normal
+  const q = 0;                                // steel: no visible deformation
+  const k = 1;
   const perp = 1 / Math.sqrt(k);
   const ax = [Math.cos(b.na), Math.sin(b.na), 0];
   const minv = [];

@@ -56,6 +56,17 @@ function ellipsePts(cx, cy, rx, ry, rot, a0, a1, seed, wob = 0.035) {
   return pts;
 }
 
+// Clamp outline points to the contact chord so the drawing shows a real flat contact patch.
+function flatten(pts, x, y, b) {
+  if (!(b.pen > 0)) return pts;
+  const q = Math.min(0.6, b.pen / R), lim = (1 - q) * R;
+  const ux = -Math.cos(b.na), uy = -Math.sin(b.na);
+  return pts.map(([px, py]) => {
+    const d = (px - x) * ux + (py - y) * uy;
+    return d > lim ? [px - (d - lim) * ux, py - (d - lim) * uy] : [px, py];
+  });
+}
+
 // The drawn ball. `draw` in [0,1] reveals the outline, `hatch` in [0,1] reveals shading.
 function drawBall(g, x, y, b, seed, { draw = 1, hatch = 1, ghost = null } = {}) {
   const rx = R * b.along, ry = R * b.across, rot = b.angle;
@@ -76,7 +87,7 @@ function drawBall(g, x, y, b, seed, { draw = 1, hatch = 1, ghost = null } = {}) 
   // Graphite outline: starts upper-left, overshoots the join like a real hand.
   const a0 = -2.2, total = TAU + 0.5;
   const end = a0 + total * ease.inOutQuad(clamp(draw));
-  if (draw > 0) stroke(g, ellipsePts(x, y, rx, ry, rot, a0, end, seed + 7), { width: 4.6, alpha: 0.92, seed: seed + 8 });
+  if (draw > 0) stroke(g, flatten(ellipsePts(x, y, R * (b.pen > 0 ? 1 + 0.2 * b.pen / R : 1), R * (b.pen > 0 ? 1 + 0.2 * b.pen / R : 1), 0, a0, end, seed + 7), x, y, b), { width: 4.6, alpha: 0.92, seed: seed + 8 });
   if (draw > 0.9) stroke(g, ellipsePts(x, y, rx * 0.985, ry * 0.985, rot, a0 + 0.3, a0 + 0.3 + TAU * 0.6, seed + 9), { width: 1.8, alpha: 0.45, seed: seed + 10 });
   // Seam line (half a great circle) drawn on the ball, turning with it.
   if (hatch > 0.5) stroke(g, ellipsePts(x, y, rx * 0.42, ry * 0.97, sp + rot * 0, -Math.PI / 2, Math.PI / 2, seed + 12, 0.02), { width: 2.6, alpha: 0.75 * clamp((hatch - 0.5) * 2), seed: seed + 13 });
@@ -171,23 +182,23 @@ function drawPencil(g, x, y, ang, lift) {
 function pencilPose(t) {
   const ang0 = -0.95, tr = tapTime();
   const cx = X0, cy = Y0;
-  if (t < 0.04) {
-    const u = ease.outCubic(t / 0.04);
+  if (t < 0.03) {
+    const u = ease.outCubic(t / 0.03);
     return { x: lerp(cx + 520, cx + Math.cos(-2.2) * R, u), y: lerp(cy - 380, cy + Math.sin(-2.2) * R, u), ang: ang0 - 0.2 * (1 - u), lift: 60 * (1 - u) };
   }
-  if (t < 0.34) {
-    const d = ease.inOutQuad(invLerp(0.04, 0.34, t));
+  if (t < 0.27) {
+    const d = ease.inOutQuad(invLerp(0.03, 0.27, t));
     const a = -2.2 + (TAU + 0.5) * d;
     return { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, ang: ang0 + 0.08 * Math.sin(a), lift: 0 };
   }
-  if (t < 0.46) {
-    const u = invLerp(0.34, 0.46, t);
+  if (t < 0.37) {
+    const u = invLerp(0.27, 0.37, t);
     const zig = Math.abs(((u * 7) % 2) - 1);
     return { x: cx - R * 0.6 + u * R * 1.3 + 30 * zig, y: cy + R * 0.55 - u * R * 0.25 - 70 * zig, ang: ang0, lift: 2 };
   }
   const hit = { x: cx - 26, y: cy - R + 6 };
   if (t < tr - 0.035) {
-    const u = ease.inOutCubic(invLerp(0.46, tr - 0.035, t));
+    const u = ease.inOutCubic(invLerp(0.37, tr - 0.035, t));
     return { x: lerp(cx + R * 0.6, hit.x + 60, u), y: lerp(cy + R * 0.3, hit.y - 150, u), ang: ang0 + 0.35 * u, lift: 140 * u };
   }
   if (t < tr) {
@@ -277,7 +288,7 @@ function drawChart(g, t) {
 
 // Planned path in blue (dashed): the simulated trajectory, revealed along its length.
 function drawPlan(g, t) {
-  const p = clamp(invLerp(0.36, 0.7, t));
+  const p = clamp(invLerp(0.3, 0.62, t));
   if (p <= 0) return;
   const tr = tapTime();
   const tEnd = lerp(tr, T.CEL + 0.3, ease.outCubic(p));
@@ -306,10 +317,11 @@ export default {
     paper = paperTexture(W + 900, H + 160, 7, [246, 243, 234], { fibers: 3000, blotch: 0.06, dark: 0.08 });
     buildSheet();
   },
-  shutter: () => ({ samples: 2, angle: 180 }),
+  // Speed-adaptive motion blur: enough sub-frames that copies of the ball stay within ~5 px.
+  shutter: (t) => { const b = ball2D(t); return { samples: Math.min(6, Math.max(2, Math.ceil(Math.hypot(b.vx, b.vy) * 0.0048 / 5) + 1)), angle: 180 }; },
   draw(g, t) {
     const boil = Math.floor(t * 24);
-    const sk = shake(t, 14);
+    const sk = shake(t, 6);
     const tr = tapTime();
     // Start close on the pencil, pull back and pan to the tracking framing by the cut.
     const end = camFrame(T.CEL);
@@ -333,8 +345,8 @@ export default {
     g.fillText(`fr ${String(Math.floor(t * 24) + 1).padStart(3, '0')}`, 2022, 934);
 
     const b = ball2D(t);
-    const drawP = clamp(invLerp(0.04, 0.34, t));
-    const hatchP = clamp(invLerp(0.34, 0.46, t));
+    const drawP = clamp(invLerp(0.03, 0.27, t));
+    const hatchP = clamp(invLerp(0.27, 0.37, t));
 
     // Contact shadow smudge
     const hNorm = clamp(b.h / DROP_H);
@@ -348,10 +360,10 @@ export default {
     // Onion skins: the previous two drawings (a 24 fps pencil test's light table), blue and red.
     if (t > tr + 0.05) {
       const g2 = ball2D(t - 2 / 24), g1 = ball2D(t - 1 / 24);
-      drawBall(g, g2.x, g2.y, g2, boil * 13 + 5, { ghost: { color: RED, alpha: 0.2 } });
-      drawBall(g, g1.x, g1.y, g1, boil * 13 + 9, { ghost: { color: BLUE, alpha: 0.32 } });
+      drawBall(g, g2.cx, g2.cy, g2, boil * 13 + 5, { ghost: { color: RED, alpha: 0.2 } });
+      drawBall(g, g1.cx, g1.cy, g1, boil * 13 + 9, { ghost: { color: BLUE, alpha: 0.32 } });
     }
-    drawBall(g, b.x, b.y, b, boil * 31 + 3, { draw: drawP, hatch: hatchP });
+    drawBall(g, b.cx, b.cy, b, boil * 31 + 3, { draw: drawP, hatch: hatchP });
 
     // Impact accents and the "squash!" note at the first contact
     const first = eventsOn('pencil')[0];

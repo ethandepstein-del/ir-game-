@@ -11,15 +11,16 @@
 export const PX_PER_M = 700;              // the ball is 24 cm across
 export const G = 9.81 * PX_PER_M;         // px/s²
 export const R = 84, FLOOR = 830;
+const BALL_KG = 0.35;
 export const HZ = 4800;
 const DT = 1 / HZ;
-const TC = 0.03;                          // contact duration of the soft rubber ball (s)
-const KI = 0.45;                          // moment of inertia factor, I = KI·m·R²
+const TC = 0.018;                         // contact duration of the rubber ball (s), exaggerated ~2× so it reads
+const KI = 0.6;                           // moment of inertia factor, I = KI·m·R² (hollow rubber ball)
 const DRAG = 0.5 * 1.2 * 0.47 * Math.PI * 0.12 ** 2 / 0.35; // ½ρC_dA/m (1/m)
-const JIG_W = 2 * Math.PI * 13, JIG_Z = 0.28, JIG_GAIN = 0.35;
+const JIG_W = 2 * Math.PI * 18, JIG_Z = 0.45, JIG_GAIN = 0.08;
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
-export const MAT = { paperDesk: 0.64, cel: 0.74, plate: 0.55, paper: 0.6, pixel: 0.7, block: 0.5, chrome: 0.9 };
+export const MAT = { paperDesk: 0.72, cel: 0.74, plate: 0.55, paper: 0.6, pixel: 0.7, block: 0.5, chrome: 0.9 };
 
 export function contactKC(e, tc = TC) {
   const ln = Math.log(e);
@@ -90,7 +91,7 @@ function stepPlate(p, t) {
   }
   if (p.stopped) { p.load = 0; return; }
   // Spring pushes the plate up (−y) while compressed below its stop; the ball pushes it down.
-  const a = (-p.k * (p.y - p.yStop) + p.load) / p.m + G;
+  const a = (-p.k * (p.y - p.yStop) + BALL_KG * p.load) / p.m + G;   // load is the ball's acceleration
   p.v += a * DT; p.y += p.v * DT;
   if (p.y > p.yCock) { p.y = p.yCock; if (p.v > 0) p.v = 0; } // the housing supports it from below
   if (p.y <= p.yStop && p.v < 0) { p.y = p.yStop; p.stopV = p.v; p.v = 0; p.stopped = true; p.stoppedAt = t; }
@@ -111,7 +112,7 @@ function floorSurface(e, id) {
 }
 function ceilSurface(yb, x0, x1, e) {
   const { k, c } = contactKC(e);
-  return { n: [0, 1], d: yb, x0, x1, k, c, mu: 0, id: 'block', e };
+  return { n: [0, 1], d: yb, x0, x1, k, c, mu: 0.5, id: 'block', e };
 }
 
 // ---------------------------------------------------------------- 2D course
@@ -149,7 +150,7 @@ function solve(f, lo, hi, target, { steps = 48, last = true } = {}) {
 
 // Targets on the 160 bpm grid (beat k at 0.5 + 0.375k).
 const bt = (k) => 0.5 + 0.375 * k;
-export const TARGETS = { cut1: 2.0, celLand: bt(6), paperLand: bt(10), pixelLand: bt(12.5) };
+export const TARGETS = { cut1: 2.0, celLand: bt(6), paperLand: bt(10), pixelLand: bt(12.75) };
 
 function solveCourse() {
   const at = (spec, stopAt) => simulate({ ...spec, stopAt });
@@ -162,7 +163,7 @@ function solveCourse() {
   p.kPaper = solve((k) => at({ ...p, kPaper: k }, 'paperLand').stopT, 100, 20000, TARGETS.paperLand, { last: false });
   p.pixelX = at(p, 'paper2').stopX;
   // Pixel spring block: stay on the branch with exactly one clean headbutt of the bonus block.
-  p.kPixel = solve((k) => at({ ...p, kPixel: k }, 'pixelLand').stopT, 560, 3600, TARGETS.pixelLand, { last: false });
+  p.kPixel = solve((k) => at({ ...p, kPixel: k }, 'pixelLand').stopT, 380, 560, TARGETS.pixelLand, { last: false });
   return p;
 }
 
@@ -211,12 +212,16 @@ function simulate(p, record = false) {
     counts[s.id] = (counts[s.id] || 0) + 1;
     if (s.plate && s.plate.triggerAt === null) s.plate.triggerAt = t + 0.006;
   } };
+  // Plate surfaces are built once and shared across stages, so a stage change mid-contact
+  // does not fire the same impact twice.
+  let S1 = null, S2 = null, S3 = null;
   const setStage = (st) => {
     stage = st;
-    if (st === 'pencil') surfaces = [floors.pencil, plateSurface(P1, MAT.plate)];
-    if (st === 'cel') surfaces = [floors.cel, plateSurface(P1, MAT.plate), plateSurface(P2, MAT.plate)];
-    if (st === 'paper') surfaces = [floors.paper, plateSurface(P2, MAT.plate), plateSurface(P3, MAT.plate)];
-    if (st === 'pixel') surfaces = [floors.pixel, plateSurface(P3, MAT.plate), block];
+    S1 ||= plateSurface(P1, MAT.plate); S2 ||= plateSurface(P2, MAT.plate); S3 ||= plateSurface(P3, MAT.plate);
+    if (st === 'pencil') surfaces = [floors.pencil, S1];
+    if (st === 'cel') surfaces = [floors.cel, S1, S2];
+    if (st === 'paper') surfaces = [floors.paper, S2, S3];
+    if (st === 'pixel') surfaces = [floors.pixel, S3, block];
     counts = {};
   };
   setStage('pencil');
@@ -255,7 +260,7 @@ export const SLOPE = (4.5 * Math.PI) / 180;
 export const G3 = G / R;
 function simulateChrome(entry, t0, tEnd) {
   const n = [Math.sin(SLOPE), Math.cos(SLOPE)];
-  const { k, c } = contactKC(MAT.chrome);
+  const { k, c } = contactKC(MAT.chrome, 0.004);   // steel on stone: a stiff, near-instant contact
   const floor = { n, d: 0, k, c, mu: 0.25, id: 'chrome', e: MAT.chrome };
   const b = {
     x: n[0], y: n[1], vx: entry.vx / R, vy: -entry.vy / R, w: -entry.w, th: 0,
@@ -308,15 +313,15 @@ export function ball2D(t) {
   } else {
     [x, y, vx, vy, th, w, q, na, pen] = sample(rec.data, t, rec.t0, rec.n);
   }
-  const squash = Math.max(0, q);
-  const across = clamp(1 - q * 0.55, 0.45, 1.3);
+  const squash = pen > 0 ? Math.max(0, q) : 0;
+  const across = clamp(1 - (pen > 0 ? q : q * 0.5) * 0.55, 0.45, 1.3);
   const along = 1 / Math.sqrt(across);
   // While in contact, keep the flattened side on the surface.
   const nx = Math.cos(na), ny = Math.sin(na);
   const shift = pen > 0 ? R * (1 - across) - pen : 0;
   const dx = x - nx * shift, dy = y - ny * shift;
   return {
-    x: dx, y: dy, cx: x, cy: y, vx, vy, spin: th, w, squash, q,
+    x: dx, y: dy, cx: x, cy: y, vx, vy, spin: th, w, squash, q, na,
     along, across, angle: na + Math.PI / 2, h: FLOOR - R - y, pen,
   };
 }

@@ -326,8 +326,8 @@ function build(ctx, T0) {
   const tr = P.params.tRelease;
 
   // --- 1. Pencil test
-  pencilScratch(0.04, 0.3, 0.24, -0.35, -0.2);
-  pencilScratch(0.34, 0.12, 0.24, -0.3, -0.2, 6);
+  pencilScratch(0.03, 0.24, 0.24, -0.35, -0.2);
+  pencilScratch(0.27, 0.1, 0.24, -0.3, -0.2, 6);
   pencilTap(tr, 0.5, -0.25);
   for (const { k, t } of grid(0.5, C1, BEAT)) woodTick(t, k % 4 === 0 ? 0.22 : 0.14, k % 4 === 0 ? 2100 : 1700, 0.45);
   whoosh(tr + 0.05, 0.35, 0.07, 600, 2400, -0.3, -0.1);

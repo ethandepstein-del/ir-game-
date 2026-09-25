@@ -85,11 +85,13 @@ function coin(g, x, y, t) {
 function ballSprite(g, cx, cy, b) {
   const rx = R * K * b.along, ry = R * K * b.across;
   const ca = Math.cos(b.angle), sa = Math.sin(b.angle);
-  const ext = Math.ceil(Math.max(rx, ry)) + 2;
+  const ext = Math.ceil(R * K * 1.25) + 2;
+  const q = b.pen > 0 ? Math.min(0.6, b.pen / R) : 0;
+  const rr = R * K * (1 + 0.2 * q), lim = (1 - q) * R * K;
+  const ux = -Math.cos(b.na), uy = -Math.sin(b.na);
   const inside = (x, y) => {
     const dx = x - cx, dy = y - cy;
-    const u = (dx * ca + dy * sa) / rx, v = (-dx * sa + dy * ca) / ry;
-    return u * u + v * v <= 1;
+    return dx * dx + dy * dy <= rr * rr && dx * ux + dy * uy <= lim;
   };
   const ix = Math.round(cx), iy = Math.round(cy);
   for (let y = iy - ext; y <= iy + ext; y++) {
@@ -212,7 +214,7 @@ export default {
       for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 0.2], [1, 0.2]]) px(lg, hitX + dx * (10 + s), blockBottom - 8 + dy * (6 + s), 10, 2, 2);
     }
     // Ball shadow (dithered)
-    const [bxL, byL] = toL(b.x, b.y);
+    const [bxL, byL] = toL(b.cx, b.cy);
     const [bcx] = toL(b.cx, b.cy);
     const hN = clamp(b.h / 500);
     const sw = Math.round(R * K * (1.1 - 0.5 * hN));

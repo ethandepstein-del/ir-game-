@@ -2,7 +2,7 @@
 // of field, a paper-puppet ball on a brass split pin, pop-up flowers and confetti. Shot on 12s.
 import { W, H, T, R, FLOOR, CAM_Z, CAM_CY, camFrame, applyCam, physics, eventsOn, clamp, lerp, invLerp, ease, rng, shake, ball2D, TAU, noise1, wobble } from '../core.js';
 import { plateY } from '../physics.js';
-import { makeCanvas, paperTexture, grain, vignette } from '../fx.js';
+import { makeCanvas, paperTexture, grain, vignette, ballShape } from '../fx.js';
 
 const P = {
   sky: [150, 214, 232], sun: '#f6c445', sunIn: '#f9dc7a', ray: '#f29e4c',
@@ -114,18 +114,16 @@ function paperBall(g, b, x, y, spin) {
   // Drop shadow onto the backdrop (the ball is a card standing in front of it).
   g.shadowColor = 'rgba(30,30,20,0.38)';
   g.shadowBlur = 18; g.shadowOffsetX = 12; g.shadowOffsetY = 16;
-  g.beginPath(); g.ellipse(x, y, rx, ry, b.angle, 0, TAU);
+  g.beginPath(); ballShape(g, x, y, R, b);
   g.fillStyle = P.ball; g.fill();
   g.restore();
   g.save();
-  g.beginPath(); g.ellipse(x, y, rx, ry, b.angle, 0, TAU);
+  g.beginPath(); ballShape(g, x, y, R, b);
   textured(g, P.ball, 0.55);
   g.clip();
   // Two stripes that turn with the ball, each a separate glued-on piece with a tiny shadow.
   g.translate(x, y);
-  g.rotate(b.angle);
-  g.scale(b.along, b.across);
-  g.rotate(-b.angle + spin);
+  g.rotate(spin);
   for (const off of [-0.42, 0.42]) {
     g.save();
     g.shadowColor = 'rgba(60,20,10,0.35)'; g.shadowBlur = 4; g.shadowOffsetX = 2; g.shadowOffsetY = 3;
@@ -139,7 +137,7 @@ function paperBall(g, b, x, y, spin) {
   g.restore();
   // Lighting: warm key from top-left, falloff to the lower right.
   g.save();
-  g.beginPath(); g.ellipse(x, y, rx, ry, b.angle, 0, TAU);
+  g.beginPath(); ballShape(g, x, y, R, b);
   g.clip();
   const lg = g.createRadialGradient(x - R * 0.45, y - R * 0.5, R * 0.1, x, y, R * 1.3);
   lg.addColorStop(0, 'rgba(255,240,210,0.35)');
@@ -270,7 +268,8 @@ export default {
     fbg.drawImage(fg, 0, 0);
     fg = fb;
   },
-  shutter: () => ({ samples: 2, angle: 180 }),
+  // Speed-adaptive motion blur: enough sub-frames that copies of the ball stay within ~5 px.
+  shutter: (t) => { const b = ball2D(t); return { samples: Math.min(6, Math.max(2, Math.ceil(Math.hypot(b.vx, b.vy) * 0.0048 / 5) + 1)), angle: 180 }; },
   draw(g, t) {
     // Cut-paper pieces keep a faint hand-placed tremble (24 Hz, sub-pixel to 1 px); motion is smooth.
     const hi = Math.floor(t * 24 + 1e-6);
@@ -340,7 +339,7 @@ export default {
     g.beginPath(); g.ellipse(b.cx + 10, FLOOR + 6, R * (1.4 - 0.5 * hN), 20, 0, 0, TAU); g.fill();
 
     const [bjx, bjy] = jit(30, 1);
-    paperBall(g, b, b.x + bjx, b.y + bjy, b.spin);
+    paperBall(g, b, b.cx + bjx, b.cy + bjy, b.spin);
     confetti(g, ix1, FLOOR - 40, d1, 5);
     confetti(g, ix2, FLOOR - 20, d2, 6, 18);
     g.restore();

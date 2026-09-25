@@ -2,7 +2,7 @@
 // ball, smear frames on the fast takeoff, dust puffs, and kinetic "BOING!" lettering.
 import { W, H, T, R, FLOOR, CAM_Z, CAM_CY, camFrame, applyCam, eventsOn, physics, clamp, lerp, invLerp, ease, rng, shake, ball2D, TAU, wobble, noise1 } from '../core.js';
 import { plateY } from '../physics.js';
-import { grain, vignette } from '../fx.js';
+import { grain, vignette, ballShape } from '../fx.js';
 
 const INK = '#1b1b2f';
 const C = {
@@ -104,7 +104,7 @@ function tree(g, x, groundY, s, seed, lean = 0) {
 function celBall(g, b, x, y) {
   const rx = R * b.along, ry = R * b.across;
   g.save();
-  g.beginPath(); g.ellipse(x, y, rx, ry, b.angle, 0, TAU);
+  g.beginPath(); ballShape(g, x, y, R, b);
   g.fillStyle = C.ball; g.fill();
   g.save();
   g.clip();
@@ -127,7 +127,7 @@ function celBall(g, b, x, y) {
   g.restore();
   g.lineWidth = 8;
   g.strokeStyle = INK;
-  g.beginPath(); g.ellipse(x, y, rx, ry, b.angle, 0, TAU); g.stroke();
+  g.beginPath(); ballShape(g, x, y, R, b); g.stroke();
   g.restore();
 }
 
@@ -285,7 +285,8 @@ function launcher(g, t) {
 }
 
 export default {
-  shutter: () => ({ samples: 2, angle: 180 }),
+  // Speed-adaptive motion blur: enough sub-frames that copies of the ball stay within ~5 px.
+  shutter: (t) => { const b = ball2D(t); return { samples: Math.min(6, Math.max(2, Math.ceil(Math.hypot(b.vx, b.vy) * 0.0048 / 5) + 1)), angle: 180 }; },
   draw(g, t) {
     IMPACT_BIG = T.CEL;
     IMPACT_SMALL = eventsOn('cel')[0].t;
@@ -345,7 +346,7 @@ export default {
     speedLines(g, b, t);
     const speed = Math.hypot(b.vx, b.vy);
     if (speed > 1700 && b.pen <= 0) smear(g, t);
-    celBall(g, b, b.x, b.y);
+    celBall(g, b, b.cx, b.cy);
     boing(g, ix1 - 330, FLOOR - 600, dBig - 0.02);
     g.restore();
     vignette(g, 0.22, '120,40,0', 0.55);

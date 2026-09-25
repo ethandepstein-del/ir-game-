@@ -187,23 +187,14 @@ export function ballPath(g, x, y, r, b) {
   g.ellipse(x, y, r * b.along, r * b.across, b.angle, 0, Math.PI * 2);
 }
 
-// Ball silhouette with a real contact patch: the side against the surface flattens (a squarer
-// superellipse, flatter the harder it is pressed) while the free side stays round. `b.angle` is the
-// tangent direction; the surface is on the +y side of that frame (screen "down" for a floor).
-export function ballShape(g, x, y, r, b, { move = true } = {}) {
-  const rx = r * b.along, ry = r * b.across;
-  const q = Math.max(0, b.q || 0), touching = (b.pen || 0) > 0;
-  const pFlat = touching ? 2 + Math.min(10, q * 26) : 2;
-  const c = Math.cos(b.angle), s = Math.sin(b.angle);
-  const n = 48;
-  for (let i = 0; i <= n; i++) {
-    const th = (i / n) * Math.PI * 2;
-    const ct = Math.cos(th), st = Math.sin(th);
-    const p = st > 0 ? pFlat : 2;
-    const ex = Math.sign(ct) * Math.pow(Math.abs(ct), 2 / p) * rx;
-    const ey = Math.sign(st) * Math.pow(Math.abs(st), 2 / p) * ry;
-    const px = x + ex * c - ey * s, py = y + ex * s + ey * c;
-    if (i === 0 && move) g.moveTo(px, py); else g.lineTo(px, py);
-  }
+// Ball silhouette with a real contact patch: a circle (slightly bulged by the compression) with
+// the side against the surface cut flat, drawn 1:1 from the simulated penetration and centred on
+// the simulated centre. `b.na` is the contact normal (pointing from the surface into the ball).
+export function ballShape(g, x, y, r, b) {
+  const q = b.pen > 0 ? Math.min(0.6, b.pen / r) : 0;
+  const rr = r * (1 + 0.2 * q);
+  const a = Math.acos(Math.min(1, ((1 - q) * r) / rr));
+  const dn = b.na + Math.PI;               // direction toward the surface
+  g.arc(x, y, rr, dn + a, dn - a + Math.PI * 2);
   g.closePath();
 }
