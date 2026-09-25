@@ -7,11 +7,11 @@ A 15-second animation built entirely from code: no stock footage, no samples, no
 One deterministic rigid-body simulation (`src/physics.js`) drives the ball through every world, stepped at 4800 Hz:
 
 - **Gravity** at 9.81 m/s² for a 24 cm ball (700 px per metre).
-- **Soft contact:** a spring–damper whose stiffness and damping come from each surface's coefficient of restitution. Squash depth and contact time fall out of the impact speed, so small bounces squash less.
+- **Soft contact:** a spring–damper whose stiffness and damping come from each surface's coefficient of restitution. It uses an 18 ms contact, about twice a real rubber ball's so it reads on screen. Squash depth follows impact speed, and the ball is drawn as a circle with a flat contact patch, 1:1 with the simulated compression. The steel boule gets a 4 ms contact and doesn't visibly deform.
 - **Coulomb friction** at the contact patch couples slip to spin. The ball picks up a real roll on its first bounce, and painted stripes, a turning construction cross or engraved grooves make that roll visible in every style.
-- **Air drag** (quadratic) and a **damped shape-vibration mode** that rings after each contact.
+- **Air drag** (quadratic), a hollow-ball moment of inertia, and real friction on the bonus block. A rolling ball that headbutts it grips, reverses its spin and drops almost straight down.
 - **Energy only comes from visible machines:** a pencil tap, a latched coil spring in a trap door, an accordion paper spring, a game spring block, and gravity on the chrome world's 4.5° slope. Bounces otherwise decay as restitution says they must.
-- **A solver** tunes each launcher's spring (scan and bisection) so the key impacts land on the 160 bpm grid: 2.000 s, 2.750 s, 4.250 s and 5.1875 s.
+- **A solver** tunes each launcher's spring (scan and bisection) so the key impacts land on the 160 bpm grid: 2.000 s, 2.750 s, 4.250 s and 5.281 s.
 
 | Time | World | What happens |
 |---|---|---|
@@ -19,12 +19,12 @@ One deterministic rigid-body simulation (`src/physics.js`) drives the ball throu
 | 2.0–3.3 | **Cel cartoon** | The ball lands on a latched coil spring in a trap door. The latch lets go, the spring fires ("BOING!") and rings at its stop. Trees lean and ring when the ground takes a hit. |
 | 3.3–4.8 | **Cut paper** | An accordion-folded paper spring pops the ball up. Pop-up flowers and confetti follow. |
 | 4.8–5.8 | **8-bit** | A spring block launches the ball into a bonus block, which pays out three coins. |
-| 5.8–9.5 | **3D chrome** | A ray-traced steel boule on a glossy slope: bounces shorten and quicken as gravity feeds it speed. The camera was placed exactly where the ball would be, and the ball hits the lens in slow motion. |
+| 5.8–9.5 | **3D chrome** | A ray-traced steel boule skips down a polished-stone slope through a colonnade of black glass fins with tungsten light strips, lit like a night-time product shoot. The bounces shorten and quicken as gravity feeds it speed. The camera was placed exactly where the ball would be, and the ball hits the lens in slow motion. |
 | 9.5–15.0 | **Finale** | The lens cracks and about 900 shards swarm into "Claude". The ball comes back as the full stop and flickers through every style on its last bounces. |
 
 The soundtrack is synthesized with WebAudio and driven by the same simulation: each contact sounds at a level set by its impact speed, launchers twang and clank, and the chrome bounces ring higher as they shrink. Each world's groove runs on the shared 160 bpm grid.
 
-The master is rendered at 120 fps with sub-frame motion blur; the 60 fps version is derived from it.
+The master is rendered at 120 fps with speed-adaptive sub-frame motion blur (2–6 samples); the 60 fps version is derived from it.
 
 ## Files
 
