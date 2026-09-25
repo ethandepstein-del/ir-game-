@@ -1,0 +1,718 @@
+<title>Japan Map Quiz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  :root {
+    --paper: #f3f5f2;
+    --panel: #fbfcfa;
+    --ocean: #d6e3ea;
+    --ocean-ink: #7f9aab;
+    --land: #fdfcf8;
+    --land-2: #ebe9e1;
+    --coast: #53616d;
+    --grid: #b7c9d3;
+    --ink: #1b2631;
+    --muted: #5a6975;
+    --line: #d4dbdf;
+    --accent: #27477f;
+    --accent-soft: #dfe6f3;
+    --seal: #b8322a;
+    --seal-soft: #f6dcd8;
+    --ok: #2d7a4c;
+    --ok-soft: #d8eee0;
+    --warn: #a86d12;
+    --halo: #fdfcf8;
+    --sea-hl: rgba(39, 71, 127, .16);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --serif: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #0f151b; --panel: #151d25; --ocean: #14232e; --ocean-ink: #5f7d90;
+      --land: #2b3641; --land-2: #212a33; --coast: #8ea0ae; --grid: #203441;
+      --ink: #e5eaee; --muted: #93a3af; --line: #26323c;
+      --accent: #93b2ee; --accent-soft: #1f2d45; --seal: #f07466; --seal-soft: #3d201d;
+      --ok: #62c68f; --ok-soft: #173424; --warn: #e2a94d; --halo: #0f151b;
+      --sea-hl: rgba(147, 178, 238, .18);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0f151b; --panel: #151d25; --ocean: #14232e; --ocean-ink: #5f7d90;
+    --land: #2b3641; --land-2: #212a33; --coast: #8ea0ae; --grid: #203441;
+    --ink: #e5eaee; --muted: #93a3af; --line: #26323c;
+    --accent: #93b2ee; --accent-soft: #1f2d45; --seal: #f07466; --seal-soft: #3d201d;
+    --ok: #62c68f; --ok-soft: #173424; --warn: #e2a94d; --halo: #0f151b;
+    --sea-hl: rgba(147, 178, 238, .18);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); padding: 0 16px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .app { max-width: 1180px; margin: 0 auto; padding-block: 18px 40px; display: grid; gap: 14px; }
+
+  .top { display: flex; align-items: center; gap: 12px; }
+  .hanko { flex: none; width: 42px; height: 42px; border-radius: 8px; background: var(--seal); color: #fff;
+    display: grid; place-items: center; font: 800 24px/1 var(--serif); transform: rotate(-4deg); }
+  h1 { margin: 0; font: 800 clamp(22px, 4vw, 30px)/1.1 var(--serif); letter-spacing: .01em; text-wrap: balance; }
+  .sub { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+  .modes { display: flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+  .modes button { flex: 1 0 auto; border: 0; background: none; padding: 8px 12px; border-radius: 7px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+  .modes button[aria-selected="true"] { background: var(--accent); color: var(--panel); }
+
+  .layout { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; } }
+
+  .stage { display: grid; gap: 10px; min-width: 0; }
+  .prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 64px; }
+  .prompt .eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .prompt .target { font: 800 clamp(26px, 6vw, 38px)/1.1 var(--serif); }
+  .prompt .grow { flex: 1 1 auto; min-width: 0; }
+  .prompt .score { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  .timer { font: 500 26px/1 var(--mono); font-variant-numeric: tabular-nums; padding: 6px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+  .timer.low { background: var(--seal-soft); color: var(--seal); }
+
+  .btn { border: 1px solid var(--line); background: var(--panel); padding: 7px 14px; border-radius: 8px; font-weight: 500; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+
+  .mapwrap { position: relative; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--ocean); }
+  .mapwrap svg { display: block; width: 100%; height: auto; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; max-height: 72vh; }
+  .maptools { position: absolute; inset: 8px 8px auto 8px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+  .maptools > * { pointer-events: auto; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: none; padding: 5px 10px; font-size: 13px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .seg button:disabled { opacity: .45; cursor: default; }
+  .zoom button { width: 34px; font-size: 17px; line-height: 1; padding: 5px 0; }
+  .maphint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--ocean-ink); pointer-events: none; }
+
+  /* map */
+  .ocean { fill: var(--ocean); }
+  .grid { fill: none; stroke: var(--grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .sea { fill: transparent; stroke: none; transition: fill .2s; }
+  .land { fill: var(--land-2); stroke: var(--coast); stroke-width: .8; vector-effect: non-scaling-stroke; stroke-linejoin: round; transition: fill .2s; }
+  .land.jp { fill: var(--land); }
+  .halo { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; }
+  .city { fill: var(--ink); stroke: var(--halo); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .hl { fill: var(--accent) !important; }
+  .sea.hl { fill: var(--sea-hl) !important; fill-opacity: 1; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
+  .city.hl { fill: var(--accent) !important; stroke: var(--accent); stroke-width: 6; stroke-opacity: .35; }
+  .good { fill: var(--ok) !important; }
+  .sea.good { fill: var(--ok-soft) !important; fill-opacity: .9; stroke: var(--ok); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .bad { fill: var(--seal) !important; }
+  .sea.bad { fill: var(--seal-soft) !important; fill-opacity: .9; }
+  .answer { animation: pulse 1s ease-in-out 3; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .answer { animation: none; } }
+  .lbl { font-family: var(--sans); font-weight: 600; fill: var(--ink); stroke: var(--halo); stroke-width: 3.5; paint-order: stroke; stroke-linejoin: round; pointer-events: none; letter-spacing: .02em; display: none; }
+  .lbl.sea-l { fill: var(--accent); font-style: italic; font-weight: 500; }
+  .lbl.city-l { font-weight: 500; }
+  .lbl.on { display: block; }
+  .lbl.ok { fill: var(--ok); }
+  .lbl.no { fill: var(--seal); }
+
+  .choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .choices button { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 12px 10px; font-weight: 600; font-size: 16px; text-align: left; display: flex; gap: 10px; align-items: center; }
+  .choices button kbd { font: 500 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .choices button:hover:not(:disabled) { border-color: var(--accent); }
+  .choices button.right { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+  .choices button.wrong { background: var(--seal-soft); border-color: var(--seal); color: var(--seal); }
+
+  .feedback { min-height: 48px; border-radius: 10px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .feedback .msg { flex: 1 1 240px; }
+  .feedback .msg b { font-weight: 600; }
+  .feedback.ok { border-color: var(--ok); background: var(--ok-soft); }
+  .feedback.no { border-color: var(--seal); background: var(--seal-soft); }
+  .feedback .hint { color: var(--muted); font-size: 13.5px; display: block; }
+
+  .results { display: grid; gap: 10px; width: 100%; }
+  .results .big { font: 800 34px/1 var(--serif); }
+  .results ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 16px; font-size: 14px; }
+  .results li { display: flex; gap: 8px; }
+  .results .x { color: var(--seal); }
+  .results .v { color: var(--ok); }
+  .results .row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .side { display: grid; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .side h2 { margin: 0; font: 600 11px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 4px 11px; font-size: 13px; }
+  .chips button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .chips button:disabled { opacity: .45; cursor: default; }
+  .meter { display: grid; gap: 6px; }
+  .meter .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; display: flex; }
+  .meter .bar i { display: block; height: 100%; }
+  .meter .txt { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .cat { display: grid; gap: 2px; }
+  .cat h3 { margin: 6px 0 2px; font: 600 13px/1.3 var(--sans); display: flex; justify-content: space-between; }
+  .cat h3 span { color: var(--muted); font-weight: 400; }
+  .item { display: flex; align-items: center; gap: 9px; border: 0; background: none; text-align: left; padding: 5px 6px; border-radius: 6px; width: 100%; }
+  .item:hover { background: var(--accent-soft); }
+  .pip { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--line); }
+  .pip.s1 { background: var(--warn); }
+  .pip.s2 { background: var(--ok); }
+  .pip.miss { background: var(--seal); }
+  .item .n { flex: 1; }
+  .item .r { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .reset { justify-self: start; border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; padding: 0; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="hanko" aria-hidden="true">地</div>
+    <div>
+      <h1>Japan Map Quiz</h1>
+      <p class="sub">25 places on two maps, 10 minutes on quiz day. Study, drill, then take the timed run.</p>
+    </div>
+  </header>
+
+  <nav class="modes" role="tablist" aria-label="Mode">
+    <button role="tab" data-mode="study" aria-selected="true">Study</button>
+    <button role="tab" data-mode="find" aria-selected="false">Find it</button>
+    <button role="tab" data-mode="name" aria-selected="false">Name it</button>
+    <button role="tab" data-mode="exam" aria-selected="false">Timed quiz</button>
+  </nav>
+
+  <div class="layout">
+    <section class="stage">
+      <div class="prompt" id="prompt"></div>
+      <div class="mapwrap" id="mapwrap">
+        <div class="maptools">
+          <div class="seg" id="viewseg">
+            <button id="v-japan" data-view="japan" aria-pressed="true">Japan</button>
+            <button id="v-region" data-view="region" aria-pressed="false">East Asia</button>
+          </div>
+          <div class="seg zoom">
+            <button id="z-in" aria-label="Zoom in">+</button>
+            <button id="z-out" aria-label="Zoom out">−</button>
+            <button id="z-reset" aria-label="Reset zoom">⟲</button>
+          </div>
+        </div>
+        <div class="maphint">Pinch or scroll to zoom · drag to pan</div>
+      </div>
+      <div class="choices" id="choices" hidden></div>
+      <div class="feedback" id="feedback"></div>
+    </section>
+
+    <aside class="side">
+      <div class="meter" id="meter"></div>
+      <div>
+        <h2 style="margin-bottom:8px">Practice set</h2>
+        <div class="chips" id="chips"></div>
+      </div>
+      <div class="legend">
+        <span><i class="pip"></i>new</span>
+        <span><i class="pip miss"></i>missed last time</span>
+        <span><i class="pip s1"></i>right once</span>
+        <span><i class="pip s2"></i>right 2+ in a row</span>
+      </div>
+      <div id="list"></div>
+      <button class="reset" id="reset">Reset my progress</button>
+    </aside>
+  </div>
+</div>
+
+<script>
+const MAP = /*__MAP_DATA__*/null;
+
+const ITEMS = [
+  { id: 'hokkaido', name: 'Hokkaido', cat: 'islands', map: 'japan', hint: 'Northernmost main island, across the Tsugaru Strait. Main city: Sapporo.' },
+  { id: 'honshu', name: 'Honshu', cat: 'islands', map: 'japan', hint: 'The big central island. Tokyo, Kyoto, Osaka, Nagoya, Sendai and Hiroshima are all on it.' },
+  { id: 'shikoku', name: 'Shikoku', cat: 'islands', map: 'japan', hint: 'Smallest of the four. Sits south of Honshu across the Inland Sea, facing Hiroshima.' },
+  { id: 'kyushu', name: 'Kyushu', cat: 'islands', map: 'japan', hint: 'Southwestern main island, closest to Korea. Nagasaki is on its west coast.' },
+  { id: 'ryukyu', name: 'Ryukyu Islands', cat: 'islands', map: 'region', hint: 'The long chain of small islands running southwest from Kyushu toward Taiwan.' },
+  { id: 'okinawa', name: 'Okinawa', cat: 'islands', map: 'region', hint: 'The largest Ryukyu island, roughly halfway down the chain between Kyushu and Taiwan.' },
+  { id: 'okhotsk', name: 'Sea of Okhotsk', cat: 'seas', map: 'region', hint: 'North of Hokkaido, closed in by Russia, Sakhalin and the Kuril Islands.' },
+  { id: 'japan', name: 'Sea of Japan', cat: 'seas', map: 'region', hint: 'Between Japan and the Korean Peninsula / Russian coast. Honshu\'s west side faces it.' },
+  { id: 'yellow', name: 'Yellow Sea', cat: 'seas', map: 'region', hint: 'Between China and the west coast of Korea. Korea sits between the Yellow Sea and the Sea of Japan.' },
+  { id: 'ecs', name: 'East China Sea', cat: 'seas', map: 'region', hint: 'South of Korea, bounded by China, Kyushu and the Ryukyu chain.' },
+  { id: 'russia', name: 'Russia', cat: 'countries', map: 'region', hint: 'Everything north: the mainland above Korea and China\'s northeast, plus Sakhalin and the Kurils.' },
+  { id: 'china', name: 'China', cat: 'countries', map: 'region', hint: 'The big mainland to the west, from the Yellow Sea down to opposite Taiwan.' },
+  { id: 'nkorea', name: 'North Korea', cat: 'countries', map: 'region', hint: 'Upper half of the Korean Peninsula, bordering China and (barely) Russia.' },
+  { id: 'skorea', name: 'South Korea', cat: 'countries', map: 'region', hint: 'Lower half of the peninsula, the tip closest to Kyushu.' },
+  { id: 'taiwan', name: 'Taiwan', cat: 'countries', map: 'region', hint: 'Island off China\'s southeast coast, at the southern end of the Ryukyu chain.' },
+  { id: 'sendai', name: 'Sendai', cat: 'cities', map: 'japan', hint: 'The big city of Tōhoku, on the Pacific side of northern Honshu. Farthest north of the ten.' },
+  { id: 'tokyo', name: 'Tokyo', cat: 'cities', map: 'japan', hint: 'Edo. Head of Tokyo Bay on the Kantō plain. The northernmost of the Kantō trio.' },
+  { id: 'yokohama', name: 'Yokohama', cat: 'cities', map: 'japan', hint: 'Port just south of Tokyo on the west shore of Tokyo Bay. Middle of the Kantō trio.' },
+  { id: 'kamakura', name: 'Kamakura', cat: 'cities', map: 'japan', hint: 'Seat of the Kamakura shogunate (1185–1333). Just south of Yokohama, on Sagami Bay. Bottom of the trio.' },
+  { id: 'nagoya', name: 'Nagoya', cat: 'cities', map: 'japan', hint: 'On Ise Bay, about halfway between Tokyo and Kyoto.' },
+  { id: 'kyoto', name: 'Kyoto', cat: 'cities', map: 'japan', hint: 'Heian-kyō, capital 794–1868. Inland, the top of the Kansai triangle (north of Osaka and Nara).' },
+  { id: 'nara', name: 'Nara', cat: 'cities', map: 'japan', hint: 'Heijō-kyō, capital 710–784. East of Osaka, south of Kyoto: the right corner of the Kansai triangle.' },
+  { id: 'osaka', name: 'Osaka', cat: 'cities', map: 'japan', hint: 'Port on Osaka Bay: the west (left) corner of the Kansai triangle. Kōbe is just past it.' },
+  { id: 'hiroshima', name: 'Hiroshima', cat: 'cities', map: 'japan', hint: 'Western Honshu, on the Inland Sea coast facing Shikoku.' },
+  { id: 'nagasaki', name: 'Nagasaki', cat: 'cities', map: 'japan', hint: 'West coast of Kyushu. Dejima, the Dutch trading post of the Edo period.' },
+];
+const BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+const SHORT = { nkorea: 'N. Korea', skorea: 'S. Korea' };
+const OTHER = { mongolia: 'Mongolia', pacific: 'open ocean', jp: 'another Japanese island' };
+const nameOf = (id) => BY_ID[id]?.name ?? OTHER[id] ?? id;
+const CATS = [
+  ['all', 'All 25'], ['islands', 'Islands'], ['seas', 'Seas'], ['countries', 'Countries'], ['cities', 'Cities'],
+];
+const JP_LAND = new Set(['hokkaido', 'honshu', 'shikoku', 'kyushu', 'ryukyu', 'okinawa', 'japan']);
+// City label placement: dx, dy in em, text-anchor.
+const CITY_LBL = {
+  sendai: [.5, .35, 'start'], tokyo: [.5, -.35, 'start'], yokohama: [.6, .45, 'start'], kamakura: [.25, 1.3, 'start'],
+  nagoya: [.25, -.55, 'start'], kyoto: [-.1, -.6, 'end'], nara: [.5, .9, 'start'], osaka: [-.5, .35, 'end'],
+  hiroshima: [0, -.7, 'middle'], nagasaki: [-.5, .35, 'end'],
+};
+
+// ---------- storage ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+let stats = store.get('jmq-stats', {});
+const stat = (id) => (stats[id] ||= { r: 0, w: 0, streak: 0, last: null });
+function record(id, ok) {
+  const s = stat(id);
+  if (ok) { s.r++; s.streak++; s.last = 'r'; } else { s.w++; s.streak = 0; s.last = 'w'; }
+  store.set('jmq-stats', stats);
+  renderSide();
+}
+
+// ---------- map building ----------
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const views = {};
+for (const key of ['japan', 'region']) {
+  const m = MAP[key];
+  const svg = el('svg', { viewBox: `0 0 ${m.w} ${m.h}`, role: 'img', 'aria-label': key === 'japan' ? 'Map of Japan' : 'Map of East Asia' });
+  el('rect', { class: 'ocean', x: -50, y: -50, width: m.w + 100, height: m.h + 100, 'data-id': 'pacific' }, svg);
+  const gSea = el('g', {}, svg);
+  for (const s of m.seas) el('path', { class: 'sea', d: s.d, 'data-id': s.id }, gSea);
+  el('path', { class: 'grid', d: m.grid }, svg);
+  const gLand = el('g', {}, svg);
+  for (const s of m.land) {
+    el('path', { class: 'land' + (JP_LAND.has(s.id) ? ' jp' : ''), d: s.d, 'data-id': s.id === 'japan' ? 'jp' : s.id }, gLand);
+  }
+  // fat invisible strokes so tiny islands are tappable
+  for (const id of ['ryukyu', 'okinawa']) {
+    const s = m.land.find((x) => x.id === id);
+    if (s) el('path', { class: 'halo', d: s.d, 'data-id': id }, gLand);
+  }
+  const gCity = el('g', {}, svg);
+  const cityEls = {};
+  if (key === 'japan') for (const c of m.cities) cityEls[c.id] = el('circle', { class: 'city', cx: c.p[0], cy: c.p[1], r: 6, 'data-id': c.id }, gCity);
+  const gLbl = el('g', { 'font-size': 24 }, svg);
+  const lblEls = {};
+  for (const it of ITEMS) {
+    if (it.map !== key) continue;
+    let x, y, anchor = 'middle', dx = 0, dy = .35, cls = 'lbl';
+    if (it.cat === 'cities') {
+      const c = m.cities.find((q) => q.id === it.id);
+      [x, y] = c.p; [dx, dy, anchor] = CITY_LBL[it.id]; cls += ' city-l';
+    } else {
+      [x, y] = m.labels[it.id];
+      if (it.cat === 'seas') cls += ' sea-l';
+      if (it.id === 'ryukyu' || it.id === 'okinawa') anchor = 'start';
+    }
+    const t = el('text', { class: cls, x, y, dx: dx + 'em', dy: dy + 'em', 'text-anchor': anchor }, gLbl);
+    t.textContent = SHORT[it.id] ?? it.name;
+    lblEls[it.id] = t;
+  }
+  if (key === 'region') {
+    const t = el('text', { class: 'lbl', x: m.labels.mongolia[0], y: m.labels.mongolia[1], 'text-anchor': 'middle', fill: 'var(--muted)', style: 'fill:var(--muted);font-weight:400' }, gLbl);
+    t.textContent = 'Mongolia'; lblEls.mongolia = t;
+  }
+  const P = el('text', { class: 'lbl sea-l', x: key === 'japan' ? m.w * .78 : m.w * .82, y: key === 'japan' ? m.h * .82 : m.h * .6, 'text-anchor': 'middle' }, gLbl);
+  P.textContent = 'Pacific Ocean'; lblEls.pacific = P;
+  views[key] = { key, svg, m, vb: { x: 0, y: 0, w: m.w, h: m.h }, cityEls, lblEls, gLbl };
+  document.getElementById('mapwrap').appendChild(svg);
+}
+
+// ---------- zoom / pan ----------
+function applyVB(v) {
+  const { vb, m } = v;
+  vb.w = Math.min(m.w, Math.max(m.w / 8, vb.w)); vb.h = vb.w * m.h / m.w;
+  vb.x = Math.min(m.w - vb.w, Math.max(0, vb.x)); vb.y = Math.min(m.h - vb.h, Math.max(0, vb.y));
+  v.svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  const z = m.w / vb.w, s = 1 / Math.pow(z, .7);
+  v.gLbl.setAttribute('font-size', (v.key === 'japan' ? 26 : 23) * s);
+  for (const c of Object.values(v.cityEls)) c.setAttribute('r', 6.5 * s);
+}
+function zoomAt(v, factor, cx, cy) {
+  const { vb } = v;
+  const nw = vb.w / factor;
+  vb.x = cx - (cx - vb.x) * (nw / vb.w); vb.y = cy - (cy - vb.y) * (nw / vb.w); vb.w = nw;
+  applyVB(v);
+}
+const toSvg = (v, clientX, clientY) => {
+  const r = v.svg.getBoundingClientRect();
+  return [v.vb.x + (clientX - r.left) / r.width * v.vb.w, v.vb.y + (clientY - r.top) / r.height * v.vb.h];
+};
+for (const v of Object.values(views)) {
+  applyVB(v);
+  const ptrs = new Map();
+  let start = null, moved = false, pinched = false;
+  v.svg.addEventListener('pointerdown', (e) => {
+    v.svg.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 1) { start = { x: e.clientX, y: e.clientY, vb: { ...v.vb } }; moved = false; pinched = false; }
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      pinched = true;
+      start = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mid: toSvg(v, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2), vb: { ...v.vb } };
+    }
+  });
+  v.svg.addEventListener('pointermove', (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    const r = v.svg.getBoundingClientRect();
+    if (ptrs.size === 1 && start && start.x !== undefined) {
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (Math.hypot(dx, dy) > 7) moved = true;
+      if (moved) {
+        v.vb.x = start.vb.x - dx / r.width * start.vb.w; v.vb.y = start.vb.y - dy / r.height * start.vb.h;
+        applyVB(v);
+      }
+    } else if (ptrs.size === 2 && start && start.d) {
+      const [a, b] = [...ptrs.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      Object.assign(v.vb, start.vb);
+      zoomAt(v, d / start.d, start.mid[0], start.mid[1]);
+    }
+  });
+  const end = (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    const wasTap = ptrs.size === 1 && !moved && !pinched && e.type === 'pointerup';
+    ptrs.delete(e.pointerId);
+    if (wasTap) onMapTap(v, e.clientX, e.clientY);
+    if (ptrs.size === 1) { const [p] = [...ptrs.values()]; start = { x: p[0], y: p[1], vb: { ...v.vb } }; moved = true; }
+    if (ptrs.size === 0) start = null;
+  };
+  v.svg.addEventListener('pointerup', end);
+  v.svg.addEventListener('pointercancel', end);
+  v.svg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const [x, y] = toSvg(v, e.clientX, e.clientY);
+    zoomAt(v, Math.exp(-e.deltaY * .0025), x, y);
+  }, { passive: false });
+}
+const cur = () => views[state.view];
+document.getElementById('z-in').onclick = () => { const v = cur(); zoomAt(v, 1.6, v.vb.x + v.vb.w / 2, v.vb.y + v.vb.h / 2); };
+document.getElementById('z-out').onclick = () => { const v = cur(); zoomAt(v, 1 / 1.6, v.vb.x + v.vb.w / 2, v.vb.y + v.vb.h / 2); };
+document.getElementById('z-reset').onclick = () => { const v = cur(); Object.assign(v.vb, { x: 0, y: 0, w: v.m.w }); applyVB(v); };
+
+// ---------- state ----------
+const state = {
+  mode: 'study', view: 'japan', cat: store.get('jmq-cat', 'all'),
+  showLabels: true, revealed: new Set(),
+  queue: [], item: null, locked: false, round: null, exam: null, custom: null,
+};
+const $ = (id) => document.getElementById(id);
+const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pool = () => state.custom ?? ITEMS.filter((i) => state.cat === 'all' || i.cat === state.cat).map((i) => i.id);
+
+function setView(key) {
+  state.view = key;
+  for (const v of Object.values(views)) v.svg.toggleAttribute('hidden', v.key !== key);
+  for (const b of $('viewseg').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.view === key));
+}
+function lockView(locked) { for (const b of $('viewseg').querySelectorAll('button')) b.disabled = locked; }
+$('viewseg').onclick = (e) => { const b = e.target.closest('button'); if (b && !b.disabled) { setView(b.dataset.view); paint(); } };
+
+function nodesFor(id) {
+  const out = [];
+  for (const v of Object.values(views)) out.push(...v.svg.querySelectorAll(`[data-id="${id}"]:not(.halo)`));
+  return out;
+}
+function clearMarks() {
+  for (const v of Object.values(views)) {
+    v.svg.querySelectorAll('.hl,.good,.bad,.answer').forEach((n) => n.classList.remove('hl', 'good', 'bad', 'answer'));
+    Object.values(v.lblEls).forEach((t) => t.classList.remove('on', 'ok', 'no'));
+    v.svg.classList.toggle('study', state.mode === 'study');
+  }
+}
+function label(id, cls) {
+  for (const v of Object.values(views)) { const t = v.lblEls[id]; if (t) { t.classList.add('on'); if (cls) t.classList.add(cls); } }
+}
+function mark(id, cls) { nodesFor(id).forEach((n) => n.classList.add(cls)); }
+
+// paint = apply the current mode's resting look to the maps
+function paint() {
+  clearMarks();
+  if (state.mode === 'study') {
+    for (const it of ITEMS) if (state.showLabels || state.revealed.has(it.id)) label(it.id);
+    if (state.showLabels) { label('pacific'); label('mongolia'); }
+    if (state.item) { mark(state.item.id, 'hl'); label(state.item.id); }
+  } else if (state.mode === 'name' && state.item) {
+    mark(state.item.id, 'hl');
+  }
+}
+
+// ---------- modes ----------
+function setMode(mode) {
+  if (state.exam?.timer) clearInterval(state.exam.timer);
+  state.mode = mode; state.item = null; state.locked = false; state.exam = null;
+  if (mode !== 'find') state.custom = null;
+  for (const b of document.querySelectorAll('.modes button')) b.setAttribute('aria-selected', String(b.dataset.mode === mode));
+  $('choices').hidden = true;
+  lockView(mode !== 'study');
+  renderSide();
+  if (mode === 'study') return startStudy();
+  if (mode === 'exam') return startExam();
+  startRound();
+}
+document.querySelector('.modes').onclick = (e) => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); };
+
+function feedback(html, tone = '') {
+  const f = $('feedback'); f.className = 'feedback' + (tone ? ' ' + tone : ''); f.innerHTML = html;
+}
+
+// Study
+function startStudy() {
+  state.revealed.clear();
+  renderStudyPrompt();
+  feedback('<div class="msg">Tap any island, sea, country or city dot to see its name and a way to remember it. Switch between the <b>Japan</b> and <b>East Asia</b> maps at the top left, like the two maps on the quiz.</div>');
+  paint();
+}
+function renderStudyPrompt() {
+  $('prompt').innerHTML = `<div class="grow"><div class="eyebrow">Study</div><div class="target">${state.showLabels ? 'Everything labeled' : 'Labels hidden'}</div></div>
+    <button class="btn" id="toggle-l">${state.showLabels ? 'Hide labels' : 'Show labels'}</button>`;
+  $('toggle-l').onclick = () => { state.showLabels = !state.showLabels; state.revealed.clear(); state.item = null; renderStudyPrompt(); paint(); };
+}
+function focusItem(id) {
+  const it = BY_ID[id];
+  state.item = it; state.revealed.add(id);
+  if (state.view !== it.map && !(it.cat === 'islands' && state.view === 'region')) setView(it.map);
+  paint();
+  feedback(`<div class="msg"><b>${it.name}</b><span class="hint">${it.hint}</span></div>`);
+}
+
+// Rounds for Find it / Name it
+function startRound() {
+  const ids = shuffle(pool());
+  state.queue = ids.map((id) => BY_ID[id]);
+  state.round = { total: ids.length, done: new Set(), firstTry: 0, missed: new Set(), asked: 0 };
+  feedback(state.mode === 'find'
+    ? '<div class="msg">A place name appears above the map. Tap where it is. Misses come back a few turns later.</div>'
+    : '<div class="msg">A place is highlighted on the map. Pick its name. Keys 1–4 work too.</div>');
+  next();
+}
+function next() {
+  state.locked = false;
+  const it = state.queue.shift();
+  if (!it) return finishRound();
+  state.item = it;
+  setView(it.map);
+  paint();
+  renderRoundPrompt();
+  if (state.mode === 'name') renderChoices(it);
+}
+function renderRoundPrompt() {
+  const r = state.round, it = state.item;
+  const scope = state.custom ? 'Your misses' : CATS.find((c) => c[0] === state.cat)[1];
+  $('prompt').innerHTML = state.mode === 'find'
+    ? `<div class="grow"><div class="eyebrow">Find it · ${scope} · ${r.done.size + 1} of ${r.total}</div><div class="target">${it.name}</div></div>
+       <div class="score">${r.firstTry} first try<br>${r.missed.size} missed</div>`
+    : `<div class="grow"><div class="eyebrow">Name it · ${scope} · ${r.done.size + 1} of ${r.total}</div><div class="target">What's highlighted?</div></div>
+       <div class="score">${r.firstTry} first try<br>${r.missed.size} missed</div>`;
+}
+function answer(tappedId) {
+  const it = state.item, r = state.round;
+  const ok = tappedId === it.id || (it.id === 'ryukyu' && tappedId === 'okinawa');
+  const first = !r.missed.has(it.id);
+  state.locked = true;
+  record(it.id, ok);
+  clearMarks();
+  if (ok) {
+    r.done.add(it.id); if (first) r.firstTry++;
+    mark(it.id, 'good'); label(it.id, 'ok');
+    feedback(`<div class="msg"><b>Yes, ${it.name}.</b><span class="hint">${it.hint}</span></div>`, 'ok');
+    renderRoundPrompt();
+    setTimeout(() => { if (state.item === it && state.locked) next(); }, state.mode === 'find' ? 1100 : 900);
+  } else {
+    r.missed.add(it.id);
+    state.queue.splice(Math.min(3, state.queue.length), 0, it);
+    if (tappedId && tappedId !== 'pacific' && BY_ID[tappedId]) { mark(tappedId, 'bad'); label(tappedId, 'no'); }
+    mark(it.id, 'good'); mark(it.id, 'answer'); label(it.id, 'ok');
+    const said = state.mode === 'find' ? `You tapped ${nameOf(tappedId)}.` : `That's not ${nameOf(tappedId)}.`;
+    feedback(`<div class="msg"><b>${said} ${it.name} is the one flashing.</b><span class="hint">${it.hint}</span></div>
+      <button class="btn primary" id="nx">Next ↵</button>`, 'no');
+    $('nx').onclick = next;
+    renderRoundPrompt();
+  }
+}
+function renderChoices(it) {
+  const same = ITEMS.filter((i) => i.cat === it.cat && i.id !== it.id);
+  const opts = shuffle([it, ...shuffle(same).slice(0, 3)]);
+  const c = $('choices'); c.hidden = false; c.innerHTML = '';
+  opts.forEach((o, i) => {
+    const b = document.createElement('button');
+    b.innerHTML = `<kbd>${i + 1}</kbd>${o.name}`; b.dataset.id = o.id;
+    b.onclick = () => {
+      if (state.locked) return;
+      c.querySelectorAll('button').forEach((x) => { x.disabled = true; if (x.dataset.id === it.id) x.classList.add('right'); });
+      if (o.id !== it.id) b.classList.add('wrong');
+      answer(o.id);
+    };
+    c.appendChild(b);
+  });
+}
+function finishRound() {
+  const r = state.round;
+  state.item = null; paint(); $('choices').hidden = true;
+  const misses = [...r.missed];
+  $('prompt').innerHTML = `<div class="grow"><div class="eyebrow">${state.mode === 'find' ? 'Find it' : 'Name it'} · round done</div><div class="target">${r.firstTry} / ${r.total} first try</div></div>`;
+  feedback(`<div class="results">
+    <div>${misses.length ? 'Took more than one try: ' + misses.map(nameOf).join(', ') + '.' : 'Every one on the first try.'}</div>
+    <div class="row"><button class="btn primary" id="again">Go again</button>${misses.length ? '<button class="btn" id="redo">Drill just these</button>' : ''}</div></div>`);
+  $('again').onclick = () => { state.custom = null; startRound(); };
+  if (misses.length) $('redo').onclick = () => { state.custom = misses; startRound(); };
+}
+
+// Timed quiz
+function startExam() {
+  const byMap = (m) => shuffle(ITEMS.filter((i) => i.map === m));
+  state.exam = { order: [...byMap('japan'), ...byMap('region')], i: 0, answers: {}, left: 600, timer: null, started: false };
+  state.item = null;
+  setView('japan'); paint();
+  $('prompt').innerHTML = `<div class="grow"><div class="eyebrow">Timed quiz</div><div class="target">25 places · 10:00</div></div>`;
+  feedback(`<div class="msg">Same as the real thing: Japan map first (4 islands, 10 cities), then the East Asia map. No feedback until the end. Tap <b>Skip</b> if you're stuck.</div>
+    <button class="btn primary" id="go">Start the clock</button>`);
+  $('go').onclick = () => {
+    const ex = state.exam; ex.started = true;
+    ex.timer = setInterval(() => { ex.left--; renderExamPrompt(); if (ex.left <= 0) endExam(); }, 1000);
+    examNext();
+  };
+}
+function examNext() {
+  const ex = state.exam;
+  if (ex.i >= ex.order.length) return endExam();
+  state.item = ex.order[ex.i];
+  setView(state.item.map); paint(); renderExamPrompt();
+  feedback(`<div class="msg">Tap it on the map. ${state.item.map === 'japan' ? 'Zoom in for Kantō and Kansai cities.' : ''}</div><button class="btn" id="skip">Skip</button><button class="btn" id="stop">Finish now</button>`);
+  $('skip').onclick = () => examAnswer(null);
+  $('stop').onclick = endExam;
+}
+function renderExamPrompt() {
+  const ex = state.exam; if (!ex || !state.item) return;
+  const mm = String(Math.floor(ex.left / 60)).padStart(2, '0'), ss = String(ex.left % 60).padStart(2, '0');
+  $('prompt').innerHTML = `<div class="timer${ex.left < 60 ? ' low' : ''}">${mm}:${ss}</div>
+    <div class="grow"><div class="eyebrow">${ex.i + 1} of 25 · ${state.item.map === 'japan' ? 'Map 1: Japan' : 'Map 2: East Asia'}</div><div class="target">${state.item.name}</div></div>`;
+}
+function examAnswer(id) {
+  const ex = state.exam;
+  ex.answers[state.item.id] = id;
+  ex.i++;
+  examNext();
+}
+function endExam() {
+  const ex = state.exam; if (!ex) return;
+  clearInterval(ex.timer); ex.timer = null;
+  state.item = null;
+  const rows = ex.order.map((it) => {
+    const a = ex.answers[it.id];
+    const ok = a === it.id || (it.id === 'ryukyu' && a === 'okinawa');
+    return { it, a, ok, asked: it.id in ex.answers };
+  });
+  rows.forEach((r) => { if (r.asked) record(r.it.id, r.ok); });
+  const score = rows.filter((r) => r.ok).length;
+  const used = 600 - ex.left;
+  clearMarks();
+  rows.forEach((r) => { mark(r.it.id, r.ok ? 'good' : 'bad'); label(r.it.id, r.ok ? 'ok' : 'no'); });
+  $('prompt').innerHTML = `<div class="grow"><div class="eyebrow">Timed quiz · ${Math.floor(used / 60)}:${String(used % 60).padStart(2, '0')} used</div><div class="target">${score} / 25</div></div>`;
+  const misses = rows.filter((r) => !r.ok);
+  feedback(`<div class="results">
+    <div>${score === 25 ? 'Perfect. You are ready.' : 'Red on the map is what you missed. Switch maps to see both.'}</div>
+    <ul>${rows.map((r) => `<li><span class="${r.ok ? 'v' : 'x'}">${r.ok ? '✓' : '✗'}</span><span>${r.it.name}${r.ok ? '' : ` <span style="color:var(--muted)">— ${!r.asked ? 'ran out of time' : r.a ? 'tapped ' + nameOf(r.a) : 'skipped'}</span>`}</span></li>`).join('')}</ul>
+    <div class="row"><button class="btn primary" id="retake">Retake</button>${misses.length ? '<button class="btn" id="drill">Drill my misses</button>' : ''}</div></div>`);
+  state.exam = null;
+  lockView(false);
+  $('retake').onclick = () => setMode('exam');
+  if (misses.length) $('drill').onclick = () => {
+    const ids = misses.map((r) => r.it.id);
+    setMode('find'); state.custom = ids; startRound();
+  };
+}
+
+// ---------- taps ----------
+function onMapTap(v, clientX, clientY) {
+  let id = null;
+  // Snap to the nearest city dot when tapping close to one (dots are tiny on a phone).
+  if (v.key === 'japan') {
+    const [x, y] = toSvg(v, clientX, clientY);
+    const upp = v.vb.w / v.svg.getBoundingClientRect().width;
+    let best = null, bd = 18 * upp;
+    for (const c of v.m.cities) { const d = Math.hypot(c.p[0] - x, c.p[1] - y); if (d < bd) { bd = d; best = c.id; } }
+    id = best;
+  }
+  if (!id) {
+    const n = document.elementFromPoint(clientX, clientY)?.closest('[data-id]');
+    id = n ? n.dataset.id : null;
+  }
+  if (!id) return;
+  if (state.mode === 'study') {
+    if (BY_ID[id]) focusItem(id);
+    else { state.item = null; paint(); feedback(`<div class="msg"><b>${nameOf(id)[0].toUpperCase() + nameOf(id).slice(1)}</b><span class="hint">Not on the quiz list.</span></div>`); }
+  } else if (state.mode === 'find' && state.item && !state.locked) {
+    answer(id);
+  } else if (state.mode === 'exam' && state.exam?.started && state.item) {
+    examAnswer(id);
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (state.mode === 'name' && !state.locked && /^[1-4]$/.test(e.key)) $('choices').children[+e.key - 1]?.click();
+  else if (e.key === 'Enter' && state.locked && $('nx')) $('nx').click();
+});
+
+// ---------- side panel ----------
+function level(id) {
+  const s = stats[id];
+  if (!s || s.last === null) return '';
+  if (s.last === 'w') return 'miss';
+  return s.streak >= 2 ? 's2' : 's1';
+}
+function renderSide() {
+  const chips = $('chips');
+  chips.innerHTML = CATS.map(([k, n]) => `<button data-cat="${k}" aria-pressed="${state.cat === k && !state.custom}" ${state.mode === 'exam' || state.mode === 'study' ? 'disabled' : ''}>${n}</button>`).join('');
+  const counts = { s2: 0, s1: 0, miss: 0, '': 0 };
+  ITEMS.forEach((i) => counts[level(i.id)]++);
+  $('meter').innerHTML = `<h2>Your progress</h2>
+    <div class="bar" role="img" aria-label="${counts.s2} solid, ${counts.s1} right once, ${counts.miss} missed, ${counts['']} new">
+      <i style="width:${counts.s2 * 4}%;background:var(--ok)"></i><i style="width:${counts.s1 * 4}%;background:var(--warn)"></i><i style="width:${counts.miss * 4}%;background:var(--seal)"></i></div>
+    <div class="txt">${counts.s2} of 25 solid · ${counts.s1} right once · ${counts.miss} missed · ${counts['']} new</div>`;
+  $('list').innerHTML = CATS.slice(1).map(([k, n]) => {
+    const its = ITEMS.filter((i) => i.cat === k);
+    return `<div class="cat"><h3>${n} <span>${its.length}</span></h3>${its.map((i) => {
+      const s = stats[i.id];
+      return `<button class="item" data-id="${i.id}"><i class="pip ${level(i.id)}"></i><span class="n">${i.name}</span><span class="r">${s ? `${s.r}✓ ${s.w}✗` : ''}</span></button>`;
+    }).join('')}</div>`;
+  }).join('');
+}
+$('chips').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  state.cat = b.dataset.cat; state.custom = null; store.set('jmq-cat', state.cat);
+  renderSide(); startRound();
+};
+$('list').onclick = (e) => {
+  const b = e.target.closest('.item'); if (!b) return;
+  if (state.mode === 'exam' && state.exam?.started) return;
+  if (state.mode !== 'study') setMode('study');
+  focusItem(b.dataset.id);
+};
+let resetArmed = false;
+$('reset').onclick = () => {
+  if (!resetArmed) { resetArmed = true; $('reset').textContent = 'Tap again to erase progress'; setTimeout(() => { resetArmed = false; $('reset').textContent = 'Reset my progress'; }, 3000); return; }
+  stats = {}; store.set('jmq-stats', stats); resetArmed = false; $('reset').textContent = 'Reset my progress'; renderSide();
+};
+
+setView('japan');
+setMode('study');
+</script>
