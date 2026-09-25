@@ -31,6 +31,16 @@ uniform int renderStage;
 // Volumetric clouds were marched by the prepare pass (prepare_clouds.glsl)
 // into the lower-left 1/CLOUD_RES corner of colortex11: upsample them here.
 uniform sampler2D colortex11;
+uniform int frameCounter;
+
+// True when the prepare pass ran this frame (see prepare_clouds.glsl).
+bool volumetricCloudsLive() {
+    vec2 screen = vec2(viewWidth, viewHeight);
+    vec2 lowSize = ceil(screen / float(CLOUD_RES));
+    vec4 m = texture2D(colortex11, vec2(lowSize.x + 1.5, 0.5) / screen);
+    float frame = float(frameCounter - (frameCounter / 4096) * 4096);
+    return m.x < -0.5 && abs(m.y - frame) < 0.5;
+}
 
 vec4 cloudTexel(vec2 p, vec2 lowSize, vec2 screen) {
     return texture2D(colortex11, clamp(p, vec2(0.5), lowSize - 0.5) / screen);
@@ -72,9 +82,14 @@ void main() {
     vec3 dir = normalize(mat3(gbufferModelViewInverse) * viewDir);
 
 #if defined IS_IRIS && defined CLOUDS && defined VOLUMETRIC_CLOUDS && defined OVERWORLD
-    vec3 sky = atmosphere(dir) + stars(dir) + sunDisc(dir);
-    vec4 cl = volumetricClouds(uv);
-    vec3 col = sky * (1.0 - cl.a) + cl.rgb;
+    vec3 col;
+    if (volumetricCloudsLive()) {
+        vec3 sky = atmosphere(dir) + stars(dir) + sunDisc(dir);
+        vec4 cl = volumetricClouds(uv);
+        col = sky * (1.0 - cl.a) + cl.rgb;
+    } else {
+        col = skyFull(dir, true, ambCol, sunCol);   // flat clouds fallback
+    }
 #else
     vec3 col = skyFull(dir, true, ambCol, sunCol);
 #endif

@@ -59,7 +59,7 @@ const float eyeBrightnessHalflife = 1.0;
 #define UNDERWATER_VIEW 48.0 // [16.0 24.0 32.0 48.0 64.0 96.0]
 
 // ---------------------------------------------------------------- atmosphere
-#define FOG_START 0.70 // [0.40 0.50 0.60 0.70 0.80 0.90]
+#define FOG_START 0.80 // [0.40 0.50 0.60 0.70 0.80 0.90]
 #define HAZE 1.00 // [0.0 0.50 1.00 1.50 2.00]
 #define RAIN_OPACITY 0.55 // [0.20 0.35 0.55 0.75 1.00]
 #define CLOUDS
@@ -77,9 +77,14 @@ const float eyeBrightnessHalflife = 1.0;
 // ---------------------------------------------------------------- camera / post
 #define AUTO_EXPOSURE
 #define NIGHT_SHIFT
+// Auto-exposure: target = EXPOSURE_KEY / scene log-average luminance,
+// clamped. The low limit lets bright scenes (deserts, snow) stop down.
+#define EXPOSURE_KEY 0.25
+#define EXPOSURE_MIN 0.30
+#define EXPOSURE_MAX 1.30
 #define EXPOSURE 1.00 // [0.60 0.70 0.80 0.90 1.00 1.10 1.20 1.30 1.50]
 #define CAVE_ADAPTATION 1.80 // [1.00 1.40 1.80 2.20 2.60]
-#define SATURATION 1.06 // [0.80 0.90 1.00 1.03 1.06 1.10 1.15 1.20 1.30]
+#define SATURATION 1.10 // [0.80 0.90 1.00 1.03 1.06 1.10 1.15 1.20 1.30]
 #define CONTRAST 1.00 // [0.90 0.95 1.00 1.05 1.10]
 #define BLOOM
 #define BLOOM_STRENGTH 0.06 // [0.02 0.04 0.06 0.08 0.12 0.16]

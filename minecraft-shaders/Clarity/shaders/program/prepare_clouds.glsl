@@ -42,6 +42,15 @@ uniform vec3 previousCameraPosition;
 void main() {
     vec2 screen = vec2(viewWidth, viewHeight);
     vec2 lowSize = ceil(screen / float(CLOUD_RES));
+
+    // Liveness marker: one texel just right of the cloud corner holds this
+    // frame's number. The sky only trusts the volumetric result when the
+    // marker is current, and otherwise draws the flat clouds itself.
+    if (gl_FragCoord.y < 1.0 && gl_FragCoord.x > lowSize.x + 1.0 && gl_FragCoord.x < lowSize.x + 2.0) {
+        /* RENDERTARGETS: 11 */
+        gl_FragData[0] = vec4(-1.0, float(frameCounter - (frameCounter / 4096) * 4096), 0.0, 0.0);
+        return;
+    }
     if (gl_FragCoord.x > lowSize.x || gl_FragCoord.y > lowSize.y) discard;
 
     vec2 uv = gl_FragCoord.xy / lowSize;

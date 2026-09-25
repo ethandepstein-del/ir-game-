@@ -40,7 +40,7 @@ vec3 scatter(vec3 dir, vec3 L, float E) {
     float mv = airMass(yv);
     float c = dot(dir, L);
     // Light scattered high in the sky has crossed less air: redden it less.
-    float ms = airMass(L.y) * (1.0 - 0.55 * yv);
+    float ms = airMass(L.y) * (1.0 - 0.75 * yv);
     vec3 lightCol = exp(-EXT_SUN * max(ms - airMass(1.0), 0.0));
     // Ozone along the view path deepens the zenith at dusk.
     lightCol *= exp(-OZONE * mv * 0.25);
@@ -97,8 +97,13 @@ vec3 ambientColor() {
 #if defined OVERWORLD
     vec3 sun = sunDirWorld();
     vec3 side = length(sun.xz) > 1e-3 ? normalize(vec3(sun.z, 0.0, -sun.x)) : vec3(1.0, 0.0, 0.0);
-    vec3 a = (atmosphere(vec3(0.0, 1.0, 0.0)) * 0.45 + atmosphere(side) * 0.35) * 0.70;
+    vec3 a = (atmosphere(vec3(0.0, 1.0, 0.0)) * 0.45 + atmosphere(side) * 0.35) * 0.55;
     a += vec3(0.34, 0.44, 0.78) * 0.035 * NIGHT_BRIGHTNESS;
+    // Blue hour: once the sun is down the ground is lit by the blue zenith,
+    // not the orange horizon, so shade dusk toward cool light.
+    float y = sun.y;
+    float blueHour = smoothstep(0.06, -0.04, y) * smoothstep(-0.30, -0.06, y);
+    a = mix(a, vec3(luma(a)) * vec3(0.55, 0.75, 1.35), blueHour * 0.6) + vec3(0.05, 0.08, 0.16) * 0.35 * blueHour;
     return a * AMBIENT_BRIGHTNESS;
 #elif defined NETHER
     return vec3(0.60, 0.36, 0.26) * 0.55 * AMBIENT_BRIGHTNESS;

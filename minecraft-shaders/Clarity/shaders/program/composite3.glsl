@@ -39,7 +39,7 @@ void main() {
     avgLum = exp(logSum / wSum);
 
 #ifdef AUTO_EXPOSURE
-    float target = clamp(0.30 / avgLum, 0.60, 2.20);
+    float target = clamp(EXPOSURE_KEY / avgLum, EXPOSURE_MIN, EXPOSURE_MAX);
 #if defined OVERWORLD
     // Nudge caves brighter still, using the game's own eye-light value.
     target *= mix(sqrt(CAVE_ADAPTATION), 1.0, float(eyeBrightnessSmooth.y) / 240.0);
