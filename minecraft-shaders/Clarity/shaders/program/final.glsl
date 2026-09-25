@@ -11,6 +11,7 @@ void main() {
 #endif
 
 #ifdef FSH
+#include "/lib/noise.glsl"
 uniform sampler2D colortex0;
 uniform float viewWidth;
 uniform float viewHeight;
@@ -63,8 +64,9 @@ void main() {
     vec3 sharpened = col + (col - (n + s + e + w) * 0.25) * SHARPEN;
     col = clamp(sharpened, lo, hi);
 
-    // Dither hides banding in the sky gradient.
-    col += (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0;
+    // Dither to 8 bit hides banding in the sky gradient. Triangular blue
+    // noise: +-1 step, even grain, no signal-dependent noise.
+    col += triangularNoise(blueNoise(gl_FragCoord.xy).a) / 255.0;
 
     gl_FragColor = vec4(col, 1.0);
 }

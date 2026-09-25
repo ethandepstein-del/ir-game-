@@ -128,3 +128,10 @@ option.RT_HISTORY_CLAMP=Light-Change Response
 option.RT_HISTORY_CLAMP.comment=Lower = lighting reacts faster to doors and torches (slightly more noise). 0 turns the clamp off.
 option.RT_HISTORY_FEEDBACK=History Feedback
 option.RT_HISTORY_FEEDBACK.comment=Feeds the first denoise pass back into history for a cleaner image; softens contact detail a little.
+option.NOISE_PATTERN=Noise Pattern
+option.NOISE_PATTERN.comment=Blue noise gives soft shadows, light shafts and reflections an even, structure-free grain.
+value.NOISE_PATTERN.0=Interleaved Gradient
+value.NOISE_PATTERN.1=Blue Noise
+option.VL_BLUR_RADIUS=Volumetric Smoothing
+option.BLOOM_THRESHOLD=Bloom Threshold
+option.BLOOM_THRESHOLD.comment=Only light brighter than this blooms. 0 = the old soft-everything glow.

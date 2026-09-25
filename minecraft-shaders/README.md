@@ -149,6 +149,10 @@ Clarity/shaders/
   lib/water.glsl         waves, rain ripples, caustics
   lib/voxel.glsl         voxel grid mapping, ray traversal (DDA), hit shading
   lib/fog.glsl           haze, border fog, underwater extinction
+  lib/settings_clouds.glsl, settings_rt.glsl, settings_post.glsl  feature options
+  lib/rt.glsl            shared ray-tracing helpers (reprojection, upsampling, noise)
+  lib/noise.glsl         blue-noise lookup (with an IGN fallback)
+  lib/bloom.glsl         B-spline bloom from the mip chain
   lib/waving.glsl        wind
   lib/distort.glsl       shadow-map distortion
   program/*.glsl         the actual programs (each has VSH and FSH halves)
@@ -157,6 +161,7 @@ Clarity/shaders/
   block.properties       which blocks sway, glow or are water
   shaders.properties     menu layout, profiles, pipeline flags
   lang/en_US.lang        option names
+  textures/bluenoise.png 128x128, 4 independent blue-noise channels (tools/gen_bluenoise.cjs)
 tools/build.py           regenerates stubs, validates, zips
 tools/preview/           renders the sky and water code to PNG in headless Chromium
 ```
@@ -179,10 +184,11 @@ NODE_PATH=$(npm root -g) node render.cjs sky.glsl sky.png 640 300 "$(cat tiles.j
 | Stage | What it does |
 | --- | --- |
 | `gbuffers_*` | Lights each surface as it is drawn: PCSS shadows, cloud shadows, sky and torch light, wetness. Also writes normals and each pixel's share of indirect light for SSAO. Water only writes its surface data. |
+| `prepare` | Volumetric clouds, raymarched once per frame before terrain at reduced resolution into colortex11, blended with the previous frame (sky only) |
 | `shadow` | Shadow map. In RT mode it also voxelizes terrain into a 3D image (GLSL 4.30 `imageStore`). |
-| `deferred` to `deferred4` | RT only: trace plus temporal accumulation, three à-trous denoise passes, then add albedo × indirect light |
+| `deferred` to `deferred5` | RT only. `deferred` traces at the chosen rate (every pixel, checkerboard, or 1 in 4). `deferred1` upsamples edge-aware and accumulates over time. `deferred2` is the first à-trous pass, with a variance estimate, YCoCg history clamp and history feedback. `deferred3` and `deferred4` are variance-guided à-trous at steps 2 and 4. `deferred5` adds albedo × indirect light. |
 | `composite` | SSAO (8 samples, hemisphere; off in RT mode) |
 | `composite1` | Depth-aware AO blur and resolve. The water pass: refraction, absorption, caustics, foam, crest glow, SSR with RT fallback, Fresnel and glint. Underwater caustics. Fog and haze. Volumetric light march. |
-| `composite2` | Depth-aware blur of the volumetric light, added to the scene |
-| `composite3` | Bloom from the mip chain, auto exposure (log-average, persistent buffer), tonemap, grade |
+| `composite2` | Depth-aware Gaussian blur of the volumetric light, added to the scene. Stores each pixel's bright-only luminance for bloom. |
+| `composite3` | B-spline-filtered bloom from the mip chain (thresholded), auto exposure (log-average, persistent buffer), tonemap, grade |
 | `final` | FXAA, sharpening, dither |

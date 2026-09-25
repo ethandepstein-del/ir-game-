@@ -1,4 +1,8 @@
 // Pass 3: bloom from the mip chain, auto exposure, tonemap and grading.
+#ifdef FSH
+// texture2DLod in the fragment stage (B-spline bloom taps, lib/bloom.glsl).
+#extension GL_ARB_shader_texture_lod : enable
+#endif
 #include "/lib/settings.glsl"
 
 const bool colortex0MipmapEnabled = true;
@@ -58,17 +62,9 @@ void main() {
 
 #ifdef FSH
 #include "/lib/common.glsl"
+#define BLOOM_SAMPLING
+#include "/lib/bloom.glsl"
 uniform sampler2D colortex0;
-
-// On a fullscreen pass the base LOD is 0, so the bias selects the mip.
-vec3 bloomTap(float lod) {
-    vec2 px = exp2(lod) / vec2(viewWidth, viewHeight);
-    vec3 c = texture2D(colortex0, texcoord + vec2( 0.5,  0.5) * px, lod).rgb
-           + texture2D(colortex0, texcoord + vec2(-0.5,  0.5) * px, lod).rgb
-           + texture2D(colortex0, texcoord + vec2( 0.5, -0.5) * px, lod).rgb
-           + texture2D(colortex0, texcoord + vec2(-0.5, -0.5) * px, lod).rgb;
-    return c * 0.25;
-}
 
 // Narkowicz ACES fit: filmic, keeps highlights from clipping.
 vec3 aces(vec3 x) {
@@ -76,12 +72,22 @@ vec3 aces(vec3 x) {
 }
 
 void main() {
-    vec3 col = texture2D(colortex0, texcoord).rgb;
+    vec4 c0 = texture2D(colortex0, texcoord);
+    vec3 col = c0.rgb;
 
 #ifdef BLOOM
-    vec3 bloom = bloomTap(2.0) * 0.30 + bloomTap(3.0) * 0.25 + bloomTap(4.0) * 0.20
-               + bloomTap(5.0) * 0.15 + bloomTap(6.0) * 0.10;
-    col = mix(col, bloom, BLOOM_STRENGTH);
+    // Five mip levels (1/4 to 1/64 res), each B-spline filtered, of the
+    // bright-only light composite2 marked in alpha. The pixel gives up its
+    // own bright part in exchange, so this is mix(col, bloom, BLOOM_STRENGTH)
+    // restricted to light above BLOOM_THRESHOLD (identical at threshold 0).
+    vec2 res = vec2(viewWidth, viewHeight);
+    vec3 bloom = bloomLevel(colortex0, texcoord, 2.0, res) * 0.30
+               + bloomLevel(colortex0, texcoord, 3.0, res) * 0.25
+               + bloomLevel(colortex0, texcoord, 4.0, res) * 0.20
+               + bloomLevel(colortex0, texcoord, 5.0, res) * 0.15
+               + bloomLevel(colortex0, texcoord, 6.0, res) * 0.10;
+    vec3 bright = col * clamp(c0.a / max(luma(col), 1e-6), 0.0, 1.0);
+    col = max(col + (bloom - bright) * BLOOM_STRENGTH, vec3(0.0));
 #endif
 
 #ifdef NIGHT_SHIFT
