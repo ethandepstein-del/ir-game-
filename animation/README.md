@@ -16,7 +16,7 @@ Everything runs on one 160 bpm grid, so every cut lands on a beat. The soundtrac
 ## Files
 
 - `index.html`: the player; open it through any static server and press play.
-- `dist/ball-test.html`: a single self-contained file (code and fonts inlined) that plays anywhere.
+- `out/ball-test.html`: a single self-contained file (code and fonts inlined) that plays anywhere.
 - `out/ball-test.mp4`: the rendered 1920×1080 60fps video with audio.
 - `src/core.js`: timing grid, easing, the shared ball physics (one gravity, squash & stretch), camera shake.
 - `src/worlds/*.js`: one module per style.
@@ -30,7 +30,7 @@ npm install
 npm run render                  # frames + audio → out/ball-test.mp4 (ffmpeg from $FFMPEG or imageio-ffmpeg)
 npm run stills -- 2.0,6.5,11    # PNG stills at given times → .stills/
 npm run audio                   # soundtrack only → out/ball-test.wav
-npm run build                   # single-file player → dist/ball-test.html
+npm run build                   # single-file player → out/ball-test.html
 ```
 
 Every frame is a pure function of time, so any frame can be rendered in any order. That's what lets the renderer split the work across processes.
