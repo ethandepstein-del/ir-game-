@@ -2,13 +2,17 @@
 // Variants: TERRAIN, ENTITIES, BLOCK, HAND (none = generic lit).
 // Writes: colortex0 lit HDR colour (unfogged; fog is a composite pass),
 //         colortex1 view normal + ambient share (for SSAO),
-//         colortex2 material flags.
+//         colortex2 material flags,
+//         colortex7 albedo (for ray-traced indirect light).
 #include "/lib/settings.glsl"
 #include "/lib/common.glsl"
 #include "/lib/atmosphere.glsl"
 
 #if defined HAND
 #define NO_SHADOW_LOOKUP
+#endif
+#if defined RT_GI && defined OVERWORLD && !defined HAND
+#define TRACED_AMBIENT
 #endif
 
 varying vec2 texcoord;
@@ -149,10 +153,17 @@ void main() {
     handFlag = 1.0;
 #endif
 
-    /* DRAWBUFFERS:012 */
+#if defined TRACED_AMBIENT
+    float dataB = lmcoord.y;   // sky light: the tracer's prior for escaped rays
+#else
+    float dataB = lastAmbientRatio;
+#endif
+
+    /* DRAWBUFFERS:0127 */
     gl_FragData[0] = vec4(col, albedo.a);
-    gl_FragData[1] = vec4(encodeNormal(n), lastAmbientRatio, 1.0);
+    gl_FragData[1] = vec4(encodeNormal(n), dataB, 1.0);
     gl_FragData[2] = vec4(handFlag, 0.5, 0.0, 1.0);
+    gl_FragData[3] = vec4(pow(base, vec3(1.0 / 2.2)), 1.0);
 }
 
 #endif // FSH

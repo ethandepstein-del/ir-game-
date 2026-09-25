@@ -18,7 +18,14 @@ A shader pack that looks good without getting in the way of play. It's tuned so 
 - **Rain:** surfaces darken, and up-facing blocks gather puddles that reflect the sky.
 
 **Water**
-- **Real water, not a tinted texture:** refraction, colour absorbed with depth (shallows are turquoise, deep water is blue), screen-space reflections of terrain, sky and clouds, a sharp sun glint and **caustics** on the floor.
+
+![Ocean at noon, sunset glint, rain ripples (surface normals) and caustics](docs/water-preview.png)
+
+- **Wind-driven waves:** a stack of sharp-crested wave octaves that drag each other, so small chop bunches on the big swells. Distant water drops detail, so it stays calm instead of shimmering.
+- **Real water, not a tinted texture:** refraction, and colour absorbed with depth, so shallows are turquoise and deep water is blue.
+- **Reflections:** screen-space reflections of terrain, sky and clouds. In the RT profile, ray-traced reflections fill in things that are off screen.
+- **Light:** a sharp sun glint that breaks up across the waves, sunlight glowing through wave crests when you face the sun, and web-like **caustics** on the floor. You also see caustics on everything around you while swimming.
+- **Surface details:** **shore foam** where the water gets shallow, and **raindrop ripples** in rain.
 - **From below:** you see the world above through a Snell's window, and total internal reflection beyond it.
 
 **Lighting**
@@ -26,6 +33,27 @@ A shader pack that looks good without getting in the way of play. It's tuned so 
 - **SSAO:** soft occlusion in corners and under objects. It only darkens indirect light, so sunlit faces stay crisp.
 - **Auto exposure:** brightness adapts to what you look at, like your eyes do, with a gentle night-time colour shift.
 - **Warm torch light and glowing light sources,** filmic tonemapping (ACES) with bloom, FXAA and contrast-limited sharpening. There is no TAA, so nothing ghosts.
+
+## Ray tracing (optional RT profile)
+
+Choose the **Ray Traced (Iris)** profile. This needs Iris, which is what Lunar uses on Minecraft 1.18 and later. It doesn't work with OptiFine on 1.8.9.
+
+How it works:
+
+- **Voxelization:** the shadow pass writes every block within 64 blocks of you into a 128³ voxel grid, storing each block's colour and whether it is solid, leaves or a light source.
+- **Tracing:** each pixel fires cosine-weighted rays through that grid. A ray that hits a block returns the light on that block: sunlight (with shadows), its colour, and its own glow if it's a light source. A ray that escapes returns the sky.
+- **Result:** sky light is truly occluded, so interiors, overhangs and caves get the right darkness. Sunlight bounces off the ground and walls with colour bleeding, glowing blocks light their surroundings, and leaves let dappled light through.
+- **Denoising:** 12 frames of reprojected temporal accumulation plus three edge-aware à-trous passes. At 120 fps, 12 frames is about a tenth of a second of light lag, short enough for gameplay. You can change it with **Temporal Frames**.
+- **Off-screen water reflections:** reflections that screen-space tracing can't find are traced through the same voxel grid.
+- **What stays rasterised:** sun shadows (PCSS) and torch light stay as they are. They're sharp, stable and lag-free.
+
+Things to know:
+
+- Beyond the voxel range (64 blocks), lighting fades back to the normal estimate.
+- Glass and water don't block rays, and entities aren't in the voxel grid.
+- You'll see a little noise while light settles, especially in dim places.
+
+**Performance:** one ray per pixel, three denoise passes, full resolution. On an RTX 5080 at 1440p this costs roughly 2–4 ms on top of the default profile, so 120 fps holds with the normal settings. At 4K, set **Rays per Pixel** to 1 (the default) and lower **Ray Length** if needed.
 
 ## What it deliberately leaves out, for gameplay
 
@@ -75,6 +103,7 @@ Shadows cost CPU as well as GPU, because the world is drawn a second time from t
 | Competitive | 1536 px, 80 blocks, 8 samples | No wind, volumetrics, haze, cloud shadows, bloom or puddles. Brighter caves. |
 | Balanced | 2048 px, 96 blocks, 8 samples | Everything on, lighter volumetrics |
 | **RTX 5080 (default)** | 2048 px, 112 blocks, 12 samples, PCSS | Everything on |
+| Ray Traced (Iris) | 2048 px, 112 blocks, 12 samples, PCSS | Everything on, plus ray-traced sky and bounce light, and ray-traced water reflections |
 | Cinematic | 4096 px, 192 blocks, 24 samples | Everything on, 24-step volumetrics |
 
 ## Layout
@@ -85,7 +114,8 @@ Clarity/shaders/
   lib/common.glsl        uniforms, packing, noise, screen/view helpers
   lib/atmosphere.glsl    sky scattering, sun/moon light, clouds, stars, sun disc
   lib/lighting.glsl      PCSS shadows and the surface lighting model
-  lib/water.glsl         wave normals and caustics
+  lib/water.glsl         waves, rain ripples, caustics
+  lib/voxel.glsl         voxel grid mapping, ray traversal (DDA), hit shading
   lib/fog.glsl           haze, border fog, underwater extinction
   lib/waving.glsl        wind
   lib/distort.glsl       shadow-map distortion
@@ -96,7 +126,7 @@ Clarity/shaders/
   shaders.properties     menu layout, profiles, pipeline flags
   lang/en_US.lang        option names
 tools/build.py           regenerates stubs, validates, zips
-tools/preview/           renders the sky library to PNG in headless Chromium
+tools/preview/           renders the sky and water code to PNG in headless Chromium
 ```
 
 After editing, run:
@@ -117,8 +147,10 @@ NODE_PATH=$(npm root -g) node render.cjs sky.glsl sky.png 640 300 "$(cat tiles.j
 | Stage | What it does |
 | --- | --- |
 | `gbuffers_*` | Lights each surface as it is drawn: PCSS shadows, cloud shadows, sky and torch light, wetness. Also writes normals and each pixel's share of indirect light for SSAO. Water only writes its surface data. |
-| `composite` | SSAO (8 samples, hemisphere) |
-| `composite1` | Depth-aware AO blur and resolve. The water pass: refraction, absorption, caustics, SSR, Fresnel and glint. Fog and haze. Volumetric light march. |
+| `shadow` | Shadow map. In RT mode it also voxelizes terrain into a 3D image (GLSL 4.30 `imageStore`). |
+| `deferred` to `deferred4` | RT only: trace plus temporal accumulation, three à-trous denoise passes, then add albedo × indirect light |
+| `composite` | SSAO (8 samples, hemisphere; off in RT mode) |
+| `composite1` | Depth-aware AO blur and resolve. The water pass: refraction, absorption, caustics, foam, crest glow, SSR with RT fallback, Fresnel and glint. Underwater caustics. Fog and haze. Volumetric light march. |
 | `composite2` | Depth-aware blur of the volumetric light, added to the scene |
 | `composite3` | Bloom from the mip chain, auto exposure (log-average, persistent buffer), tonemap, grade |
 | `final` | FXAA, sharpening, dither |

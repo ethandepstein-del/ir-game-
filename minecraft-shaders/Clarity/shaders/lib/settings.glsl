@@ -48,6 +48,11 @@ const float ambientOcclusionLevel = 0.65; // [0.0 0.25 0.5 0.65 0.75 1.0]
 #define CAUSTICS
 #define WATER_CLARITY 1.00 // [0.50 0.75 1.00 1.25 1.50 2.00 3.00]
 #define WATER_TEXTURE 0.25 // [0.0 0.15 0.25 0.35 0.50 0.75 1.00]
+#define WAVE_HEIGHT 1.00 // [0.25 0.50 0.75 1.00 1.25 1.50 2.00]
+#define WAVE_SPEED 1.00 // [0.50 0.75 1.00 1.25 1.50]
+#define WATER_FOAM
+#define RAIN_RIPPLES
+#define WATER_SSS
 #define UNDERWATER_VIEW 48.0 // [16.0 24.0 32.0 48.0 64.0 96.0]
 
 // ---------------------------------------------------------------- atmosphere
@@ -75,3 +80,11 @@ const float ambientOcclusionLevel = 0.65; // [0.0 0.25 0.5 0.65 0.75 1.0]
 #define BLOOM_STRENGTH 0.06 // [0.02 0.04 0.06 0.08 0.12 0.16]
 #define FXAA
 #define SHARPEN 0.25 // [0.0 0.15 0.25 0.40 0.60]
+
+// ---------------------------------------------------------------- ray tracing (Iris, 1.18+)
+//#define RT_GI
+#define RT_RAYS 1 // [1 2 3 4]
+#define RT_DISTANCE 32.0 // [16.0 24.0 32.0 48.0 64.0]
+#define RT_HISTORY 12 // [4 8 12 16 24 32]
+#define RT_GI_STRENGTH 1.00 // [0.50 0.75 1.00 1.25 1.50 2.00]
+#define RT_REFLECTIONS

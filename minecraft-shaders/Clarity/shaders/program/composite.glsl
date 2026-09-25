@@ -10,6 +10,12 @@ const int colortex4Format = RGBA8;
 const int colortex5Format = RGBA16F;
 const int colortex6Format = RGBA16F;
 const bool colortex6Clear = false;
+const int colortex7Format = RGBA8;
+const int colortex8Format = RGBA16F;
+const bool colortex8Clear = false;
+const int colortex9Format = R32F;
+const bool colortex9Clear = false;
+const int colortex10Format = RGBA16F;
 */
 
 varying vec2 texcoord;
@@ -32,7 +38,7 @@ void main() {
     float depth = texture2D(depthtex1, texcoord).r;
     vec3 P = screenToView(texcoord, depth);
 
-#if defined SSAO
+#if defined SSAO && !(defined RT_GI && defined OVERWORLD)
     vec4 mat = texture2D(colortex2, texcoord);
     bool valid = abs(mat.g - 0.5) < 0.1 && mat.r < 0.5 && depth < 1.0;
     if (valid) {

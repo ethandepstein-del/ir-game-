@@ -80,3 +80,20 @@ option.BLOOM=Bloom
 option.BLOOM_STRENGTH=Bloom Strength
 option.FXAA=FXAA
 option.SHARPEN=Sharpening
+
+profile.RT=Ray Traced (Iris)
+screen.RAYTRACING=Ray Tracing
+option.RT_GI=Ray-Traced Lighting
+option.RT_GI.comment=Iris on 1.18+ only. Traces rays through a voxel copy of the world for sky light, bounce light and glowing blocks.
+option.RT_REFLECTIONS=Ray-Traced Water Reflections
+option.RT_REFLECTIONS.comment=Reflects things that are off screen. Needs Ray-Traced Lighting.
+option.RT_RAYS=Rays per Pixel
+option.RT_DISTANCE=Ray Length
+option.RT_HISTORY=Temporal Frames
+option.RT_HISTORY.comment=More frames = less noise but light reacts slower. 12 at 120 fps is a tenth of a second.
+option.RT_GI_STRENGTH=Indirect Light Strength
+option.WAVE_HEIGHT=Wave Height
+option.WAVE_SPEED=Wave Speed
+option.RAIN_RIPPLES=Rain Ripples
+option.WATER_FOAM=Shore Foam
+option.WATER_SSS=Light Through Waves

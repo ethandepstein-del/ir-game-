@@ -46,6 +46,11 @@ float shadowAt(vec3 playerPos) {
 #endif
 }
 
+#if defined RT_GI && defined RT_REFLECTIONS && defined OVERWORLD
+#include "/lib/voxel.glsl"
+#define RT_WATER_REFLECTIONS
+#endif
+
 // 3x3 depth-aware blur of the raw AO from composite.
 float resolveAO(vec2 uv) {
     vec2 px = 1.0 / vec2(viewWidth, viewHeight);
@@ -144,6 +149,28 @@ vec3 shadeWater(vec3 sceneCol, vec2 uv, float d0, vec4 wData, vec3 tint) {
         vec3 T = exp(-waterAbsorption(tint) * thickness);
         vec3 scatterCol = waterScatterColor(tint, skyLevel) + tint * sun * 0.03 * surfShadow;
         col = behind * T + scatterCol * (1.0 - T);
+
+#ifdef WATER_SSS
+        // Sunlight shining through the thin tops of waves toward the viewer.
+        vec3 Vw = mat3(gbufferModelViewInverse) * V;
+        float crest = clamp((1.0 - nW.y) * 14.0, 0.0, 1.0);
+        col += vec3(0.10, 0.75, 0.60) * tint * 4.0 * sun * surfShadow * crest
+             * pow(max(dot(Vw, L), 0.0), 3.0) * 0.5;
+#endif
+
+#ifdef WATER_FOAM
+        // Foam where the water gets shallow against the shore.
+        if (d1 < 1.0) {
+            vec3 floorPlayerF = (gbufferModelViewInverse * vec4(viewPos1, 1.0)).xyz;
+            float shallow = max(surfPlayer.y - floorPlayerF.y, 0.0);
+            vec2 fp = surfPlayer.xz + cameraPosition.xz;
+            float t = frameTimeCounter * 0.35 * WAVE_SPEED;
+            float pattern = vnoise(fp * 1.7 + vec2(t, -t * 0.6)) * 0.6 + vnoise(fp * 4.3 - vec2(t * 0.8, t)) * 0.4;
+            float foam = (1.0 - smoothstep(0.05, 0.75, shallow)) * smoothstep(0.35, 0.65, pattern + (0.4 - shallow * 0.5));
+            vec3 foamLight = ambientColor() * skyLevel * skyLevel + sun * surfShadow * max(L.y, 0.0) + MIN_LIGHT * 2.0;
+            col = mix(col, foamLight * 0.75, foam * 0.75);
+        }
+#endif
     } else {
         col = behind;
     }
@@ -163,10 +190,26 @@ vec3 shadeWater(vec3 sceneCol, vec2 uv, float d0, vec4 wData, vec3 tint) {
         Rw.y = max(Rw.y, 0.0);
         reflection = skyFull(normalize(Rw + vec3(0.0, 0.001, 0.0)), false) * smoothstep(0.2, 0.8, skyLevel)
                    + ambientColor() * 0.05;
+        vec4 hit = vec4(0.0);
 #ifdef SSR
-        vec4 hit = traceReflection(viewPos0, R);
-        reflection = mix(reflection, hit.rgb, hit.a);
+        hit = traceReflection(viewPos0, R);
 #endif
+#ifdef RT_WATER_REFLECTIONS
+        // Off-screen reflections: trace the voxel world where SSR can't see.
+        if (hit.a < 0.99) {
+            vec3 Rt = normalize(mat3(gbufferModelViewInverse) * R);
+            vec3 origin = playerToGrid(surfPlayer + nW * 0.1);
+            vec3 hp, hn;
+            vec4 vox;
+            if (insideGrid(origin) && traceVoxels(origin, Rt, 48.0, ign(gl_FragCoord.xy), hp, hn, vox)) {
+                vec3 hitPlayer = gridToPlayer(hp);
+                vec3 rc = voxelRadiance(vox, hp, hn, sun, ambientColor(), L) + toLinear(vox.rgb) * ambientColor() * 0.35;
+                rc = applyFog(rc, (gbufferModelView * vec4(hitPlayer, 1.0)).xyz, false);
+                reflection = rc;
+            }
+        }
+#endif
+        reflection = mix(reflection, hit.rgb, hit.a);
         // Sun glint (GGX, very smooth).
         vec3 H = normalize(L - mat3(gbufferModelViewInverse) * V);
         float NdotH = max(dot(nW, H), 0.0);
@@ -225,7 +268,7 @@ void main() {
     if (!(dot(col, vec3(1.0)) < 1e30)) col = vec3(0.0);
     col = max(col, vec3(0.0));
 
-#if defined SSAO
+#if defined SSAO && !(defined RT_GI && defined OVERWORLD)
     if (opaqueData && !hand && d1 < 1.0) {
         float ambientShare = texture2D(colortex1, texcoord).b;
         col *= mix(1.0, resolveAO(texcoord), ambientShare);
@@ -234,6 +277,20 @@ void main() {
 
 #if defined NETHER
     if (d0 >= 1.0) col = atmosphere(vec3(0.0, 1.0, 0.0));
+#endif
+
+#if defined CAUSTICS && defined OVERWORLD
+    // Looking around underwater: caustics play over sunlit surfaces.
+    if (isEyeInWater == 1 && opaqueData && !hand && d0 < 1.0 && texture2D(colortex3, texcoord).z < 0.2) {
+        vec3 vp = screenToView(texcoord, d0);
+        vec3 pp = (gbufferModelViewInverse * vec4(vp, 1.0)).xyz;
+        vec3 L = lightDirWorld();
+        vec3 nW = mat3(gbufferModelViewInverse) * decodeNormal(texture2D(colortex1, texcoord).xy);
+        float lit = shadowAt(pp + nW * 0.1) * cloudShadow(pp + cameraPosition, L) * max(dot(nW, L), 0.0);
+        float depthBelow = max(cameraPosition.y - (pp.y + cameraPosition.y), 0.0) + 1.0;
+        float c = caustics(pp.xz + cameraPosition.xz + L.xz / max(L.y, 0.2) * depthBelow);
+        col *= 1.0 + c * 1.4 * lit * luma(directLightColor()) / 3.0 * (float(eyeBrightnessSmooth.y) / 240.0);
+    }
 #endif
 
     vec4 wData = texture2D(colortex3, texcoord);

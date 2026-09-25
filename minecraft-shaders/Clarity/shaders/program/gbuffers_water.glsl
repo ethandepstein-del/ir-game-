@@ -71,7 +71,7 @@ void main() {
     if (matId > 0.5) {
         vec3 nW = mat3(gbufferModelViewInverse) * safeNormal(normal);
 #ifdef WATER_WAVES
-        if (nW.y > 0.9) nW = waterNormal((playerPos + cameraPosition).xz);
+        if (nW.y > 0.9) nW = waterNormal((playerPos + cameraPosition).xz, length(playerPos));
 #endif
         // Face the camera, so the surface seen from below is lit correctly.
         if (dot(nW, playerPos) > 0.0) nW = -nW;

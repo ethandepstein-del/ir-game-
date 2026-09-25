@@ -41,6 +41,11 @@ PROGRAMS = {
     "gbuffers_armor_glint":  ("gbuffers_emissive", []),
     "gbuffers_spidereyes":   ("gbuffers_emissive", ["GLOW_BOOST 1.5"]),
     "gbuffers_beaconbeam":   ("gbuffers_emissive", ["GLOW_BOOST 1.5"]),
+    "deferred":              ("deferred", []),
+    "deferred1":             ("deferred_atrous", ["ATROUS_STEP 1"]),
+    "deferred2":             ("deferred_atrous", ["ATROUS_STEP 2"]),
+    "deferred3":             ("deferred_atrous", ["ATROUS_STEP 4"]),
+    "deferred4":             ("deferred_apply", []),
     "composite":             ("composite", []),
     "composite1":            ("composite1", []),
     "composite2":            ("composite2", []),
@@ -55,13 +60,18 @@ DIMENSIONS = {
 }
 
 
+# Programs that need a newer GLSL version in a given dimension folder.
+# The overworld shadow pass writes the voxel grid with imageStore.
+VERSION_OVERRIDES = {("", "shadow"): "#version 430 compatibility"}
+
+
 def write_stubs():
     for folder, dim_defines in DIMENSIONS.items():
         out_dir = os.path.join(SHADERS, folder)
         os.makedirs(out_dir, exist_ok=True)
         for name, (program, defines) in PROGRAMS.items():
             for stage, ext in (("VSH", "vsh"), ("FSH", "fsh")):
-                lines = ["#version 120"]
+                lines = [VERSION_OVERRIDES.get((folder, name), "#version 120")]
                 lines += ["#define " + d for d in dim_defines + [stage] + defines]
                 lines.append('#include "/program/%s.glsl"' % program)
                 with open(os.path.join(out_dir, "%s.%s" % (name, ext)), "w") as f:
@@ -122,7 +132,7 @@ def build_zip():
 if __name__ == "__main__":
     write_stubs()
     if "--check" in sys.argv:
-        failed = check() + check(("MC_RENDER_STAGE_STARS 5", "IS_IRIS"))
+        failed = check() + check(("MC_RENDER_STAGE_STARS 5", "IS_IRIS")) + check(("RT_GI", "IS_IRIS"))
         if failed:
             sys.exit("%d program(s) failed to compile" % failed)
         print("all programs compile")

@@ -82,7 +82,9 @@ vec3 surfaceLight(vec3 viewNormal, vec2 lm, vec3 shadowClip, vec3 playerPos, boo
     float skyLight = lm.y;
     float faceShade = 0.78 + 0.22 * dot(viewNormal, up);
 
-#if defined OVERWORLD
+#if defined TRACED_AMBIENT
+    vec3 ambient = vec3(0.0);   // replaced by ray-traced sky light and bounce
+#elif defined OVERWORLD
     vec3 ambient = amb * (skyLight * skyLight) * (foliage ? 0.92 : faceShade);
 #else
     vec3 ambient = amb * (foliage ? 0.92 : faceShade);
