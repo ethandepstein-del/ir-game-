@@ -308,7 +308,8 @@ export default {
   async init() {
     buildShards(buildLayout());
   },
-  shutter: (t) => (t < T.SLAM + 0.3 ? { samples: 5, angle: 220 } : t > PERIOD_FALL && t < 13.9 ? { samples: 3, angle: 180 } : null),
+  // No blur across the two stark impact frames (and the frame after), or they average to grey.
+  shutter: (t) => (t < T.SHATTER + 3 / 60 ? null : t < T.SLAM + 0.3 ? { samples: 5, angle: 220 } : t > PERIOD_FALL && t < 13.9 ? { samples: 3, angle: 180 } : null),
   draw(g, t) {
     const sk = shake(t, 20);
     const imp = t - T.SHATTER;
