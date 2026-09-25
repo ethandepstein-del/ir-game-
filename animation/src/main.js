@@ -14,7 +14,7 @@ const worlds = { pencil, cel, paper, pixel, chrome, finale };
 
 let out, octx, scratch, sctx, wipeA, wipeB;
 const WIPE = 0.16;
-const RIM = { cel: '255,209,102', paper: '255,246,232', pixel: '41,173,255', chrome: '160,210,255' };
+const RIM = { cel: '255,209,102', paper: '255,246,232', pixel: '41,173,255', chrome: '255,196,140' };
 
 async function init(canvas, { fontBase = 'fonts/' } = {}) {
   out = canvas;

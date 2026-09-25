@@ -133,17 +133,18 @@ vec3 rectLight(vec3 d, vec3 C, vec2 hs, float soft) {
 }
 vec3 env(vec3 d, float lights) {
   float y = d.y;
-  vec3 col = mix(vec3(0.030, 0.034, 0.048), vec3(0.006, 0.007, 0.011), clamp(y * 1.4, 0.0, 1.0));
-  col += vec3(1.0, 0.42, 0.16) * 0.55 * exp(-abs(y) * 10.0) * (0.55 + 0.45 * d.x);
-  col += vec3(0.20, 0.45, 0.95) * 0.35 * exp(-abs(y) * 7.0) * (0.55 - 0.45 * d.x);
+  // Night studio: warm graphite dark, a low tungsten glow at the horizon, a faint cool fill.
+  vec3 col = mix(vec3(0.020, 0.016, 0.013), vec3(0.004, 0.004, 0.005), clamp(y * 1.6, 0.0, 1.0));
+  col += vec3(1.0, 0.55, 0.25) * 0.16 * exp(-abs(y) * 9.0);
+  col += vec3(0.30, 0.42, 0.60) * 0.05 * exp(-abs(y) * 4.0) * (0.5 - 0.5 * d.x);
   if (lights <= 0.0) return col * uDim;
-  // Studio lights: only seen in reflections, never directly by the camera.
-  vec3 li = vec3(0.16, 0.20, 0.28) * smoothstep(0.0, 0.7, y) + vec3(0.55, 0.46, 0.38) * exp(-abs(y - 0.03) * 16.0) * 0.8;
-  li += vec3(1.0, 0.97, 0.93) * 7.0 * rectLight(d, normalize(vec3(-0.25, 1.0, 0.45)), vec2(0.62, 0.30), 0.05);
-  li += vec3(1.0, 0.95, 0.9) * 3.0 * rectLight(d, normalize(vec3(0.5, 0.8, -0.6)), vec2(0.25, 0.25), 0.04);
-  li += vec3(1.0, 0.60, 0.30) * 6.0 * rectLight(d, normalize(vec3(1.0, 0.15, -0.30)), vec2(0.05, 0.9), 0.02);
-  li += vec3(0.35, 0.72, 1.0) * 5.0 * rectLight(d, normalize(vec3(-1.0, 0.22, -0.25)), vec2(0.045, 0.85), 0.02);
-  li += vec3(0.9, 0.9, 1.0) * 2.0 * rectLight(d, normalize(vec3(0.2, 0.25, 1.0)), vec2(0.5, 0.03), 0.02);
+  // Studio lights, seen only in reflections: a big warm key, a soft fill, a cool rim strip, and a
+  // long low bar that gives the boule its horizon line.
+  vec3 li = vec3(0.10, 0.09, 0.08) * smoothstep(0.0, 0.8, y);
+  li += vec3(1.0, 0.90, 0.78) * 8.0 * rectLight(d, normalize(vec3(-0.25, 1.0, 0.45)), vec2(0.62, 0.30), 0.08);
+  li += vec3(1.0, 0.86, 0.70) * 1.6 * rectLight(d, normalize(vec3(0.5, 0.8, -0.6)), vec2(0.3, 0.3), 0.1);
+  li += vec3(0.55, 0.75, 1.0) * 4.0 * rectLight(d, normalize(vec3(-0.9, 0.3, -0.35)), vec2(0.03, 0.8), 0.015);
+  li += vec3(1.0, 0.78, 0.55) * 1.3 * rectLight(d, normalize(vec3(0.15, 0.06, 1.0)), vec2(0.9, 0.025), 0.02);
   return (col + li * lights) * uDim;
 }
 float hitBall(vec3 ro, vec3 rd, out vec3 n) {
@@ -162,13 +163,26 @@ float gridLine(vec2 g, float w, float aa) {
   return 1.0 - smoothstep(w, w + aa, m);
 }
 // Floor without reflections (grid, AO, rings): used directly and inside reflections.
+float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+const float SPACING = 7.0, PZ = 6.5, PW = 0.45, PH = 8.0;
 vec3 floorBase(vec3 p, float dist) {
-  vec3 col = vec3(0.010, 0.011, 0.014) * uDim;
-  float aa = 0.0012 * dist + 0.004;
-  float fade = exp(-dist * 0.045);
   vec2 fp = vec2(dot(p, uTD), p.z);
-  col += vec3(0.25, 0.55, 1.0) * 0.10 * gridLine(fp / 2.0, 0.012, aa) * fade * uDim;
-  col += vec3(0.35, 0.65, 1.0) * 0.16 * gridLine(fp / 10.0, 0.004, aa * 0.2) * fade * uDim;
+  vec2 tile = floor(fp / 3.5);
+  // Polished black stone: each slab a slightly different tone, thin dark seams between them.
+  vec3 col = vec3(0.0075, 0.0068, 0.0062) * (0.8 + 0.4 * h21(tile)) * uDim;
+  float aa = 0.0012 * dist + 0.004;
+  float seam = gridLine(fp / 3.5, 0.004, aa * 0.3);
+  col *= 1.0 - 0.7 * seam;
+  // Warm pools of light thrown on the floor by the fins' strips.
+  float pool = 0.0;
+  float si = floor(fp.x / SPACING + 0.5);
+  for (int k = -1; k <= 1; k++) {
+    float sc = (si + float(k)) * SPACING;
+    vec2 a = vec2(sc, -PZ + PW + 0.05), b = vec2(sc, PZ - PW - 0.05);
+    pool += exp(-dot(fp - a, fp - a) * 0.35);
+    if (sc >= 20.0) pool += exp(-dot(fp - b, fp - b) * 0.35);
+  }
+  col += vec3(1.0, 0.62, 0.32) * 0.05 * pool * uDim;
   // Contact shadow / AO under the ball
   if (uBallOn > 0.5) {
     float hgt = max(dot(uBallC, uN) - 1.0, 0.0);
@@ -185,8 +199,8 @@ vec3 floorBase(vec3 p, float dist) {
     float rad = 0.9 + 11.0 * pow(age, 0.6);
     float w = 0.10 + age * 0.5;
     float ring = exp(-pow((rr - rad) / w, 2.0)) * exp(-age * 3.2);
-    col += vec3(0.55, 0.85, 1.0) * ring * 1.6;
-    col += vec3(1.0, 0.8, 0.6) * exp(-rr * rr * 2.5) * exp(-age * 18.0) * 1.1;
+    col += vec3(1.0, 0.78, 0.55) * ring * 0.38;
+    col += vec3(1.0, 0.8, 0.6) * exp(-rr * rr * 2.5) * exp(-age * 18.0) * 0.8;
   }
   return col;
 }
@@ -201,9 +215,8 @@ float cell(vec3 q, out float f2) {
   }
   return f1;
 }
-// Colonnade along the slope: glossy black pillars with emissive strips on their inner faces.
+// Colonnade along the slope: black glass fins with tungsten light strips on their inner faces.
 // Boxes live in the slope frame (s downhill, h above the floor, z across).
-const float SPACING = 7.0, PZ = 6.5, PW = 0.45, PH = 8.0;
 float hitPillars(vec3 ro, vec3 rd, out vec3 nrm, out vec3 info) {
   vec3 o = vec3(dot(ro, uTD), dot(ro, uN), ro.z), d = vec3(dot(rd, uTD), dot(rd, uN), rd.z);
   float best = 1e9;
@@ -232,14 +245,13 @@ float hitPillars(vec3 ro, vec3 rd, out vec3 nrm, out vec3 info) {
 vec3 pillarShade(vec3 p, vec3 n, vec3 rd, vec3 info) {
   vec3 rr = reflect(rd, n);
   float fres = 0.04 + 0.96 * pow(1.0 - abs(dot(rd, n)), 5.0);
-  vec3 col = vec3(0.012, 0.013, 0.017) * uDim + env(rr, 0.35) * mix(0.08, 0.6, fres);
-  // Inner and outer faces carry a thin light strip; its hue alternates down the colonnade.
+  vec3 col = vec3(0.006, 0.006, 0.007) * uDim + env(rr, 0.5) * mix(0.05, 0.7, fres);
+  // A thin warm strip runs up each inner face, fading out toward the top.
   bool face = info.x > 50.0;
   float u = face ? info.x - 99.0 : info.x;
-  float strip = 1.0 - smoothstep(0.03, 0.07, abs(u));
-  float cap = smoothstep(PH - 0.12, PH - 0.02, info.y);
-  vec3 hue = mod(floor(info.z), 2.0) < 1.0 ? vec3(0.35, 0.75, 1.0) : vec3(1.0, 0.55, 0.28);
-  col += hue * (strip * (face ? 3.2 : 0.6) + cap * 1.5) * uDim;
+  float strip = (1.0 - smoothstep(0.025, 0.06, abs(u))) * (face ? 1.0 : 0.0);
+  float falloff = 0.55 + 0.45 * smoothstep(PH, 0.0, info.y);
+  col += vec3(1.0, 0.72, 0.45) * strip * 3.4 * falloff * uDim;
   return col;
 }
 vec3 ballShade(vec3 p, vec3 n, vec3 rd) {
@@ -259,7 +271,7 @@ vec3 ballShade(vec3 p, vec3 n, vec3 rd) {
     refl = floorBase(fp, tf + 6.0) + env(fr, 1.0) * fres * 0.6;
   } else refl = env(rr, 1.0);
   float cosT = clamp(dot(-rd, n), 0.0, 1.0);
-  vec3 F0 = vec3(0.97, 0.95, 0.92);
+  vec3 F0 = vec3(0.90, 0.87, 0.82);
   vec3 F = F0 + (1.0 - F0) * pow(1.0 - cosT, 5.0);
   vec3 col = refl * F;
   // Engraved grooves of a steel boule, in the ball's own (spinning) frame.
@@ -309,17 +321,44 @@ void main() {
     float tb2 = uBallOn > 0.5 ? hitBall(p, rr, n2) : -1.0;
     vec3 pn2, pinfo2;
     float tp2 = hitPillars(p, rr, pn2, pinfo2);
-    if (tp2 > 0.0 && (tb2 < 0.0 || tp2 < tb2)) refl = pillarShade(p + rr * tp2, pn2, rr, pinfo2);
-    else if (tb2 > 0.0) refl = ballShade(p + rr * tb2, n2, rr) * 0.85;
+    // Glossy, not mirror: reflections of nearby things stay crisp, distant ones fade out.
+    if (tp2 > 0.0 && (tb2 < 0.0 || tp2 < tb2)) refl = pillarShade(p + rr * tp2, pn2, rr, pinfo2) * exp(-tp2 * 0.09);
+    else if (tb2 > 0.0) refl = ballShade(p + rr * tb2, n2, rr) * 0.85 * exp(-tb2 * 0.05);
     else refl = env(rr, 0.12);
+    refl *= 0.85 + 0.3 * h21(floor(vec2(dot(p, uTD), p.z) / 3.5) + 7.0);
     col += refl * mix(0.25, 1.0, fres) * 0.45;
     col = mix(col, env(normalize(vec3(rd.x, 0.02, rd.z)), 0.0) * 0.6, 1.0 - exp(-tf * 0.012));
   } else {
     col = env(rd, 0.0);
   }
+  // Atmosphere: haze with soft halos around the fins' light strips.
+  float tHit = min(min(tbb, tff), tpp);
+  if (tHit > 1e8) tHit = 200.0;
+  vec3 o2 = vec3(dot(ro, uTD), dot(ro, uN), ro.z), d2 = vec3(dot(rd, uTD), dot(rd, uN), rd.z);
+  vec3 glow = vec3(0.0);
+  float dxz2 = max(1e-4, d2.x * d2.x + d2.z * d2.z);
+  for (int side = 0; side < 2; side++) {
+    float zs = side == 0 ? -PZ + PW : PZ - PW;
+    for (int i = -2; i < 13; i++) {
+      float sc = float(i) * SPACING;
+      if (side == 1 && sc < 20.0) continue;
+      float ts = ((sc - o2.x) * d2.x + (zs - o2.z) * d2.z) / dxz2;
+      if (ts <= 0.0 || ts > tHit) continue;
+      vec2 q = vec2(o2.x + d2.x * ts - sc, o2.z + d2.z * ts - zs);
+      float h = o2.y + d2.y * ts;
+      float inside = smoothstep(-0.5, 0.3, h) * smoothstep(PH + 0.5, PH - 1.5, h);
+      glow += vec3(1.0, 0.66, 0.38) * exp(-dot(q, q) * 1.6) * inside / (1.0 + ts * 0.06);
+    }
+  }
+  col += glow * 0.06 * uDim;
+  col = mix(col, vec3(0.012, 0.009, 0.007) * uDim, 1.0 - exp(-tHit * 0.009));
   col += vec3(1.0, 0.9, 0.8) * uFlash;
-  col = aces(col * 1.05);
+  col = aces(col * 1.18);
   col = pow(col, vec3(1.0 / 2.2));
+  // Split-tone grade: cool, slightly lifted shadows; warm highlights.
+  float lum = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(col * vec3(0.93, 1.0, 1.07) + vec3(0.004, 0.008, 0.012), col * vec3(1.05, 1.0, 0.9), smoothstep(0.08, 0.65, lum));
+  col = clamp((col - 0.5) * 1.08 + 0.5, 0.0, 1.0);
   frag = vec4(col, 1.0);
 }`;
 
@@ -388,7 +427,7 @@ function sparks(g, cam, tt) {
     const d = tt - e.t;
     if (d < 0 || d > 0.7 || e.speed < 500) return;
     const r = rng(500 + k), c = [e.x - N[0], e.y - N[1], 0];
-    const n = Math.round(Math.min(70, e.speed / 30));
+    const n = Math.round(Math.min(34, e.speed / 60));
     for (let i = 0; i < n; i++) {
       const a = r() * TAU, sp = (3 + r() * 10) * e.speed / 1800, up = 3 + r() * 8;
       const life = 0.25 + r() * 0.4;
@@ -420,8 +459,8 @@ export default {
     sparks(g, cam, tt);
   },
   post(g, t, out) {
-    bloom(g, out, { strength: 0.85, radius: 26, cut: 1.35, streak: 0.55 });
-    vignette(g, 0.5, '0,0,0', 0.5);
+    bloom(g, out, { strength: 0.75, radius: 30, cut: 1.3, streak: 0.22 });
+    vignette(g, 0.55, '8,5,3', 0.45);
     grain(g, t, 0.05);
   },
 };
