@@ -1,0 +1,64 @@
+profile=Profile
+profile.COMPETITIVE=Competitive
+profile.BALANCED=Balanced
+profile.RTX5080=RTX 5080 (120 fps)
+profile.CINEMATIC=Cinematic
+profile.comment=RTX 5080 is the tuned default. Competitive removes wind, rays and bloom for PvP.
+
+screen.LIGHTING=Lighting
+screen.SHADOWS=Shadows
+screen.WORLD=Wind
+screen.WATER=Water
+screen.ATMOSPHERE=Sky & Fog
+screen.CAMERA=Camera
+
+option.SUN_BRIGHTNESS=Sunlight
+option.AMBIENT_BRIGHTNESS=Sky Light
+option.BLOCKLIGHT_BRIGHTNESS=Torch Light
+option.NIGHT_BRIGHTNESS=Night Brightness
+option.MIN_LIGHT=Minimum Light
+option.MIN_LIGHT.comment=Floor for unlit areas so caves are never pitch black.
+option.EMISSIVE_STRENGTH=Glowing Blocks
+option.BLOCKLIGHT_R=Torch Red
+option.BLOCKLIGHT_G=Torch Green
+option.BLOCKLIGHT_B=Torch Blue
+option.FOLIAGE_SSS=Leaf Translucency
+option.ambientOcclusionLevel=Corner Shading
+
+option.SHADOWS=Shadows
+option.COLORED_SHADOWS=Stained Glass Shadows
+option.shadowMapResolution=Shadow Quality
+option.shadowDistance=Shadow Distance
+option.SHADOW_SOFTNESS=Shadow Softness
+option.SHADOW_SAMPLES=Shadow Filter Samples
+option.sunPathRotation=Sun Angle
+
+option.WAVING_PLANTS=Waving Plants
+option.WAVING_LEAVES=Waving Leaves
+option.WAVING_SPEED=Wind Speed
+option.WAVING_AMOUNT=Wind Strength
+
+option.WATER_WAVES=Water Waves
+option.WATER_REFLECTIONS=Water Reflections
+option.WATER_OPACITY=Water Opacity
+option.WATER_TEXTURE=Water Texture
+option.WATER_TEXTURE.comment=How much of the vanilla water texture shows through.
+option.UNDERWATER_VIEW=Underwater View Distance
+
+option.FOG_START=Fog Start
+option.FOG_START.comment=Fraction of render distance before fog begins.
+option.RAIN_OPACITY=Rain Opacity
+option.CLOUD_OPACITY=Cloud Opacity
+option.STAR_BRIGHTNESS=Stars
+option.GODRAYS=Light Shafts
+option.GODRAY_STRENGTH=Light Shaft Strength
+
+option.EXPOSURE=Exposure
+option.CAVE_ADAPTATION=Cave Brightening
+option.CAVE_ADAPTATION.comment=How much the image brightens underground.
+option.SATURATION=Saturation
+option.CONTRAST=Contrast
+option.BLOOM=Bloom
+option.BLOOM_STRENGTH=Bloom Strength
+option.FXAA=FXAA
+option.SHARPEN=Sharpening
