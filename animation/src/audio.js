@@ -1,6 +1,7 @@
 // Procedural score and sound design. Every sound is synthesized with WebAudio nodes and
 // scheduled against the same timeline as the picture. Works offline (render) and live (player).
-import { T, BEAT, beat, rng } from './core.js';
+import { T, BEAT, beat, rng, physics, ball2D, camFrame, W } from './core.js';
+import { rampStart } from './worlds/chrome.js';
 
 const SR = 48000, LEN = 15;
 const mtof = (m) => 440 * 2 ** ((m - 69) / 12);
@@ -31,7 +32,7 @@ function build(ctx, T0) {
   comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 3; comp.attack.value = 0.005; comp.release.value = 0.2;
   const lim = ctx.createDynamicsCompressor();
   lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.08;
-  const outG = ctx.createGain(); outG.gain.value = 1.35;
+  const outG = ctx.createGain(); outG.gain.value = 1.22;
   // Final soft clipper (input ±1 maps across the curve): linear to 0.72, then a tanh knee to ~0.95.
   const clip = ctx.createWaveShaper();
   {
@@ -313,109 +314,124 @@ function build(ctx, T0) {
   };
 
   // ================================================================ SCORE
-  // --- 1. Pencil test (0 – 2.0)
-  pencilScratch(0.06, 0.36, 0.24, -0.35, -0.2);
-  pencilScratch(0.42, 0.16, 0.24, -0.3, -0.2, 7);
-  pencilTap(0.76, 0.5, -0.25);
-  for (let k = 0; k < 4; k++) woodTick(beat(k), k === 0 ? 0.24 : 0.16, k === 0 ? 2100 : 1700, 0.45);
-  whoosh(0.8, 0.45, 0.09, 600, 2400, -0.3, -0.1);
-  softThump(beat(2), 0.7);
-  pencilTap(beat(2), 0.3, -0.15);
-  pencilScratch(beat(2) + 0.08, 0.14, 0.12, -0.5, -0.5);
-  whoosh(1.3, 0.6, 0.04, 500, 1800, -0.1, 0.1);
-  swell(T.CEL, 0.35, 0.05, 2000, 9000);
+  // Driven by the simulation: every contact sounds at a level set by its impact speed, launchers
+  // twang when their latch lets go and clank at their stop, and each world's groove runs on the
+  // shared 160 bpm grid between its cuts.
+  const P = physics();
+  const [C1, C2, C3, C4] = P.cuts;
+  const EV = P.events.filter((e) => e.t < T.SHATTER - 1e-3);
+  const lvl = (sp, ref = 2800) => Math.min(1.3, Math.pow(sp / ref, 1.1));
+  const grid = (a, b, step) => { const out = []; for (let k = Math.ceil((a - 0.5) / step - 1e-6); 0.5 + k * step < b - 1e-6; k++) out.push({ k, t: 0.5 + k * step }); return out; };
+  const { P1, P2, P3 } = P.run.plates;
+  const tr = P.params.tRelease;
 
-  // --- 2. Cel cartoon (2.0 – 3.5)
-  boing(T.CEL, 0.42);
-  kick(T.CEL, 0.8);
-  cymbal(T.CEL, 0.08, 0.5, 0.3);
-  tamb(T.CEL, 0.08);
-  slide(T.CEL + 0.02, beat(5), 520, 1500, 0.06);
-  slide(beat(5), beat(6), 1500, 480, 0.06);
-  [39, 43, 46, 43].forEach((m, i) => tri(beat(4 + i), m, 0.3, 0.26));
-  clap(beat(5), 0.28, -0.1); clap(beat(7), 0.28, -0.1);
-  for (let i = 0; i < 8; i++) hat(T.CEL + i * BEAT / 2, i % 2 ? 0.05 : 0.03);
-  kick(beat(6), 0.6);
-  woodTick(beat(6), 0.3, 760, 0);
-  [75, 79, 82, 87].forEach((m, i) => xylo(beat(6) + 0.02 + i * BEAT / 4, m, 0.1, 0.3 - i * 0.1));
-  [87, 82, 79, 75].forEach((m, i) => xylo(beat(7) + i * BEAT / 4, m, 0.1, -0.1 + i * 0.1));
+  // --- 1. Pencil test
+  pencilScratch(0.04, 0.3, 0.24, -0.35, -0.2);
+  pencilScratch(0.34, 0.12, 0.24, -0.3, -0.2, 6);
+  pencilTap(tr, 0.5, -0.25);
+  for (const { k, t } of grid(0.5, C1, BEAT)) woodTick(t, k % 4 === 0 ? 0.22 : 0.14, k % 4 === 0 ? 2100 : 1700, 0.45);
+  whoosh(tr + 0.05, 0.35, 0.07, 600, 2400, -0.3, -0.1);
+  swell(C1, 0.3, 0.05, 2000, 9000);
 
-  // --- 3. Cut paper (3.5 – 5.0)
-  paperCrunch(T.PAPER, 0.22, 0.26, 36, 3);
-  paperThump(T.PAPER, 0.55);
-  [0, 0.08, 0.16].forEach((d, i) => pop(T.PAPER + d + 0.02, 0.16, 1000 + i * 250, -0.4 + i * 0.4));
-  paperCrunch(T.PAPER + 0.1, 0.9, 0.06, 40, 4, 0.1);
-  [63, 70, 67, 70, 72, 70, 67, 65].forEach((m, i) => kalimba(T.PAPER + i * BEAT / 2, m + 12, 0.1, i % 2 ? 0.35 : -0.35));
-  for (let k = 8; k < 12; k++) paperThump(beat(k), k === 8 ? 0 : 0.28);
-  for (let i = 0; i < 16; i++) shaker(T.PAPER + i * BEAT / 4, i % 2 ? 0.035 : 0.02);
-  paperThump(beat(10), 0.4);
-  paperCrunch(beat(10), 0.12, 0.12, 14, 5);
-  pop(beat(10) + 0.04, 0.14, 1300, -0.3); pop(beat(10) + 0.1, 0.14, 1500, 0.3);
+  // --- 2. Cel: latched coil spring
+  boing(C1, 0.45);
+  kick(C1, 0.8);
+  cymbal(C1, 0.08, 0.5, 0.3);
+  tamb(C1, 0.08);
+  if (P1.releasedAt) osc('triangle', 180, P1.releasedAt, 0.12, { gain: 0.12, f1: 520 });
+  if (P1.stoppedAt) { metal(P1.stoppedAt, 0.08, 980, 0.2); woodTick(P1.stoppedAt, 0.2, 600); }
+  const celLand = EV.find((e) => e.surface === 'cel');
+  let apex = C1, best = 1e9;
+  for (let t = C1 + 0.05; t < celLand.t; t += 0.005) { const y = ball2D(t).cy; if (y < best) { best = y; apex = t; } }
+  slide(C1 + 0.03, apex, 520, 1500, 0.06);
+  slide(apex, celLand.t, 1500, 480, 0.06);
+  for (const { k, t } of grid(C1, C2, BEAT)) { tri(t, [39, 43, 46, 43][k % 4], 0.3, 0.26); if (k % 2) clap(t, 0.26, -0.1); }
+  for (const { t } of grid(C1, C2, BEAT / 2)) hat(t, 0.04);
+  [75, 79, 82, 87].forEach((m, i) => xylo(celLand.t + 0.02 + i * BEAT / 4, m, 0.1, 0.3 - i * 0.1));
+  [87, 82, 79, 75].forEach((m, i) => xylo(C2 - BEAT + i * BEAT / 4, m, 0.1, -0.1 + i * 0.1));
 
-  // --- 4. 8-bit (5.0 – 6.5)
-  chipNoise(T.PIXEL, 0.1, 0.12, 0.35);
-  chip(T.PIXEL, 280, 0.16, { gain: 0.09, f1: 900 });
-  const bassLine = [39, 51, 46, 51, 44, 56, 46, 58];
-  bassLine.forEach((m, i) => chip(T.PIXEL + i * BEAT / 2, mtof(m - 12), BEAT / 2 - 0.02, { gain: 0.1, wave: P125 }));
-  for (let i = 0; i < 8; i++) chipNoise(T.PIXEL + i * BEAT / 2 + BEAT / 4, 0.04, 0.05, 2.5, 0.2);
-  chip(beat(13), 140, 0.08, { gain: 0.12, wave: P25, f1: 70 });
-  chipNoise(beat(13), 0.06, 0.1, 0.6);
-  [0, 0.075, 0.15].forEach((d, i) => {
-    chip(beat(13) + d, 1319, 0.05, { gain: 0.07, pan: -0.2 + i * 0.2 });
-    chip(beat(13) + d + 0.05, 1976, 0.22, { gain: 0.07, pan: -0.2 + i * 0.2 });
-  });
-  chipNoise(beat(14), 0.08, 0.1, 0.35);
-  chip(beat(14), 320, 0.12, { gain: 0.07, f1: 800 });
-  // Warp into 3D: fast rising arpeggio + reverse cymbal
+  // --- 3. Paper: accordion spring
+  paperCrunch(C2, 0.2, 0.26, 36, 3);
+  paperThump(C2, 0.55);
+  [0, 0.08, 0.16].forEach((d, i) => pop(C2 + d + 0.02, 0.16, 1000 + i * 250, -0.4 + i * 0.4));
+  if (P2.releasedAt) whoosh(P2.releasedAt, 0.14, 0.09, 700, 5000, 0, 0.2);
+  if (P2.stoppedAt) noise(P2.stoppedAt, 0.03, { type: 'bandpass', f: 2200, Q: 2, gain: 0.18 });
+  paperCrunch(C2 + 0.1, 0.9, 0.06, 40, 4, 0.1);
+  for (const { k, t } of grid(C2, C3, BEAT / 2)) kalimba(t, [63, 70, 67, 70, 72, 70, 67, 65][((k % 8) + 8) % 8] + 12, 0.1, k % 2 ? 0.35 : -0.35);
+  for (const { k, t } of grid(C2, C3, BEAT / 4)) shaker(t, k % 2 ? 0.035 : 0.02);
+  for (const { t } of grid(C2 + 0.05, C3, BEAT)) paperThump(t, 0.24);
+
+  // --- 4. 8-bit: spring block, bonus block, coins
+  chip(C3, 200, 0.2, { gain: 0.09, f1: 820 });
+  chipNoise(C3, 0.08, 0.1, 0.4);
+  for (const { k, t } of grid(C3, C4, BEAT / 2)) chip(t, mtof([39, 51, 46, 51, 44, 56, 46, 58][((k % 8) + 8) % 8] - 12), BEAT / 2 - 0.02, { gain: 0.1, wave: P125 });
+  for (const { t } of grid(C3, C4, BEAT / 2)) chipNoise(t + BEAT / 4, 0.04, 0.05, 2.5, 0.2);
   const arp = [63, 67, 70, 75, 79, 82, 87, 91];
-  for (let i = 0; i < 12; i++) chip(6.2 + i * 0.025, mtof(arp[i % 8] + (i >= 8 ? 12 : 0) - 12), 0.03, { gain: 0.06, wave: P25 });
-  swell(T.CHROME, 0.6, 0.16, 1500, 12000);
+  for (let i = 0; i < 12; i++) chip(C4 - 0.3 + i * 0.025, mtof(arp[i % 8] + (i >= 8 ? 12 : 0) - 12), 0.03, { gain: 0.06, wave: P25 });
+  swell(C4, 0.55, 0.16, 1500, 12000);
 
-  // --- 5. Chrome (6.5 – 9.5)
-  sub(T.CHROME, 0.9, 1.1, 75, 30);
-  kick(T.CHROME, 0.9, 170, 40, 0.5);
-  metal(T.CHROME, 0.26, 330, 0);
-  cymbal(T.CHROME, 0.18, 1.6, 0.2);
-  whoosh(6.56, 0.8, 0.13, 250, 2800, -0.8, 0.8);
-  for (let k = 17; k < 24; k++) kick(beat(k), 0.7, 150, 42, 0.3);
-  for (const k of [17, 19, 21, 23]) clap(beat(k), 0.22, 0.05);
-  for (let i = 0; i < 22; i++) hat(T.CHROME + BEAT + i * BEAT / 4, i % 2 ? 0.045 : 0.02, false, 0.3);
-  // Sidechained saw bass on 8ths
-  const bassNotes = [27, 27, 27, 27, 27, 27, 27, 27, 23, 23, 23, 23, 25, 25];
-  bassNotes.forEach((m, i) => {
-    const t = T.CHROME + BEAT + i * BEAT / 2;
+  // --- Contacts, from the simulation
+  // Pan each 2D contact to where it lands on screen.
+  const panOf = (e) => {
+    if (e.surface === 'chrome') return 0;
+    const f = camFrame(e.t);
+    return Math.max(-0.6, Math.min(0.6, ((e.x - f.x) * f.z) / (W / 2) * 0.8));
+  };
+  for (const e of EV) {
+    const g = lvl(e.speed), pn = panOf(e);
+    if (e.surface === 'pencil') { softThump(e.t, 0.75 * g); pencilTap(e.t, 0.35 * g, pn); }
+    else if (e.surface === 'cel') { kick(e.t, 0.7 * g); woodTick(e.t, 0.3 * g, 760, pn); }
+    else if (e.surface === 'paper') {
+      paperThump(e.t, 0.5 * g); paperCrunch(e.t, 0.12, 0.13 * g, 14, Math.floor(e.t * 100), pn);
+      pop(e.t + 0.04, 0.14 * g, 1300, -0.3); pop(e.t + 0.1, 0.14 * g, 1500, 0.3); pop(e.t + 0.15, 0.12 * g, 1700, 0.1);
+    } else if (e.surface === 'pixel') { chipNoise(e.t, 0.1, 0.12 * g, 0.35, pn); chip(e.t, 220, 0.07, { gain: 0.07 * g, f1: 90, pan: pn }); }
+    else if (e.surface === 'block') {
+      chip(e.t, 140, 0.08, { gain: 0.12, wave: P25, f1: 70 }); chipNoise(e.t, 0.06, 0.1, 0.6);
+      [0, 0.075, 0.15].forEach((d, i) => {
+        chip(e.t + d, 1319, 0.05, { gain: 0.07, pan: -0.2 + i * 0.2 });
+        chip(e.t + d + 0.05, 1976, 0.22, { gain: 0.07, pan: -0.2 + i * 0.2 });
+      });
+    } else if (e.surface === 'chrome') {
+      // Big hits ring low; as the bounces shrink the ring rises: an accelerando into the lens.
+      const gc = lvl(e.speed, 1900);
+      if (e.speed > 700) { metal(e.t, 0.22 * gc, 330 + (1 - Math.min(1, gc)) * 200, 0); sub(e.t, 0.55 * gc, 0.5, 80, 40); }
+      else if (e.speed > 80) metal(e.t, 0.1 * Math.max(0.35, gc), 700 + (1 - gc) * 900, 0.15);
+    }
+  }
+
+  // --- 5. Chrome slope: groove until the slow-motion ramp, then the approach and the hit
+  const R0 = rampStart();
+  sub(C4, 0.9, 1.1, 75, 30);
+  kick(C4, 0.9, 170, 40, 0.5);
+  cymbal(C4, 0.18, 1.6, 0.2);
+  whoosh(C4 + 0.06, 0.9, 0.12, 250, 2800, -0.8, 0.8);
+  for (const { k, t } of grid(C4 + 0.1, R0, BEAT)) { kick(t, 0.62, 150, 42, 0.3); if (k % 2) clap(t, 0.2, 0.05); }
+  for (const { k, t } of grid(C4 + 0.1, R0, BEAT / 4)) hat(t, k % 2 ? 0.045 : 0.02, false, 0.3);
+  grid(C4 + 0.1, R0, BEAT / 2).forEach(({ k, t }) => {
+    const m = [27, 27, 27, 27, 23, 23, 25, 25][Math.floor(k / 2) % 8];
     const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(m + 12);
     const o2 = ctx.createOscillator(); o2.type = 'square'; o2.frequency.value = mtof(m);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 6;
     lp.frequency.setValueAtTime(1600, at(t)); lp.frequency.exponentialRampToValueAtTime(220, at(t + 0.16));
-    const g = envGain(t, 0.004, BEAT / 2 - 0.01, 0.13, 'lin');
+    const g = envGain(t, 0.004, BEAT / 2 - 0.01, 0.12, 'lin');
     o.connect(lp); o2.connect(lp); lp.connect(g); route(g, { dest: bassBus });
     o.start(at(t)); o.stop(at(t + BEAT / 2)); o2.start(at(t)); o2.stop(at(t + BEAT / 2));
   });
-  for (let k = 17; k < 24; k++) {
-    bassBus.gain.setValueAtTime(0.2, at(beat(k)));
-    bassBus.gain.linearRampToValueAtTime(1, at(beat(k) + 0.16));
-  }
-  [[7.25, 392], [8.0, 440], [8.75, 523]].forEach(([t, f], i) => {
-    metal(t, 0.2, f, i % 2 ? 0.3 : -0.3);
-    sub(t, 0.35, 0.5, 80, 40);
-  });
-  whoosh(7.3, 0.7, 0.07, 300, 2000, 0.6, -0.4);
-  // Riser + accelerating snare roll into the shatter
-  swell(9.5, 0.75, 0.22, 500, 10000);
-  sawChord(8.75, [39, 46, 51], 0.72, { gain: 0.03, cutoff: 400, cutoff1: 6000, a: 0.7, verb: 0.3 });
+  for (const { t } of grid(C4 + 0.1, R0, BEAT)) { bassBus.gain.setValueAtTime(0.2, at(t)); bassBus.gain.linearRampToValueAtTime(1, at(t + 0.16)); }
+  // Rolling hiss rises as the ball skims toward the lens; riser and snare roll into the hit.
+  noise(8.4, T.SHATTER - 8.4, { type: 'bandpass', f: 300, f1: 2400, Q: 1.2, gain: 0.07, a: 0.8, curve: 'lin' });
+  swell(T.SHATTER, 0.9, 0.2, 500, 10000);
+  sawChord(T.SHATTER - 0.9, [39, 46, 51], 0.88, { gain: 0.03, cutoff: 400, cutoff1: 6000, a: 0.85, verb: 0.3 });
   {
-    let t = 8.75, i = 0;
-    while (t < 9.46) {
-      const u = (t - 8.75) / 0.71;
-      snare(t, 0.08 + 0.2 * u, (i % 2 ? 0.15 : -0.15));
-      t += 0.1875 * Math.pow(1 - u, 1.6) + 0.028;
-      i++;
+    let t = T.SHATTER - 0.9, i = 0;
+    while (t < T.SHATTER - 0.04) {
+      const u = (t - (T.SHATTER - 0.9)) / 0.86;
+      snare(t, 0.07 + 0.2 * u, i % 2 ? 0.15 : -0.15);
+      t += 0.1875 * Math.pow(1 - u, 1.6) + 0.026; i++;
     }
   }
-  osc('sawtooth', 110, 9.18, 0.32, { gain: 0.08, f1: 28, a: 0.01, curve: 'lin' });
-  paperCrunch(9.27, 0.23, 0.07, 30, 9);
-  swell(9.5, 0.2, 0.12, 3000, 14000);
+  osc('sawtooth', 110, R0, T.SHATTER - R0, { gain: 0.08, f1: 28, a: 0.01, curve: 'lin' });
+  swell(T.SHATTER, 0.2, 0.12, 3000, 14000);
 
   // --- 6. Shatter → title
   const r6 = rng(66);

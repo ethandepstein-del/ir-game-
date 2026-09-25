@@ -3,7 +3,7 @@
 // flickering through every style it has been on each little bounce.
 import { W, H, T, clamp, lerp, invLerp, ease, rng, smooth, shake, TAU, wobble, noise1, contactSquash } from '../core.js';
 import { makeCanvas, bloom, vignette, grain } from '../fx.js';
-import { tau, ball3D, camera3D, project, renderGL } from './chrome.js';
+import { tau, ball3D, camera3D, project, renderGL, hitTime } from './chrome.js';
 
 const BG = '#141413', IVORY = '#f0eee6', MUTED = '#a3a195', ACCENT = '#d97757', INK = '#1b1b2f';
 const FONT_PX = 300, BASE_Y = 668, SPACING = 9;
@@ -45,11 +45,11 @@ function buildShards(targets) {
   // Shatter origin: where the ball was on screen at the moment of the break.
   const tt = tau(T.SHATTER - 1e-3);
   const cam = camera3D(T.SHATTER - 1e-3, tt);
-  const b = ball3D(Math.min(tt, 9.36));
-  const pc = project(cam, b.p);
-  const pe = project(cam, [b.p[0] + cam.r[0], b.p[1] + cam.r[1], b.p[2] + cam.r[2]]);
+  const b = ball3D(hitTime());
+  const pc = project(cam, b.c) || { x: W / 2, y: H / 2, z: 1 };
+  // At the lens the ball fills the frame; shards start across a disc a bit larger than the screen.
   center0 = { x: pc.x, y: pc.y };
-  radius0 = Math.hypot(pe.x - pc.x, pe.y - pc.y);
+  radius0 = Math.min(1150, (1 / Math.max(0.05, pc.z) / cam.tanHalf) * (H / 2));
   const r = rng(99);
   targets.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const minX = targets[0][0], maxX = targets[targets.length - 1][0];
@@ -57,8 +57,8 @@ function buildShards(targets) {
     const a = r() * TAU, d = Math.sqrt(r()) * radius0 * 0.95;
     const x0 = center0.x + Math.cos(a) * d, y0 = center0.y + Math.sin(a) * d;
     const out = Math.atan2(y0 - center0.y, x0 - center0.x) + (r() - 0.5) * 0.5;
-    const sp = (380 + r() * 1300) * (0.5 + d / radius0);
-    const nv = 3 + Math.floor(r() * 3), size = radius0 * (0.045 + r() * 0.1);
+    const sp = (900 + r() * 2200) * (0.4 + d / radius0);
+    const nv = 3 + Math.floor(r() * 3), size = 16 + r() * 46;
     const verts = [];
     for (let k = 0; k < nv; k++) {
       const aa = (k / nv) * TAU + (r() - 0.5) * 0.9;
@@ -314,6 +314,48 @@ function drawPeriod(g, t) {
   g.restore();
 }
 
+// The lens glass cracks where the ball struck: radial fractures and a few concentric rings.
+let cracks = null;
+function lensCracks(g, t) {
+  const d = t - T.SHATTER;
+  if (d < 0 || d > 0.55) return;
+  if (!cracks) {
+    const r = rng(314);
+    cracks = [];
+    for (let i = 0; i < 16; i++) {
+      const a0 = (i / 16) * TAU + (r() - 0.5) * 0.3;
+      const pts = [[0, 0]];
+      let a = a0, rad = 0;
+      while (rad < 1400) { rad += 40 + r() * 90; a += (r() - 0.5) * 0.25; pts.push([Math.cos(a) * rad, Math.sin(a) * rad]); }
+      cracks.push({ pts, w: 1 + r() * 2.5 });
+    }
+    for (const rr of [90, 190, 330]) {
+      for (let i = 0; i < 16; i++) {
+        if (r() < 0.3) continue;
+        const a0 = (i / 16) * TAU, a1 = ((i + 1) / 16) * TAU;
+        const k0 = rr * (0.85 + r() * 0.3), k1 = rr * (0.85 + r() * 0.3);
+        cracks.push({ pts: [[Math.cos(a0) * k0, Math.sin(a0) * k0], [Math.cos(a1) * k1, Math.sin(a1) * k1]], w: 1.2, ring: true });
+      }
+    }
+  }
+  const grow = ease.outExpo(clamp(d / 0.08));
+  const fade = 1 - smooth(clamp((d - 0.2) / 0.35));
+  g.save();
+  g.translate(center0.x, center0.y);
+  g.lineCap = 'round';
+  for (const c of cracks) {
+    const n = Math.max(2, Math.ceil(c.pts.length * (c.ring ? (grow > 0.6 ? 1 : 0) : grow)));
+    if (n < 2) continue;
+    for (const [lw, col] of [[c.w + 3, `rgba(0,0,0,${0.35 * fade})`], [c.w, `rgba(235,245,255,${0.9 * fade})`]]) {
+      g.strokeStyle = col; g.lineWidth = lw;
+      g.beginPath();
+      c.pts.slice(0, n).forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.stroke();
+    }
+  }
+  g.restore();
+}
+
 export default {
   async init() {
     buildShards(buildLayout());
@@ -339,7 +381,7 @@ export default {
     if (dim > 0.001) {
       const tt = tau(t);
       const cam = camera3D(t, tt);
-      g.drawImage(renderGL({ cam, ball: ball3D(9.36), ballOn: false, dim, tt }), 0, 0);
+      g.drawImage(renderGL({ cam, ball: ball3D(hitTime()), ballOn: false, dim, tt }), 0, 0);
       g.fillStyle = BG;
       g.globalAlpha = 1 - dim;
       g.fillRect(0, 0, W, H);
@@ -356,6 +398,7 @@ export default {
     g.fillStyle = gl;
     g.fillRect(0, 0, W, H);
 
+    lensCracks(g, t);
     const slam = t - T.SLAM;
     g.save();
     // Gentle push-in over the hold, plus the slam punch.

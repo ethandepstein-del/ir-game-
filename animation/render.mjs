@@ -12,7 +12,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const FPS = 60, DURATION = 15, FRAMES = FPS * DURATION;
+const FPS = Number(process.env.FPS || 120), DURATION = 15, FRAMES = FPS * DURATION;
 const args = process.argv.slice(2);
 const mode = args[0] || 'video';
 const opt = (name, def) => {
@@ -52,10 +52,10 @@ async function openPage(port) {
 }
 
 async function capture(page, t, motionBlur = true) {
-  const b64 = await page.evaluate(([t, mb]) => {
-    window.BT.renderFrame(t, { motionBlur: mb });
+  const b64 = await page.evaluate(([t, mb, fps]) => {
+    window.BT.renderFrame(t, { motionBlur: mb, fps });
     return document.getElementById('c').toDataURL('image/png').split(',')[1];
-  }, [t, motionBlur]);
+  }, [t, motionBlur, FPS]);
   return Buffer.from(b64, 'base64');
 }
 

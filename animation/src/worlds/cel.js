@@ -1,6 +1,7 @@
 // World 2: flat cel animation. Bold 1950s palette, sunburst sky, thick ink lines, cel-shaded
 // ball, smear frames on the fast takeoff, dust puffs, and kinetic "BOING!" lettering.
-import { W, H, T, R, FLOOR, CAM_Z, CAM_CY, camX, applyCam, clamp, lerp, invLerp, ease, rng, shake, ball2D, beat, TAU, wobble, noise1 } from '../core.js';
+import { W, H, T, R, FLOOR, CAM_Z, CAM_CY, camFrame, applyCam, eventsOn, physics, clamp, lerp, invLerp, ease, rng, shake, ball2D, TAU, wobble, noise1 } from '../core.js';
+import { plateY } from '../physics.js';
 import { grain, vignette } from '../fx.js';
 
 const INK = '#1b1b2f';
@@ -10,7 +11,7 @@ const C = {
   ground: '#3d348b', groundL: '#5249a8', shadow: '#29236a',
   ball: '#ef3e36', ballD: '#b3202a', cream: '#fff4d6', cloud: '#fffaf0',
 };
-const IMPACT_BIG = T.CEL, IMPACT_SMALL = beat(6);
+let IMPACT_BIG = 0, IMPACT_SMALL = 0;
 
 // World → screen helpers for the current camera (set each draw).
 let cam = { x: 0, y: CAM_CY, z: CAM_Z };
@@ -80,8 +81,10 @@ function hills(g, offset, baseY, amp, color, dark, seed, stroke = true) {
   }
 }
 
-function tree(g, x, groundY, s, seed) {
+function tree(g, x, groundY, s, seed, lean = 0) {
   const r = rng(seed);
+  g.save();
+  g.translate(x, groundY); g.transform(1, 0, -lean, 1, 0, 0); g.translate(-x, -groundY);
   const h = (170 + r() * 90) * s, rad = (70 + r() * 30) * s;
   g.lineWidth = 7;
   g.strokeStyle = INK;
@@ -94,6 +97,7 @@ function tree(g, x, groundY, s, seed) {
   g.beginPath(); g.ellipse(x + rad * 0.45, groundY - h - rad * 0.45, rad * 0.8, rad * 1.1, 0, 0, TAU); g.fill();
   g.restore();
   g.beginPath(); g.ellipse(x, groundY - h - rad * 0.7, rad * 0.85, rad * 1.15, 0, 0, TAU); g.stroke();
+  g.restore();
 }
 
 // Cel-shaded ball: shading is lit from the top-left in screen space, clipped to the squashed shape.
@@ -104,7 +108,15 @@ function celBall(g, b, x, y) {
   g.fillStyle = C.ball; g.fill();
   g.save();
   g.clip();
-  g.fillStyle = C.ballD;
+  // Painted stripe that turns with the ball (spin from the simulation's friction).
+  g.save();
+  g.translate(x, y); g.rotate(b.spin);
+  g.fillStyle = C.cream;
+  g.fillRect(-R * 1.5, -R * 0.2, R * 3, R * 0.4);
+  g.fillStyle = C.ball;
+  g.fillRect(-R * 1.5, -R * 0.06, R * 3, R * 0.12);
+  g.restore();
+  g.fillStyle = 'rgba(120,8,24,0.5)';
   g.beginPath();
   g.rect(x - 300, y - 300, 600, 600);
   g.ellipse(x - R * 0.2, y - R * 0.24, R * 1.02, R * 1.0, 0, 0, TAU, true);
@@ -235,59 +247,106 @@ function boing(g, x, y, d) {
   g.restore();
 }
 
+// Trap-door launcher: a latched coil spring in a pit, the plate flush with the ground.
+function launcher(g, t) {
+  const pl = physics().run.plates.P1;
+  const x = pl.x, y = plateY(0, t);
+  const pw = 104, pitBot = FLOOR + 120;
+  g.fillStyle = '#1f1a52';
+  g.fillRect(x - pw, FLOOR, pw * 2, pitBot - FLOOR);
+  g.lineWidth = 7; g.strokeStyle = INK;
+  g.strokeRect(x - pw, FLOOR, pw * 2, pitBot - FLOOR);
+  // Coil: vibrates sideways after the plate slams into its stop.
+  const top = y + 18, bot = pitBot - 6, n = 7, cw = 58;
+  const since = pl.stoppedAt ? t - pl.stoppedAt : -1;
+  const sway = since >= 0 ? 16 * wobble(since, 9, 5) : 0;
+  const pts = [];
+  for (let i = 0; i <= n * 2; i++) {
+    const u = i / (n * 2);
+    pts.push([x + (i % 2 ? cw : -cw) + sway * Math.sin(u * Math.PI), lerp(bot, top, u)]);
+  }
+  for (const [lw, col] of [[14, INK], [6, '#c9ccd6']]) {
+    g.lineWidth = lw; g.strokeStyle = col; g.lineJoin = 'round'; g.lineCap = 'round';
+    g.beginPath(); pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke();
+  }
+  // Latch: a hook that swings open when the ball lands.
+  const rel = pl.releasedAt ? clamp((t - pl.releasedAt) / 0.06) : 0;
+  g.save();
+  g.translate(x + pw - 6, FLOOR - 4);
+  g.rotate(-ease.outBack(rel) * 1.3);
+  g.fillStyle = '#f2b134'; g.lineWidth = 6; g.strokeStyle = INK;
+  g.beginPath(); g.roundRect(-44, -8, 44, 16, 6); g.fill(); g.stroke();
+  g.restore();
+  // Plate
+  g.lineWidth = 7; g.strokeStyle = INK; g.fillStyle = C.cream;
+  g.beginPath(); g.roundRect(x - 90, y, 180, 18, 7); g.fill(); g.stroke();
+  g.fillStyle = C.ball;
+  for (let k = -2; k <= 2; k++) { g.beginPath(); g.roundRect(x + k * 34 - 9, y + 4, 18, 10, 3); g.fill(); }
+}
+
 export default {
+  shutter: () => ({ samples: 2, angle: 180 }),
   draw(g, t) {
+    IMPACT_BIG = T.CEL;
+    IMPACT_SMALL = eventsOn('cel')[0].t;
     const b = ball2D(t);
     const sk = shake(t, 16);
     const dBig = t - IMPACT_BIG, dSmall = t - IMPACT_SMALL;
-    const punch = 0.1 * Math.exp(-Math.max(0, dBig) * 7) + 0.03 * (dSmall > 0 ? Math.exp(-dSmall * 9) : 0);
-    cam = { x: camX(t), y: CAM_CY, z: CAM_Z * (1 + punch) };
-    const tilt = 0.05 * wobble(dBig, 1.6, 4) + sk.rot;
+    const fr = camFrame(t);
+    const punch = 0.08 * Math.exp(-Math.max(0, dBig) * 7) + 0.03 * (dSmall > 0 ? Math.exp(-dSmall * 9) : 0);
+    cam = { x: fr.x, y: fr.y, z: fr.z * (1 + punch) };
+    const tilt = 0.04 * wobble(dBig, 1.6, 4) + sk.rot;
 
-    // Sky and far layers in screen space with parallax.
     sunburst(g, t, Math.exp(-Math.max(0, dBig) * 5));
     const groundScreen = (FLOOR - cam.y) * cam.z + H / 2;
     g.save();
     g.translate(W / 2, H / 2); g.rotate(tilt * 0.5); g.translate(-W / 2, -H / 2);
-    cloud(g, 360 - cam.x * 0.25 % 2400 + 600, 250, 1.1);
-    cloud(g, 1500 - cam.x * 0.25 + 400, 170, 0.8);
-    cloud(g, 2400 - cam.x * 0.25 + 400, 300, 0.95);
+    const cl = fr.lift * 0.35;
+    cloud(g, 360 - (cam.x * 0.25) % 2400 + 600, 250 + cl, 1.1);
+    cloud(g, 1500 - cam.x * 0.25 + 400, 170 + cl, 0.8);
+    cloud(g, 2400 - cam.x * 0.25 + 400, 300 + cl, 0.95);
     hills(g, cam.x * 0.35, groundScreen - 60, 70, C.far, null, 5, false);
     hills(g, cam.x * 0.6, groundScreen - 10, 95, C.hill, null, 9, true);
     g.restore();
 
+    // Trees (parallax 0.8) lean and ring when an impact shakes the ground nearby.
+    const hits = physics().events.filter((e) => e.t <= t && e.t > t - 1.2);
     g.save();
     applyCam(g, cam.x * 0.8 + 192, cam.y, cam.z, { x: sk.x * 0.8, y: sk.y * 0.8, rot: tilt });
-    for (let i = -2; i < 9; i++) tree(g, 380 + i * 380 + (i % 2) * 70, FLOOR + 4, 0.62 + (i % 3) * 0.07, 30 + i);
+    for (let i = -2; i < 14; i++) {
+      const tx = 380 + i * 380 + (i % 2) * 70;
+      const wx = tx + 0.2 * cam.x - 192;
+      let lean = 0;
+      for (const e of hits) lean += 0.16 * Math.min(1.5, e.speed / 2500) * Math.exp(-Math.abs(e.x - wx) / 420) * wobble(t - e.t, 2.3, 3.2) * Math.sign(wx - e.x || 1);
+      tree(g, tx, FLOOR + 4, 0.62 + (i % 3) * 0.07, 30 + i, lean);
+    }
     g.restore();
     g.save();
     applyCam(g, cam.x, cam.y, cam.z, { x: sk.x, y: sk.y, rot: tilt });
-    // Ground
     g.fillStyle = C.ground;
-    g.fillRect(cam.x - 2000, FLOOR, 4000, 800);
+    g.fillRect(cam.x - 2400, FLOOR, 4800, 900);
     g.fillStyle = C.groundL;
-    for (let x = Math.floor((cam.x - 1200) / 120) * 120; x < cam.x + 1200; x += 120) {
+    for (let x = Math.floor((cam.x - 1400) / 120) * 120; x < cam.x + 1400; x += 120) {
       g.beginPath(); g.roundRect(x, FLOOR + 40 + ((x / 120) % 2) * 50, 56, 12, 6); g.fill();
     }
     g.lineWidth = 9;
     g.strokeStyle = INK;
-    g.beginPath(); g.moveTo(cam.x - 2000, FLOOR); g.lineTo(cam.x + 2000, FLOOR); g.stroke();
+    g.beginPath(); g.moveTo(cam.x - 2400, FLOOR); g.lineTo(cam.x + 2400, FLOOR); g.stroke();
+    const ix1 = physics().run.plates.P1.x, ix2 = eventsOn('cel')[0].x;
+    impactStar(g, ix1, FLOOR - 10, dBig, 0.55);
+    launcher(g, t);
 
-    // Contact shadow
-    const hN = clamp(b.h / 500);
+    const hN = clamp(b.h / 600);
     g.fillStyle = C.shadow;
-    g.beginPath(); g.ellipse(b.x, FLOOR + 10, R * (1.15 - 0.55 * hN) * (b.squash > 0.1 ? b.along : 1), 13 * (1 - 0.5 * hN), 0, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(b.cx, FLOOR + 10, R * (1.15 - 0.55 * hN) * (b.squash > 0.1 ? b.along : 1), 13 * (1 - 0.5 * hN), 0, 0, TAU); g.fill();
 
-    const ix1 = ball2D(IMPACT_BIG).x, ix2 = ball2D(IMPACT_SMALL).x;
-    impactStar(g, ix1, FLOOR - 10, dBig, 1);
-    dust(g, ix1, FLOOR, dBig, 1.2, 11);
-    dust(g, ix2, FLOOR, dSmall, 0.7, 12);
+    dust(g, ix2, FLOOR, dSmall, 1.1, 12);
 
     speedLines(g, b, t);
     const speed = Math.hypot(b.vx, b.vy);
-    if (speed > 1250 && b.squash < 0.2) smear(g, t);
+    if (speed > 1700 && b.pen <= 0) smear(g, t);
     celBall(g, b, b.x, b.y);
-    boing(g, ix1 + 500, FLOOR - 530, dBig);
+    boing(g, ix1 - 330, FLOOR - 600, dBig - 0.02);
     g.restore();
     vignette(g, 0.22, '120,40,0', 0.55);
     grain(g, t, 0.035);

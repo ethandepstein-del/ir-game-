@@ -1,12 +1,13 @@
 // World 1: the pencil test. Animation paper, blue construction lines, a timing chart,
 // onion skins, and a real pencil that draws the ball and taps it into motion. On 24s, boiling on 12s.
-import { W, H, T, R, FLOOR, X0, DROP, DROP_H, ARCS, CAM_Z, CAM_CY, applyCam, clamp, lerp, invLerp, ease, rng, hold, noise1, shake, ball2D, beat, TAU } from '../core.js';
+import { W, H, T, R, FLOOR, X0, Y0, CAM_Z, CAM_CY, applyCam, camFrame, physics, eventsOn, clamp, lerp, invLerp, ease, rng, noise1, shake, ball2D, TAU } from '../core.js';
 import { paperTexture, grain, vignette, makeCanvas } from '../fx.js';
 
 const GRAPHITE = [52, 50, 48];
 const BLUE = [92, 150, 214];
 const RED = [206, 72, 60];
-const Y0 = FLOOR - R - DROP_H; // where the ball is drawn before it drops
+const DROP_H = FLOOR - R - Y0;
+const tapTime = () => physics().params.tRelease;
 
 let paper, sheet; // paper texture and a pre-drawn sheet (paper + static notes)
 
@@ -63,10 +64,13 @@ function drawBall(g, x, y, b, seed, { draw = 1, hatch = 1, ghost = null } = {}) 
     return;
   }
   // Blue construction: centre cross and a loose guide circle.
+  const sp = b.spin || 0, cs = Math.cos(sp), sn = Math.sin(sp);
   if (draw > 0.05) {
     const a = clamp(draw * 1.5) * 0.55;
-    stroke(g, line(x - rx - 16, y, x + rx + 16, y, 6, 1, seed + 1), { color: BLUE, width: 1.4, alpha: a, seed: seed + 2, taper: false });
-    stroke(g, line(x, y - ry - 16, x, y + ry + 16, 6, 1, seed + 3), { color: BLUE, width: 1.4, alpha: a, seed: seed + 4, taper: false });
+    // The construction cross turns with the ball, the way animators track rotation.
+    const ex = rx + 16, ey = ry + 16;
+    stroke(g, line(x - cs * ex, y - sn * ey, x + cs * ex, y + sn * ey, 6, 1, seed + 1), { color: BLUE, width: 1.4, alpha: a, seed: seed + 2, taper: false });
+    stroke(g, line(x + sn * ex, y - cs * ey, x - sn * ex, y + cs * ey, 6, 1, seed + 3), { color: BLUE, width: 1.4, alpha: a, seed: seed + 4, taper: false });
     stroke(g, ellipsePts(x + 3, y - 2, rx * 1.04, ry * 1.04, rot, 0, TAU, seed + 5, 0.06), { color: BLUE, width: 1.3, alpha: a * 0.8, seed: seed + 6, taper: false });
   }
   // Graphite outline: starts upper-left, overshoots the join like a real hand.
@@ -74,6 +78,8 @@ function drawBall(g, x, y, b, seed, { draw = 1, hatch = 1, ghost = null } = {}) 
   const end = a0 + total * ease.inOutQuad(clamp(draw));
   if (draw > 0) stroke(g, ellipsePts(x, y, rx, ry, rot, a0, end, seed + 7), { width: 4.6, alpha: 0.92, seed: seed + 8 });
   if (draw > 0.9) stroke(g, ellipsePts(x, y, rx * 0.985, ry * 0.985, rot, a0 + 0.3, a0 + 0.3 + TAU * 0.6, seed + 9), { width: 1.8, alpha: 0.45, seed: seed + 10 });
+  // Seam line (half a great circle) drawn on the ball, turning with it.
+  if (hatch > 0.5) stroke(g, ellipsePts(x, y, rx * 0.42, ry * 0.97, sp + rot * 0, -Math.PI / 2, Math.PI / 2, seed + 12, 0.02), { width: 2.6, alpha: 0.75 * clamp((hatch - 0.5) * 2), seed: seed + 13 });
   // Crescent hatching on the lower right, clipped to the ball.
   if (hatch > 0) {
     g.save();
@@ -161,40 +167,39 @@ function drawPencil(g, x, y, ang, lift) {
   drawBody(g, false);
 }
 
-// Pencil choreography: returns tip position, body angle and lift.
+// Pencil choreography: draw the ball, hatch it, wind up and tap it at the solved release time.
 function pencilPose(t) {
-  const ang0 = -0.95;
-  if (t < 0.06) {
-    const u = ease.outCubic(t / 0.06);
-    return { x: lerp(X0 + 520, X0 + Math.cos(-2.2) * R, u), y: lerp(Y0 - 380, Y0 + Math.sin(-2.2) * R, u), ang: ang0 - 0.2 * (1 - u), lift: 60 * (1 - u) };
+  const ang0 = -0.95, tr = tapTime();
+  const cx = X0, cy = Y0;
+  if (t < 0.04) {
+    const u = ease.outCubic(t / 0.04);
+    return { x: lerp(cx + 520, cx + Math.cos(-2.2) * R, u), y: lerp(cy - 380, cy + Math.sin(-2.2) * R, u), ang: ang0 - 0.2 * (1 - u), lift: 60 * (1 - u) };
   }
-  if (t < 0.42) {
-    const d = ease.inOutQuad(invLerp(0.06, 0.42, t));
+  if (t < 0.34) {
+    const d = ease.inOutQuad(invLerp(0.04, 0.34, t));
     const a = -2.2 + (TAU + 0.5) * d;
-    return { x: X0 + Math.cos(a) * R, y: Y0 + Math.sin(a) * R, ang: ang0 + 0.08 * Math.sin(a), lift: 0 };
+    return { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, ang: ang0 + 0.08 * Math.sin(a), lift: 0 };
   }
-  if (t < 0.58) {
-    const u = invLerp(0.42, 0.58, t);
+  if (t < 0.46) {
+    const u = invLerp(0.34, 0.46, t);
     const zig = Math.abs(((u * 7) % 2) - 1);
-    const cx = X0 - R * 0.6 + u * R * 1.3;
-    return { x: cx + 30 * zig, y: Y0 + R * 0.55 - u * R * 0.25 - 70 * zig, ang: ang0, lift: 2 };
+    return { x: cx - R * 0.6 + u * R * 1.3 + 30 * zig, y: cy + R * 0.55 - u * R * 0.25 - 70 * zig, ang: ang0, lift: 2 };
   }
-  if (t < 0.72) {
-    // Lift and wind up above the ball (anticipation)
-    const u = ease.inOutCubic(invLerp(0.58, 0.72, t));
-    return { x: lerp(X0 + R * 0.6, X0 + 30, u), y: lerp(Y0 + R * 0.3, Y0 - R - 150, u), ang: ang0 + 0.35 * u, lift: 140 * u };
+  const hit = { x: cx - 26, y: cy - R + 6 };
+  if (t < tr - 0.035) {
+    const u = ease.inOutCubic(invLerp(0.46, tr - 0.035, t));
+    return { x: lerp(cx + R * 0.6, hit.x + 60, u), y: lerp(cy + R * 0.3, hit.y - 150, u), ang: ang0 + 0.35 * u, lift: 140 * u };
   }
-  if (t < 0.76) {
-    const u = ease.inQuad(invLerp(0.72, 0.76, t));
-    return { x: lerp(X0 + 30, X0 + 8, u), y: lerp(Y0 - R - 150, Y0 - R + 4, u), ang: ang0 + 0.35 - 0.2 * u, lift: 140 * (1 - u) };
+  if (t < tr) {
+    const u = ease.inQuad(invLerp(tr - 0.035, tr, t));
+    return { x: lerp(hit.x + 60, hit.x, u), y: lerp(hit.y - 150, hit.y, u), ang: ang0 + 0.35 - 0.2 * u, lift: 140 * (1 - u) };
   }
-  // Recoil and exit up-right
-  const u = ease.outCubic(invLerp(0.76, 1.15, t));
-  return { x: lerp(X0 + 8, X0 + 760, u), y: lerp(Y0 - R + 4, Y0 - 620, u), ang: ang0 + 0.15 + 0.5 * u, lift: 30 + 200 * u };
+  const u = ease.outCubic(invLerp(tr, tr + 0.4, t));
+  return { x: lerp(hit.x, hit.x + 760, u), y: lerp(hit.y, hit.y - 620, u), ang: ang0 + 0.15 + 0.5 * u, lift: 30 + 200 * u };
 }
 
 function buildSheet() {
-  sheet = makeCanvas(W + 240, H + 160);
+  sheet = makeCanvas(W + 900, H + 160);
   const g = sheet.getContext('2d');
   g.drawImage(paper, 0, 0);
   g.translate(120, 80);
@@ -206,23 +211,23 @@ function buildSheet() {
     g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 3; g.stroke();
     g.restore();
   };
-  hole(960, 38, 120, 26); hole(960 - 330, 38, 30, 30); hole(960 + 330, 38, 30, 30);
+  hole(1300, 38, 120, 26); hole(1300 - 330, 38, 30, 30); hole(1300 + 330, 38, 30, 30);
   // Field guide
-  const fr = { x: 150, y: 110, w: 1620, h: 860 };
+  const fr = { x: 420, y: 110, w: 1800, h: 860 };
   stroke(g, line(fr.x, fr.y, fr.x + fr.w, fr.y, 20, 1.2, 11), { color: BLUE, width: 1.5, alpha: 0.4, seed: 12, taper: false });
   stroke(g, line(fr.x + fr.w, fr.y, fr.x + fr.w, fr.y + fr.h, 20, 1.2, 13), { color: BLUE, width: 1.5, alpha: 0.4, seed: 14, taper: false });
   stroke(g, line(fr.x, fr.y + fr.h, fr.x + fr.w, fr.y + fr.h, 20, 1.2, 15), { color: BLUE, width: 1.5, alpha: 0.4, seed: 16, taper: false });
   stroke(g, line(fr.x, fr.y, fr.x, fr.y + fr.h, 20, 1.2, 17), { color: BLUE, width: 1.5, alpha: 0.4, seed: 18, taper: false });
-  stroke(g, line(960 - 26, 540, 960 + 26, 540, 4, 0.5, 19), { color: BLUE, width: 1.5, alpha: 0.45, seed: 20, taper: false });
-  stroke(g, line(960, 540 - 26, 960, 540 + 26, 4, 0.5, 21), { color: BLUE, width: 1.5, alpha: 0.45, seed: 22, taper: false });
+  stroke(g, line(1320 - 26, 540, 1320 + 26, 540, 4, 0.5, 19), { color: BLUE, width: 1.5, alpha: 0.45, seed: 20, taper: false });
+  stroke(g, line(1320, 540 - 26, 1320, 540 + 26, 4, 0.5, 21), { color: BLUE, width: 1.5, alpha: 0.45, seed: 22, taper: false });
   g.fillStyle = rgba(BLUE, 0.55);
   g.font = '600 30px Caveat';
   g.fillText('12 FLD', fr.x + 12, fr.y + fr.h - 14);
   // Floor line + ground ticks
-  stroke(g, line(40, FLOOR + 1, W - 40, FLOOR - 1, 40, 1.8, 31), { width: 3.4, alpha: 0.88, seed: 32 });
-  stroke(g, line(60, FLOOR + 3, W - 90, FLOOR + 2, 40, 2.2, 33), { width: 1.6, alpha: 0.4, seed: 34 });
+  stroke(g, line(40, FLOOR + 1, W + 700, FLOOR - 1, 60, 1.8, 31), { width: 3.4, alpha: 0.88, seed: 32 });
+  stroke(g, line(60, FLOOR + 3, W + 640, FLOOR + 2, 60, 2.2, 33), { width: 1.6, alpha: 0.4, seed: 34 });
   const r = rng(40);
-  for (let x = 70; x < W - 60; x += 34 + r() * 20) {
+  for (let x = 70; x < W + 680; x += 34 + r() * 20) {
     stroke(g, [[x, FLOOR + 12 + r() * 4], [x - 22, FLOOR + 38 + r() * 10]], { width: 1.5, alpha: 0.3, seed: 41 + x });
   }
   // Title block
@@ -234,17 +239,17 @@ function buildSheet() {
   g.fillStyle = rgba(GRAPHITE, 0.7);
   g.fillText('sc. 01 · on 1s @ 24', 882, 276);
   // Frame counter box
-  stroke(g, line(1480, 880, 1660, 880, 8, 1.4, 61), { width: 2, alpha: 0.6, seed: 62 });
-  stroke(g, line(1480, 950, 1660, 952, 8, 1.4, 63), { width: 2, alpha: 0.6, seed: 64 });
-  stroke(g, line(1480, 878, 1482, 952, 6, 1.4, 65), { width: 2, alpha: 0.6, seed: 66 });
-  stroke(g, line(1660, 878, 1658, 954, 6, 1.4, 67), { width: 2, alpha: 0.6, seed: 68 });
+  stroke(g, line(2000, 880, 2180, 880, 8, 1.4, 61), { width: 2, alpha: 0.6, seed: 62 });
+  stroke(g, line(2000, 950, 2180, 952, 8, 1.4, 63), { width: 2, alpha: 0.6, seed: 64 });
+  stroke(g, line(2000, 878, 2002, 952, 6, 1.4, 65), { width: 2, alpha: 0.6, seed: 66 });
+  stroke(g, line(2180, 878, 2178, 954, 6, 1.4, 67), { width: 2, alpha: 0.6, seed: 68 });
 }
 
 // Timing chart (top right): ease-in spacing, drawn progressively.
 function drawChart(g, t) {
   const p = clamp(invLerp(0.7, 1.3, t));
   if (p <= 0) return;
-  const x0 = 1260, x1 = 1640, y = 206;
+  const x0 = 1720, x1 = 2100, y = 206;
   const n = Math.floor(p * 40);
   stroke(g, line(x0, y, lerp(x0, x1, p), y, 14, 0.8, 71), { width: 2.2, alpha: 0.8, seed: 72 });
   const ticks = 9;
@@ -266,96 +271,91 @@ function drawChart(g, t) {
   if (n > 30) {
     g.fillStyle = rgba(RED, 0.85 * clamp((p - 0.75) * 5));
     g.font = '600 32px Caveat';
-    g.fillText('slow out  →  fast in', 1320, 262);
+    g.fillText('slow out  →  fast in', 1780, 262);
   }
 }
 
-// Planned path in blue (dashed), revealed along its length.
+// Planned path in blue (dashed): the simulated trajectory, revealed along its length.
 function drawPlan(g, t) {
-  const p = clamp(invLerp(0.4, 0.78, t));
+  const p = clamp(invLerp(0.36, 0.7, t));
   if (p <= 0) return;
-  const tEnd = lerp(DROP, T.CEL + 0.35, ease.outCubic(p));
-  const pts = [];
-  for (let tt = DROP; tt <= tEnd; tt += 1 / 90) {
-    const b = ball2D(tt);
-    pts.push([b.x, FLOOR - R - b.h]);
-  }
+  const tr = tapTime();
+  const tEnd = lerp(tr, T.CEL + 0.3, ease.outCubic(p));
   g.save();
   g.setLineDash([10, 12]);
-  g.lineDashOffset = 0;
   g.strokeStyle = rgba(BLUE, 0.55);
   g.lineWidth = 2;
   g.lineCap = 'round';
   g.beginPath();
-  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  for (let tt = tr, i = 0; tt <= tEnd; tt += 1 / 120, i++) {
+    const b = ball2D(tt);
+    i ? g.lineTo(b.cx, b.cy) : g.moveTo(b.cx, b.cy);
+  }
   g.stroke();
   g.restore();
-  // Contact keys marked with an X.
-  for (const a of ARCS.slice(0, 3)) {
-    if (a.t1 > tEnd) break;
-    const b = ball2D(a.t1 - 1e-4);
-    const x = b.x, y = FLOOR;
-    stroke(g, [[x - 12, y - 12], [x + 12, y + 12]], { color: BLUE, width: 2.2, alpha: 0.7, seed: 90 + a.t1 * 10 });
-    stroke(g, [[x + 12, y - 12], [x - 12, y + 12]], { color: BLUE, width: 2.2, alpha: 0.7, seed: 95 + a.t1 * 10 });
+  // Contact keys marked with an X where the simulation says the ball will land.
+  for (const e of physics().events.filter((ev) => ev.t <= Math.min(tEnd, T.CEL + 0.01))) {
+    const x = e.x, y = FLOOR;
+    stroke(g, [[x - 12, y - 12], [x + 12, y + 12]], { color: BLUE, width: 2.2, alpha: 0.7, seed: 90 + e.t * 10 });
+    stroke(g, [[x + 12, y - 12], [x - 12, y + 12]], { color: BLUE, width: 2.2, alpha: 0.7, seed: 95 + e.t * 10 });
   }
 }
 
 export default {
   async init() {
-    paper = paperTexture(W + 240, H + 160, 7, [246, 243, 234], { fibers: 2200, blotch: 0.06, dark: 0.08 });
+    paper = paperTexture(W + 900, H + 160, 7, [246, 243, 234], { fibers: 3000, blotch: 0.06, dark: 0.08 });
     buildSheet();
   },
+  shutter: () => ({ samples: 2, angle: 180 }),
   draw(g, t) {
-    const tq = hold(t, 24);
-    const boil = Math.floor(t * 12);
+    const boil = Math.floor(t * 24);
     const sk = shake(t, 14);
-    // Start close on the pencil, pull back to the full sheet by the cut.
-    const u = ease.inOutCubic(invLerp(0.45, 1.92, t));
-    const zoom = lerp(1.95, CAM_Z, u) + 0.02 * (1 - u) * noise1(t * 0.9);
-    const cx = lerp(X0 + 70, 960, u), cy = lerp(Y0 + 110, CAM_CY, u);
+    const tr = tapTime();
+    // Start close on the pencil, pull back and pan to the tracking framing by the cut.
+    const end = camFrame(T.CEL);
+    // Pull back fast enough to see the first contact, then settle into the tracking framing.
+    // Hold the close-up through the tap, then pull back in time to see the first contact.
+    const u = ease.inOutCubic(invLerp(tr - 0.03, 1.04, t)), u2 = ease.inOutCubic(invLerp(tr - 0.03, T.CEL - 0.04, t));
+    const zoom = lerp(1.9, lerp(1.28, end.z, u2), u) + 0.02 * (1 - u) * noise1(t * 0.9);
+    const cx = lerp(X0 + 90, end.x, u2), cy = lerp(Y0 + 40, lerp(560, end.y, u2), u);
     g.fillStyle = '#26211d';
     g.fillRect(0, 0, W, H);
     g.save();
     applyCam(g, cx, cy, zoom, { x: sk.x, y: sk.y, rot: sk.rot + 0.006 * noise1(t * 0.7) * (1 - u) });
-    // Paper sheet (slightly jittered per drawing, like sheets on pegs)
     const jr = rng(boil * 7 + 1);
-    g.drawImage(sheet, -120 + (jr() - 0.5) * 1.2, -80 + (jr() - 0.5) * 1.2);
+    g.drawImage(sheet, -120 + (jr() - 0.5) * 0.8, -80 + (jr() - 0.5) * 0.8);
 
     drawChart(g, t);
     drawPlan(g, t);
 
-    // Frame counter
     g.fillStyle = rgba(GRAPHITE, 0.85);
     g.font = '600 50px Caveat';
-    g.fillText(`fr ${String(Math.floor(t * 24) + 1).padStart(3, '0')}`, 1502, 934);
+    g.fillText(`fr ${String(Math.floor(t * 24) + 1).padStart(3, '0')}`, 2022, 934);
 
-    const b = ball2D(tq);
-    // Tap squash from the pencil
-    if (tq >= 0.75 && tq < 0.82) { b.across = 0.9; b.along = 1.08; b.angle = 0; }
-    const drawP = clamp(invLerp(0.06, 0.42, t));
-    const hatchP = clamp(invLerp(0.42, 0.58, t));
-    const bx = b.x, by = t < DROP ? Y0 : b.y;
+    const b = ball2D(t);
+    const drawP = clamp(invLerp(0.04, 0.34, t));
+    const hatchP = clamp(invLerp(0.34, 0.46, t));
 
     // Contact shadow smudge
     const hNorm = clamp(b.h / DROP_H);
     if (drawP > 0.95) {
-      const sg = g.createRadialGradient(bx, FLOOR + 4, 0, bx, FLOOR + 4, R * (1.3 - 0.5 * hNorm));
+      const sg = g.createRadialGradient(b.cx, FLOOR + 4, 0, b.cx, FLOOR + 4, R * (1.3 - 0.5 * hNorm));
       sg.addColorStop(0, rgba(GRAPHITE, 0.22 * (1 - hNorm * 0.8)));
       sg.addColorStop(1, rgba(GRAPHITE, 0));
       g.fillStyle = sg;
-      g.beginPath(); g.ellipse(bx, FLOOR + 4, R * 1.4, 16, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(b.cx, FLOOR + 4, R * 1.4, 16, 0, 0, TAU); g.fill();
     }
-    // Onion skins: the previous two drawings, in blue and red.
-    if (tq > DROP + 0.05) {
-      const g2 = ball2D(tq - 2 / 24), g1 = ball2D(tq - 1 / 24);
-      drawBall(g, g2.x, g2.y, g2, boil * 13 + 5, { ghost: { color: RED, alpha: 0.22 } });
-      drawBall(g, g1.x, g1.y, g1, boil * 13 + 9, { ghost: { color: BLUE, alpha: 0.35 } });
+    // Onion skins: the previous two drawings (a 24 fps pencil test's light table), blue and red.
+    if (t > tr + 0.05) {
+      const g2 = ball2D(t - 2 / 24), g1 = ball2D(t - 1 / 24);
+      drawBall(g, g2.x, g2.y, g2, boil * 13 + 5, { ghost: { color: RED, alpha: 0.2 } });
+      drawBall(g, g1.x, g1.y, g1, boil * 13 + 9, { ghost: { color: BLUE, alpha: 0.32 } });
     }
-    drawBall(g, bx, by, b, boil * 31 + 3, { draw: drawP, hatch: hatchP });
+    drawBall(g, b.x, b.y, b, boil * 31 + 3, { draw: drawP, hatch: hatchP });
 
-    // Impact accents at the first contact
-    const since = tq - beat(2);
-    const ix = ball2D(beat(2)).x;
+    // Impact accents and the "squash!" note at the first contact
+    const first = eventsOn('pencil')[0];
+    const since = t - first.t, ix = first.x;
     if (since >= 0 && since < 0.2) {
       const a = 1 - since / 0.2;
       for (let i = 0; i < 3; i++) {
@@ -363,10 +363,8 @@ export default {
         stroke(g, [[ix + side * (R + 22), FLOOR - 10 - Math.abs(side) * 4], [ix + side * (R + 62), FLOOR - 36 - Math.abs(side) * 14]], { width: 2.6, alpha: 0.8 * a, seed: 300 + i + boil });
       }
     }
-    // "squash!" note in red pencil, pops on at contact and stays.
-    const nt = t - beat(2);
-    if (nt >= 0) {
-      const s = ease.outBack(clamp(nt / 0.16));
+    if (since >= 0) {
+      const s = ease.outBack(clamp(since / 0.16));
       g.save();
       g.translate(ix - 240, FLOOR - 200);
       g.rotate(-0.08);
@@ -375,20 +373,19 @@ export default {
       g.font = '600 54px Caveat';
       g.fillText('squash!', -60, 0);
       g.restore();
-      const ap = clamp((nt - 0.06) / 0.14);
+      const ap = clamp((since - 0.06) / 0.14);
       if (ap > 0) {
         const pts = [];
         for (let i = 0; i <= 10 * ap; i++) {
-          const u = i / 10;
-          pts.push([lerp(ix - 200, ix - R - 18, u), lerp(FLOOR - 186, FLOOR - 44, u) - Math.sin(u * Math.PI) * 40]);
+          const k = i / 10;
+          pts.push([lerp(ix - 200, ix - R - 18, k), lerp(FLOOR - 186, FLOOR - 44, k) - Math.sin(k * Math.PI) * 40]);
         }
         stroke(g, pts, { color: RED, width: 3, alpha: 0.85, seed: 400 });
       }
     }
-    // The pencil itself
-    if (t < 1.15) {
-      const p = pencilPose(t);
-      drawPencil(g, p.x, p.y, p.ang, p.lift);
+    if (t < tr + 0.4) {
+      const pp = pencilPose(t);
+      drawPencil(g, pp.x, pp.y, pp.ang, pp.lift);
     }
     g.restore();
     vignette(g, 0.32, '60,40,20');

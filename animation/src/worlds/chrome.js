@@ -1,104 +1,104 @@
-// World 5: 3D chrome. An analytic ray tracer in a WebGL2 fragment shader: chrome ellipsoid ball
-// (true squash & stretch), glossy lacquer floor with a grid, studio softboxes, impact shockwaves,
-// glowing cracks before the shatter. The camera swings from the 2D side view into 3D.
-import { W, H, T, clamp, lerp, invLerp, ease, rng, smooth, contactSquash, shake, TAU, noise1 } from '../core.js';
+// World 5: 3D chrome. An analytic ray tracer in a WebGL2 fragment shader. The ball is an engraved
+// steel boule (true squash along the contact normal, grooves that show its spin) driven by the
+// same physics as every other world. The floor is a glossy lacquer slope: gravity speeds the ball
+// up while restitution bleeds its bounces, so the rhythm quickens toward the camera, which has
+// been placed exactly where the ball will be. It hits the lens.
+import { W, H, T, clamp, lerp, invLerp, ease, rng, smooth, shake, TAU, noise1, physics } from '../core.js';
+import { ballChrome, SLOPE } from '../physics.js';
 import { makeCanvas, bloom, vignette, grain } from '../fx.js';
 
+const N = [Math.sin(SLOPE), Math.cos(SLOPE), 0];      // floor normal (plane through the origin)
+const TD = [Math.cos(SLOPE), -Math.sin(SLOPE), 0];    // downhill direction along the floor
+
 // ---------------------------------------------------------------- time remap (speed ramp)
-const RAMP0 = 9.18;
-export function tau(t) {
-  if (t <= RAMP0) return t;
-  // Integrate a speed curve that eases from 1 down to 0.22 (slow motion into the shatter).
-  const n = 40, dt = (t - RAMP0) / n;
+// Real time runs 1:1 until RAMP0, then eases into slow motion (0.2×) for the lens hit at 9.5 s.
+// RAMP0 is solved so the physics time at 9.5 s is exactly the moment of contact with the lens.
+let RAMP0 = 9.1, T_HIT = 9.3;
+function rampInt(r0, t) {
+  if (t <= r0) return t;
+  const n = 48, dt = (t - r0) / n;
   let acc = 0;
   for (let i = 0; i < n; i++) {
-    const u = RAMP0 + (i + 0.5) * dt;
-    acc += (1 - 0.78 * smooth(clamp((u - RAMP0) / 0.28))) * dt;
+    const u = r0 + (i + 0.5) * dt;
+    acc += (1 - 0.8 * smooth(clamp((u - r0) / 0.3))) * dt;
   }
-  return RAMP0 + acc;
+  return r0 + acc;
 }
+export const tau = (t) => rampInt(RAMP0, t);
 
-// ---------------------------------------------------------------- ball in 3D (units: ball radius)
-const G3 = 4150 / 84;
-const IMP3 = [T.CHROME, 7.25, 8.0, 8.75];
-const V3 = 290 / 84;
-const LAUNCH = 8.75, LAUNCH_V = G3 * 0.45;
-export function ball3D(tt) {
-  let h = 0, v = 0;
-  if (tt < LAUNCH) {
-    for (let i = 0; i < 3; i++) {
-      const a = IMP3[i], b = IMP3[i + 1];
-      if (tt >= a && tt < b) { const s = tt - a, D = b - a; h = 0.5 * G3 * s * (D - s); v = G3 * (D / 2 - s); }
-    }
-  } else {
-    const s = tt - LAUNCH;
-    h = LAUNCH_V * s - 0.5 * G3 * s * s; v = LAUNCH_V - G3 * s;
-  }
-  const x = tt < LAUNCH ? V3 * (tt - T.CHROME) : V3 * (LAUNCH - T.CHROME) + 7.5 * (tt - LAUNCH);
-  const vx = tt < LAUNCH ? V3 : 7.5;
-  const { squash, ring } = contactSquash(tt, IMP3);
-  // Axis + scale: squash along world up, otherwise stretch along velocity.
-  let axis, k;
-  if (squash > 0.02) { axis = [0, 1, 0]; k = 1 - 0.45 * squash + 0.05 * ring; }
-  else {
-    const sp = Math.hypot(vx, v);
-    axis = [vx / sp, v / sp, 0];
-    k = 1 + clamp((sp - 8) / 28) * 0.3;
-  }
-  const perp = 1 / Math.sqrt(k);
-  const y = squash > 0.02 ? k : 1 + h;
-  // M = perp*I + (k - perp) * a a^T ; Minv = (1/perp) I + (1/k - 1/perp) a a^T
-  const minv = [];
-  for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) minv.push((r === c ? 1 / perp : 0) + (1 / k - 1 / perp) * axis[r] * axis[c]);
-  return { p: [x, y, 0], v: [vx, v, 0], minv, h };
-}
-
-// ---------------------------------------------------------------- camera
-// [tau, azimuth, distance, camHeight, lookHeight, fovDeg, roll]
-const KEYS = [
-  [6.30, 0.00, 16.3, 3.23, 3.23, 35, 0.0],
-  [6.50, 0.00, 16.3, 3.23, 3.23, 35, 0.0],
-  [6.95, 0.30, 12.5, 2.3, 2.3, 38, 0.035],
-  [7.55, 0.80, 9.4, 1.35, 1.8, 41, 0.05],
-  [8.20, 1.12, 8.0, 0.85, 1.7, 43, 0.02],
-  [8.85, 1.36, 7.2, 0.8, 2.0, 45, -0.03],
-  [9.40, 1.50, 3.6, 3.2, 3.6, 50, -0.07],
-  [9.80, 1.54, 3.4, 3.3, 3.6, 52, -0.08],
-];
-function catmull(p0, p1, p2, p3, u) {
-  const u2 = u * u, u3 = u2 * u;
-  return 0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 + (-p0 + 3 * p1 - 3 * p2 + p3) * u3);
-}
-function keyAt(tt) {
-  let i = KEYS.findIndex((k) => k[0] > tt) - 1;
-  if (i < 0) i = tt < KEYS[0][0] ? 0 : KEYS.length - 2;
-  i = clamp(i, 0, KEYS.length - 2);
-  const a = KEYS[Math.max(0, i - 1)], b = KEYS[i], c = KEYS[i + 1], d = KEYS[Math.min(KEYS.length - 1, i + 2)];
-  const u = clamp((tt - b[0]) / (c[0] - b[0]));
-  return b.map((_, j) => catmull(a[j], b[j], c[j], d[j], u));
-}
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const norm = (a) => { const l = Math.hypot(...a); return [a[0] / l, a[1] / l, a[2] / l]; };
+const vlerp = (a, b, u) => [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u)];
 
-export function camera3D(t, tt, ballOverride) {
-  const [, az, dist, ch, lookY, fov, roll] = keyAt(tt);
-  const b = ballOverride || ball3D(Math.min(tt, 9.36));
-  // Track the ball; in the final launch, tilt up to follow it.
-  const follow = smooth(clamp((tt - 8.85) / 0.45));
-  const bx = b.p[0];
-  const target = [bx, lerp(lookY, b.p[1], 0.45 + 0.4 * follow), 0];
+// Ball state in 3D, plus the inverse shape matrix for the shader (squash along the contact normal).
+export function ball3D(tt) {
+  const b = ballChrome(tt);
+  const q = b.q;
+  const k = clamp(1 - q * 0.55, 0.5, 1.25);   // axis scale along the normal
+  const perp = 1 / Math.sqrt(k);
+  const ax = [Math.cos(b.na), Math.sin(b.na), 0];
+  const minv = [];
+  for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) minv.push((r === c ? 1 / perp : 0) + (1 / k - 1 / perp) * ax[r] * ax[c]);
+  // Keep the flattened side on the floor while in contact.
+  const shift = b.pen > 0 ? (1 - k) - b.pen : 0;
+  const p = [b.x - ax[0] * shift, b.y - ax[1] * shift, 0];
+  return { p, c: [b.x, b.y, 0], v: [b.vx, b.vy, 0], minv, th: b.th, pen: b.pen };
+}
+
+// Final camera: on the ball's path, a hair beyond its surface, looking back up the slope.
+let FINAL = null;
+function finalCam() {
+  if (FINAL) return FINAL;
+  const b = ball3D(T_HIT);
+  const dir = norm(b.v);
+  const pos = add(b.c, mul(dir, 1.04));
+  FINAL = { pos, look: mul(dir, -1) };
+  return FINAL;
+}
+
+function solveRamp() {
+  const P = physics();
+  const ev = P.chrome.events;
+  // Hit the lens during a hop late in the run (the ball is skipping fast by then).
+  const late = ev.filter((e) => e.t > 9.1 && e.t < 9.4);
+  const e0 = late.length ? late[0] : ev[ev.length - 1];
+  const e1 = ev.find((e) => e.t > e0.t + 1e-3);
+  T_HIT = e1 ? e0.t + (e1.t - e0.t) * 0.5 : e0.t + 0.05;
+  let lo = 8.6, hi = 9.49;
+  for (let i = 0; i < 40; i++) {
+    const m = 0.5 * (lo + hi);
+    if (rampInt(m, T.SHATTER) > T_HIT) hi = m; else lo = m;
+  }
+  RAMP0 = 0.5 * (lo + hi);
+  FINAL = null;
+}
+
+export function camera3D(t, tt) {
+  const b = ball3D(Math.min(tt, T_HIT));
+  const t0 = T.CHROME;
+  // Orbit: from the 2D side view (az 0, rolled to the slope) around to face the ball.
+  const u = ease.inOutCubic(clamp((tt - t0) / 1.6));
+  const az = lerp(0, 1.15, u), dist = lerp(15, 8.5, u), hgt = lerp(2.6, 1.6, u);
+  const orbitTarget = add(b.c, [lerp(0, 1.2, u), lerp(1.0, 0.4, u), 0]);
+  const orbitPos = add(b.c, [dist * Math.sin(az), hgt, dist * Math.cos(az)]);
+  const F = finalCam();
+  const w = smooth(clamp((tt - (t0 + 1.3)) / 1.4));
+  const pos = vlerp(orbitPos, F.pos, w);
+  const target = vlerp(orbitTarget, add(F.pos, mul(F.look, 6)), w);
   const sk = shake(t, 1);
-  const pos = [bx + dist * Math.sin(az) + sk.x * 0.004, ch + sk.y * 0.004, dist * Math.cos(az)];
-  const f = norm(sub(target, pos));
+  const p2 = [pos[0] + sk.x * 0.003 * (1 - w * 0.8), pos[1] + sk.y * 0.003 * (1 - w * 0.8), pos[2]];
+  const f = norm(sub(target, p2));
   let r = norm(cross(f, [0, 1, 0]));
-  let u = cross(r, f);
-  const rr = roll + sk.rot * 2;
-  const cr = Math.cos(rr), sr = Math.sin(rr);
-  [r, u] = [[r[0] * cr + u[0] * sr, r[1] * cr + u[1] * sr, r[2] * cr + u[2] * sr], [u[0] * cr - r[0] * sr, u[1] * cr - r[1] * sr, u[2] * cr - r[2] * sr]];
-  const tanHalf = Math.tan((fov * Math.PI) / 360);
-  return { pos, f, r, u, tanHalf };
+  let up = cross(r, f);
+  const roll = lerp(-SLOPE, 0, u) + sk.rot * 2;
+  const cr = Math.cos(roll), sr = Math.sin(roll);
+  [r, up] = [add(mul(r, cr), mul(up, sr)), sub(mul(up, cr), mul(r, sr))];
+  const fov = lerp(34, 46, w);
+  return { pos: p2, f, r, u: up, tanHalf: Math.tan((fov * Math.PI) / 360) };
 }
 export function project(cam, p) {
   const v = sub(p, cam.pos);
@@ -118,7 +118,8 @@ uniform vec3 uCamPos, uCamR, uCamU, uCamF;
 uniform float uTan;
 uniform vec3 uBallC;
 uniform mat3 uMinv;
-uniform float uBallOn, uCrack, uDim, uTime, uFlash;
+uniform float uBallOn, uCrack, uDim, uTime, uFlash, uSpin;
+uniform vec3 uN, uTD;
 uniform vec4 uRings[4];
 
 vec3 rectLight(vec3 d, vec3 C, vec2 hs, float soft) {
@@ -165,12 +166,14 @@ vec3 floorBase(vec3 p, float dist) {
   vec3 col = vec3(0.010, 0.011, 0.014) * uDim;
   float aa = 0.0012 * dist + 0.004;
   float fade = exp(-dist * 0.045);
-  col += vec3(0.25, 0.55, 1.0) * 0.10 * gridLine(p.xz / 2.0, 0.012, aa) * fade * uDim;
-  col += vec3(0.35, 0.65, 1.0) * 0.16 * gridLine(p.xz / 10.0, 0.004, aa * 0.2) * fade * uDim;
+  vec2 fp = vec2(dot(p, uTD), p.z);
+  col += vec3(0.25, 0.55, 1.0) * 0.10 * gridLine(fp / 2.0, 0.012, aa) * fade * uDim;
+  col += vec3(0.35, 0.65, 1.0) * 0.16 * gridLine(fp / 10.0, 0.004, aa * 0.2) * fade * uDim;
   // Contact shadow / AO under the ball
   if (uBallOn > 0.5) {
-    float hgt = max(uBallC.y - 1.0, 0.0);
-    vec2 dxz = p.xz - uBallC.xz;
+    float hgt = max(dot(uBallC, uN) - 1.0, 0.0);
+    vec3 dd = p - uBallC;
+    vec2 dxz = vec2(dot(dd, uTD), dd.z);
     float ao = exp(-dot(dxz, dxz) / (0.9 + hgt * 0.8)) / (1.0 + hgt * 0.5);
     col *= 1.0 - 0.9 * ao;
   }
@@ -178,12 +181,12 @@ vec3 floorBase(vec3 p, float dist) {
     vec4 r = uRings[i];
     if (r.w < 0.0 || r.w > 1.2) continue;
     float age = r.w;
-    float rr = length(p.xz - r.xz);
+    float rr = length(p - r.xyz);
     float rad = 0.9 + 11.0 * pow(age, 0.6);
     float w = 0.10 + age * 0.5;
     float ring = exp(-pow((rr - rad) / w, 2.0)) * exp(-age * 3.2);
     col += vec3(0.55, 0.85, 1.0) * ring * 1.6;
-    col += vec3(1.0, 0.8, 0.6) * exp(-rr * rr * 1.5) * exp(-age * 14.0) * 3.0;
+    col += vec3(1.0, 0.8, 0.6) * exp(-rr * rr * 2.5) * exp(-age * 18.0) * 1.1;
   }
   return col;
 }
@@ -198,20 +201,75 @@ float cell(vec3 q, out float f2) {
   }
   return f1;
 }
+// Colonnade along the slope: glossy black pillars with emissive strips on their inner faces.
+// Boxes live in the slope frame (s downhill, h above the floor, z across).
+const float SPACING = 7.0, PZ = 6.5, PW = 0.45, PH = 8.0;
+float hitPillars(vec3 ro, vec3 rd, out vec3 nrm, out vec3 info) {
+  vec3 o = vec3(dot(ro, uTD), dot(ro, uN), ro.z), d = vec3(dot(rd, uTD), dot(rd, uN), rd.z);
+  float best = 1e9;
+  for (int side = 0; side < 2; side++) {
+    float zc = side == 0 ? -PZ : PZ;
+    for (int i = -2; i < 13; i++) {
+      float sc = float(i) * SPACING;
+      if (side == 1 && sc < 20.0) continue;
+      vec3 lo = vec3(sc - PW, 0.0, zc - PW), hi = vec3(sc + PW, PH, zc + PW);
+      vec3 inv = 1.0 / d;
+      vec3 t0 = (lo - o) * inv, t1 = (hi - o) * inv;
+      vec3 tmin = min(t0, t1), tmax = max(t0, t1);
+      float tn = max(max(tmin.x, tmin.y), tmin.z), tf = min(min(tmax.x, tmax.y), tmax.z);
+      if (tn < tf && tn > 0.001 && tn < best) {
+        best = tn;
+        vec3 ln = tn == tmin.x ? vec3(-sign(d.x), 0, 0) : tn == tmin.y ? vec3(0, -sign(d.y), 0) : vec3(0, 0, -sign(d.z));
+        nrm = ln.x * uTD + ln.y * uN + vec3(0, 0, ln.z);
+        vec3 lp = o + d * tn;
+        info = vec3(lp.x - sc, lp.y, float(i) + (side == 0 ? 0.0 : 0.5));
+        if (ln.z != 0.0) info.x = 99.0 + (lp.x - sc);
+      }
+    }
+  }
+  return best < 1e8 ? best : -1.0;
+}
+vec3 pillarShade(vec3 p, vec3 n, vec3 rd, vec3 info) {
+  vec3 rr = reflect(rd, n);
+  float fres = 0.04 + 0.96 * pow(1.0 - abs(dot(rd, n)), 5.0);
+  vec3 col = vec3(0.012, 0.013, 0.017) * uDim + env(rr, 0.35) * mix(0.08, 0.6, fres);
+  // Inner and outer faces carry a thin light strip; its hue alternates down the colonnade.
+  bool face = info.x > 50.0;
+  float u = face ? info.x - 99.0 : info.x;
+  float strip = 1.0 - smoothstep(0.03, 0.07, abs(u));
+  float cap = smoothstep(PH - 0.12, PH - 0.02, info.y);
+  vec3 hue = mod(floor(info.z), 2.0) < 1.0 ? vec3(0.35, 0.75, 1.0) : vec3(1.0, 0.55, 0.28);
+  col += hue * (strip * (face ? 3.2 : 0.6) + cap * 1.5) * uDim;
+  return col;
+}
 vec3 ballShade(vec3 p, vec3 n, vec3 rd) {
   vec3 rr = reflect(rd, n);
   vec3 refl;
-  if (rr.y < 0.0) {
-    float tf = -p.y / rr.y;
+  float dn = dot(rr, uN);
+  vec3 pn, pinfo;
+  float tpil = hitPillars(p, rr, pn, pinfo);
+  float tfl = dn < 0.0 ? -dot(p, uN) / dn : 1e9;
+  if (tpil > 0.0 && tpil < tfl) {
+    refl = pillarShade(p + rr * tpil, pn, rr, pinfo);
+  } else if (dn < 0.0) {
+    float tf = -dot(p, uN) / dn;
     vec3 fp = p + rr * tf;
-    vec3 fr = vec3(rr.x, -rr.y, rr.z);
-    float fres = 0.04 + 0.96 * pow(1.0 - abs(rr.y), 5.0);
+    vec3 fr = reflect(rr, uN);
+    float fres = 0.04 + 0.96 * pow(1.0 - abs(dn), 5.0);
     refl = floorBase(fp, tf + 6.0) + env(fr, 1.0) * fres * 0.6;
   } else refl = env(rr, 1.0);
   float cosT = clamp(dot(-rd, n), 0.0, 1.0);
   vec3 F0 = vec3(0.97, 0.95, 0.92);
   vec3 F = F0 + (1.0 - F0) * pow(1.0 - cosT, 5.0);
   vec3 col = refl * F;
+  // Engraved grooves of a steel boule, in the ball's own (spinning) frame.
+  vec3 q = normalize(uMinv * (p - uBallC));
+  float cs = cos(-uSpin), sn = sin(-uSpin);
+  vec3 qs = vec3(q.x * cs - q.y * sn, q.x * sn + q.y * cs, q.z);
+  float gd = min(min(abs(qs.x), abs(qs.y)), abs(abs(qs.z) - 0.55));
+  float groove = 1.0 - smoothstep(0.012, 0.03, gd);
+  float lip = (1.0 - smoothstep(0.03, 0.045, gd)) - groove;
+  col = col * (1.0 - 0.78 * groove) + refl * 0.25 * lip;
   if (uCrack > 0.0) {
     vec3 q = normalize(uMinv * (p - uBallC)) * 3.2;
     float f2; float f1 = cell(q, f2);
@@ -230,20 +288,30 @@ void main() {
   vec3 ro = uCamPos;
   vec3 n;
   float tb = uBallOn > 0.5 ? hitBall(ro, rd, n) : -1.0;
-  float tf = rd.y < 0.0 ? -ro.y / rd.y : -1.0;
+  float den = dot(rd, uN);
+  float tf = den < 0.0 ? -dot(ro, uN) / den : -1.0;
   vec3 col;
-  if (tb > 0.0 && (tf < 0.0 || tb < tf)) {
+  vec3 pn, pinfo;
+  float tp = hitPillars(ro, rd, pn, pinfo);
+  float tbig = 1e9;
+  float tbb = tb > 0.0 ? tb : tbig, tff = tf > 0.0 ? tf : tbig, tpp = tp > 0.0 ? tp : tbig;
+  if (tpp < tbb && tpp < tff) {
+    col = pillarShade(ro + rd * tp, pn, rd, pinfo);
+  } else if (tb > 0.0 && (tf < 0.0 || tb < tf)) {
     col = ballShade(ro + rd * tb, n, rd);
   } else if (tf > 0.0) {
     vec3 p = ro + rd * tf;
     col = floorBase(p, tf);
-    vec3 rr = vec3(rd.x, -rd.y, rd.z);
-    float fres = 0.04 + 0.96 * pow(1.0 - abs(rd.y), 5.0);
+    vec3 rr = reflect(rd, uN);
+    float fres = 0.04 + 0.96 * pow(1.0 - abs(den), 5.0);
     vec3 refl;
     vec3 n2;
     float tb2 = uBallOn > 0.5 ? hitBall(p, rr, n2) : -1.0;
-    if (tb2 > 0.0) refl = ballShade(p + rr * tb2, n2, rr) * 0.85;
-    else refl = env(rr, 0.3);
+    vec3 pn2, pinfo2;
+    float tp2 = hitPillars(p, rr, pn2, pinfo2);
+    if (tp2 > 0.0 && (tb2 < 0.0 || tp2 < tb2)) refl = pillarShade(p + rr * tp2, pn2, rr, pinfo2);
+    else if (tb2 > 0.0) refl = ballShade(p + rr * tb2, n2, rr) * 0.85;
+    else refl = env(rr, 0.12);
     col += refl * mix(0.25, 1.0, fres) * 0.45;
     col = mix(col, env(normalize(vec3(rd.x, 0.02, rd.z)), 0.0) * 0.6, 1.0 - exp(-tf * 0.012));
   } else {
@@ -278,7 +346,7 @@ function initGL() {
   const loc = gl.getAttribLocation(prog, 'p');
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  for (const n of ['uRes', 'uCamPos', 'uCamR', 'uCamU', 'uCamF', 'uTan', 'uBallC', 'uMinv', 'uBallOn', 'uCrack', 'uDim', 'uTime', 'uFlash', 'uRings']) U[n] = gl.getUniformLocation(prog, n);
+  for (const n of ['uRes', 'uCamPos', 'uCamR', 'uCamU', 'uCamF', 'uTan', 'uBallC', 'uMinv', 'uBallOn', 'uCrack', 'uDim', 'uTime', 'uFlash', 'uRings', 'uSpin', 'uN', 'uTD']) U[n] = gl.getUniformLocation(prog, n);
 }
 
 // Render the 3D scene for a camera and ball state into the GL canvas; returns the canvas.
@@ -297,31 +365,35 @@ export function renderGL({ cam, ball, ballOn = true, crack = 0, dim = 1, flash =
   gl.uniform1f(U.uDim, dim);
   gl.uniform1f(U.uFlash, flash);
   gl.uniform1f(U.uTime, tt);
+  gl.uniform1f(U.uSpin, ball.th || 0);
+  gl.uniform3fv(U.uN, N);
+  gl.uniform3fv(U.uTD, TD);
+  // Shockwave rings from the four most recent floor contacts, scaled by impact speed.
   const rings = new Float32Array(16).fill(-1);
-  IMP3.forEach((ti, i) => {
-    const b = ball3D(ti);
-    rings[i * 4] = b.p[0]; rings[i * 4 + 1] = 0; rings[i * 4 + 2] = 0; rings[i * 4 + 3] = tt - ti;
+  const ev = physics().chrome.events.filter((e) => e.t <= tt && tt - e.t < 1.2 && e.speed > 350).slice(-4);
+  ev.forEach((e, i) => {
+    rings[i * 4] = e.x - N[0]; rings[i * 4 + 1] = e.y - N[1]; rings[i * 4 + 2] = 0; rings[i * 4 + 3] = (tt - e.t) * (2200 / Math.max(900, e.speed));
   });
   gl.uniform4fv(U.uRings, rings);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   return glc;
 }
 
-// Impact sparks projected from 3D, drawn additively as short streaks.
+// Impact sparks projected from 3D, drawn additively as short streaks; count scales with speed.
 function sparks(g, cam, tt) {
   g.save();
   g.globalCompositeOperation = 'lighter';
   g.lineCap = 'round';
-  IMP3.forEach((ti, k) => {
-    const d = tt - ti;
-    if (d < 0 || d > 0.7) return;
-    const r = rng(500 + k), c = ball3D(ti).p;
-    const n = k === 0 ? 70 : 36;
+  physics().chrome.events.forEach((e, k) => {
+    const d = tt - e.t;
+    if (d < 0 || d > 0.7 || e.speed < 500) return;
+    const r = rng(500 + k), c = [e.x - N[0], e.y - N[1], 0];
+    const n = Math.round(Math.min(70, e.speed / 30));
     for (let i = 0; i < n; i++) {
-      const a = r() * TAU, sp = 4 + r() * (k === 0 ? 12 : 8), up = 3 + r() * 9;
-      const life = 0.3 + r() * 0.4;
+      const a = r() * TAU, sp = (3 + r() * 10) * e.speed / 1800, up = 3 + r() * 8;
+      const life = 0.25 + r() * 0.4;
       if (d > life) continue;
-      const pos = (s) => [c[0] + Math.cos(a) * sp * s, Math.max(0.02, up * s - 0.5 * 30 * s * s), Math.sin(a) * sp * s];
+      const pos = (s2) => add(c, add(mul(TD, Math.cos(a) * sp * s2), add(mul(N, Math.max(0.02, up * s2 - 0.5 * 30 * s2 * s2)), [0, 0, Math.sin(a) * sp * s2])));
       const p1 = project(cam, pos(d)), p0 = project(cam, pos(Math.max(0, d - 0.03)));
       if (!p1 || !p0) continue;
       const fade = 1 - d / life;
@@ -333,24 +405,23 @@ function sparks(g, cam, tt) {
   g.restore();
 }
 
-export function crackAt(tt) { return smooth(clamp((tt - 9.24) / 0.1)); }
+export function crackAt(tt) { return 0; }
+export const hitTime = () => T_HIT;
+export const rampStart = () => RAMP0;
 
 export default {
-  async init() { initGL(); },
-  shutter: () => ({ samples: 5, angle: 200 }),
+  async init() { initGL(); solveRamp(); },
+  shutter: () => ({ samples: 2, angle: 180 }),
   draw(g, t) {
     const tt = tau(t);
-    const ball = ball3D(tt);
+    const ball = ball3D(Math.min(tt, T_HIT));
     const cam = camera3D(t, tt);
-    const flash = 0.15 * Math.exp(-(t - T.CHROME) / 0.012);
-    g.drawImage(renderGL({ cam, ball, crack: crackAt(tt), flash, tt }), 0, 0);
+    g.drawImage(renderGL({ cam, ball, crack: 0, flash: 0, tt }), 0, 0);
     sparks(g, cam, tt);
   },
   post(g, t, out) {
-    const tt = tau(t);
     bloom(g, out, { strength: 0.85, radius: 26, cut: 1.35, streak: 0.55 });
     vignette(g, 0.5, '0,0,0', 0.5);
     grain(g, t, 0.05);
-    void tt;
   },
 };

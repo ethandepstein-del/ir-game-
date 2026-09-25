@@ -1,6 +1,7 @@
 // World 3: cut-paper stop-motion diorama. Layered paper with real drop shadows, shallow depth
 // of field, a paper-puppet ball on a brass split pin, pop-up flowers and confetti. Shot on 12s.
-import { W, H, T, R, FLOOR, CAM_Z, CAM_CY, camX, applyCam, clamp, lerp, invLerp, ease, rng, hold, shake, ball2D, beat, TAU, noise1 } from '../core.js';
+import { W, H, T, R, FLOOR, CAM_Z, CAM_CY, camFrame, applyCam, physics, eventsOn, clamp, lerp, invLerp, ease, rng, shake, ball2D, TAU, noise1, wobble } from '../core.js';
+import { plateY } from '../physics.js';
 import { makeCanvas, paperTexture, grain, vignette } from '../fx.js';
 
 const P = {
@@ -78,7 +79,7 @@ function cloudShape(g, s) {
   g.closePath();
 }
 
-function flower(g, x, groundY, u, seed) {
+function flower(g, x, groundY, u, seed, t = 0) {
   // u: 0 folded flat → 1 fully popped (pop-up book hinge).
   if (u <= 0) return;
   const r = rng(seed);
@@ -87,7 +88,7 @@ function flower(g, x, groundY, u, seed) {
   const lean = (r() - 0.5) * 0.3;
   g.save();
   g.translate(x, groundY);
-  g.rotate(lean * u);
+  g.rotate(lean * u + Math.sin(t * 2.2 + seed) * 0.04 * u);
   g.scale(1, clamp(u * 1.15, 0, 1.15));
   g.shadowColor = 'rgba(30,40,20,0.35)';
   g.shadowBlur = 10; g.shadowOffsetX = 5; g.shadowOffsetY = 6;
@@ -181,6 +182,35 @@ function confetti(g, x, y, d, seed, n = 34) {
   }
 }
 
+// Pop-up launcher: an accordion-folded paper spring in a slot, under a card platform.
+function paperLauncher(g, t) {
+  const pl = physics().run.plates.P2;
+  const x = pl.x, y = plateY(1, t);
+  const pitBot = FLOOR + 110, hw = 96;
+  g.save();
+  g.fillStyle = '#6b4424';
+  g.fillRect(x - hw, FLOOR - 2, hw * 2, pitBot - FLOOR);
+  g.fillStyle = 'rgba(0,0,0,0.25)';
+  g.fillRect(x - hw, FLOOR - 2, hw * 2, 18);
+  const top = y + 14, n = 7, w = 70;
+  const since = pl.stoppedAt ? t - pl.stoppedAt : -1;
+  const sway = since >= 0 ? 12 * wobble(since, 7, 4.5) : 0;
+  for (let i = 0; i < n; i++) {
+    const y0 = lerp(pitBot, top, i / n), y1 = lerp(pitBot, top, (i + 1) / n);
+    const o0 = sway * Math.sin((i / n) * Math.PI), o1 = sway * Math.sin(((i + 1) / n) * Math.PI);
+    const k0 = i % 2 ? 1 : -1;
+    g.beginPath();
+    g.moveTo(x - w + o0 + k0 * 10, y0); g.lineTo(x + w + o0 + k0 * 10, y0);
+    g.lineTo(x + w + o1 - k0 * 10, y1); g.lineTo(x - w + o1 - k0 * 10, y1);
+    g.closePath();
+    textured(g, i % 2 ? '#e9d8b4' : '#cdb88f', 0.4);
+  }
+  g.shadowColor = 'rgba(30,30,20,0.4)'; g.shadowBlur = 12; g.shadowOffsetX = 6; g.shadowOffsetY = 8;
+  g.beginPath(); g.roundRect(x - 92, y, 184, 16, 3);
+  textured(g, '#f6d55c', 0.35);
+  g.restore();
+}
+
 export default {
   async init() {
     tex = paperTexture(512, 512, 21, [236, 232, 222], { fibers: 900, blotch: 0.12, dark: 0.18, wrap: true });
@@ -240,21 +270,22 @@ export default {
     fbg.drawImage(fg, 0, 0);
     fg = fb;
   },
-  draw(g, tReal) {
-    const t = hold(tReal, 12);
-    const hi = Math.floor(tReal * 12 + 1e-6);
-    const jit = (k, a = 1.5) => { const r = rng(hi * 97 + k * 13); return [(r() - 0.5) * a, (r() - 0.5) * a]; };
+  shutter: () => ({ samples: 2, angle: 180 }),
+  draw(g, t) {
+    // Cut-paper pieces keep a faint hand-placed tremble (24 Hz, sub-pixel to 1 px); motion is smooth.
+    const hi = Math.floor(t * 24 + 1e-6);
+    const jit = (k, a = 1) => { const r = rng(hi * 97 + k * 13); return [(r() - 0.5) * a * 0.6, (r() - 0.5) * a * 0.6]; };
     const b = ball2D(t);
     const sk = shake(t, 14);
-    const cx = camX(t);
-    const z = CAM_Z;
-    const d1 = t - T.PAPER, d2 = t - beat(10);
+    const fr = camFrame(t);
+    const cx = fr.x, z = fr.z;
+    const land = eventsOn('paper')[0];
+    const d1 = t - T.PAPER, d2 = t - land.t;
 
     g.drawImage(sky, 0, 0);
-    // Paper sun (rotates a notch per frame)
     g.save();
     const [sjx, sjy] = jit(1);
-    g.translate(1480 - cx * 0.05 + sjx, 230 + sjy);
+    g.translate(1480 - cx * 0.05 + sjx, 230 + sjy + fr.lift * 0.15);
     g.rotate(t * 0.6);
     g.shadowColor = 'rgba(120,80,20,0.35)'; g.shadowBlur = 16; g.shadowOffsetX = 8; g.shadowOffsetY = 10;
     for (let i = 0; i < 12; i++) {
@@ -267,58 +298,55 @@ export default {
     g.shadowColor = 'transparent';
     g.beginPath(); g.arc(-8, -8, 84, 0, TAU); textured(g, P.sunIn, 0.35);
     g.restore();
-    // Hanging clouds on threads
-    const clouds = [[380, 250, 1.1, 0], [1060, 170, 0.8, 1], [1900, 280, 1.0, 2], [2500, 200, 0.9, 3]];
-    for (const [x0, y0, s, k] of clouds) {
-      const x = x0 - cx * 0.3 * z + 300;
+    const clouds = [[380, 250, 1.1, 0], [1060, 170, 0.8, 1], [1900, 280, 1.0, 2], [2500, 200, 0.9, 3], [3200, 230, 1.0, 4]];
+    for (const [x0, y0, s2, k] of clouds) {
+      const x = x0 - ((cx * 0.3 * z) % 2600) + 300;
       if (x < -300 || x > W + 300) continue;
       const sway = Math.sin(t * 2.4 + k * 1.7) * 0.05;
       g.save();
-      g.translate(x, -20);
+      g.translate(x, -20 + fr.lift * 0.3);
       g.rotate(sway);
       g.strokeStyle = 'rgba(80,80,80,0.5)'; g.lineWidth = 1.5;
-      g.beginPath(); g.moveTo(0, 0); g.lineTo(0, y0 - 60 * s + 20); g.stroke();
+      g.beginPath(); g.moveTo(0, -400); g.lineTo(0, y0 - 60 * s2 + 20); g.stroke();
       g.translate(0, y0 + 20);
       g.shadowColor = 'rgba(40,70,100,0.35)'; g.shadowBlur = 18; g.shadowOffsetX = 10; g.shadowOffsetY = 14;
-      cloudShape(g, s * 1.3);
+      cloudShape(g, s2 * 1.3);
       textured(g, '#ffffff', 0.25);
       g.restore();
     }
-    // Hills
     for (let i = 0; i < layers.length; i++) {
       const L = layers[i];
-      const [jx, jy] = jit(10 + i, 1.2);
+      const [jx, jy] = jit(10 + i, 1);
       const ox = -(cx * L.par * z) % (LAYER_W - W) - 200;
-      g.drawImage(L.c, ox + jx, 60 + jy + sk.y * L.par);
+      g.drawImage(L.c, ox + jx, 60 + jy + sk.y * L.par + fr.lift * z * (0.3 + L.par * 0.7));
     }
 
     g.save();
-    applyCam(g, cx, CAM_CY, z, sk);
+    applyCam(g, cx, fr.y, z, sk);
     const [gjx, gjy] = jit(20, 1);
     const gx0 = Math.floor((cx - 1600) / 1000) * 1000;
     g.drawImage(ground, gx0 + gjx, FLOOR - 30 + gjy);
-    // Pop-up flowers on each impact (hinged up on twos)
-    const ix1 = ball2D(T.PAPER).x, ix2 = ball2D(beat(10)).x;
+    g.drawImage(ground, gx0 + gjx + LAYER_W - 40, FLOOR - 30 + gjy);
+    paperLauncher(g, t);
+    const ix1 = physics().run.plates.P2.x, ix2 = land.x;
     const pop = (d, delay) => ease.outBack(clamp((d - delay) / 0.2), 2.4);
-    [[-190, 0, 1], [170, 0.08, 2], [300, 0.16, 3]].forEach(([dx, dl, sd]) => flower(g, ix1 + dx, FLOOR + 6, pop(d1, dl), sd));
-    [[-150, 0.04, 4], [210, 0.1, 5]].forEach(([dx, dl, sd]) => flower(g, ix2 + dx, FLOOR + 6, pop(d2, dl), sd + 10));
-    // Contact shadow
-    const hN = clamp(b.h / 500);
-    const sg = g.createRadialGradient(b.x + 10, FLOOR + 6, 0, b.x + 10, FLOOR + 6, R * 1.4);
+    [[-200, 0, 1], [180, 0.08, 2], [310, 0.16, 3]].forEach(([dx, dl, sd]) => flower(g, ix1 + dx, FLOOR + 6, pop(d1, dl), sd, t));
+    [[-150, 0.04, 4], [210, 0.1, 5], [330, 0.15, 6]].forEach(([dx, dl, sd]) => flower(g, ix2 + dx, FLOOR + 6, pop(d2, dl), sd + 10, t));
+    const hN = clamp(b.h / 600);
+    const sg = g.createRadialGradient(b.cx + 10, FLOOR + 6, 0, b.cx + 10, FLOOR + 6, R * 1.4);
     sg.addColorStop(0, `rgba(20,40,20,${0.45 * (1 - hN * 0.7)})`);
     sg.addColorStop(1, 'rgba(20,40,20,0)');
     g.fillStyle = sg;
-    g.beginPath(); g.ellipse(b.x + 10, FLOOR + 6, R * (1.4 - 0.5 * hN), 20, 0, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(b.cx + 10, FLOOR + 6, R * (1.4 - 0.5 * hN), 20, 0, 0, TAU); g.fill();
 
-    const [bjx, bjy] = jit(30, 2);
-    paperBall(g, b, b.x + bjx, b.y + bjy, b.spin * 0.8 + (hi % 2) * 0.02);
-    confetti(g, ix1, FLOOR - 20, d1, 5);
-    confetti(g, ix2, FLOOR - 20, d2, 6, 16);
+    const [bjx, bjy] = jit(30, 1);
+    paperBall(g, b, b.x + bjx, b.y + bjy, b.spin);
+    confetti(g, ix1, FLOOR - 40, d1, 5);
+    confetti(g, ix2, FLOOR - 20, d2, 6, 18);
     g.restore();
-    // Out-of-focus foreground
     const fx = -(cx * 1.3 * z) % 1000 - 1000;
     g.drawImage(fg, fx, H - 250 + sk.y * 1.3);
     vignette(g, 0.3, '40,30,20', 0.5);
-    grain(g, tReal, 0.05);
+    grain(g, t, 0.05);
   },
 };

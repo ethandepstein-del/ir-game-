@@ -91,50 +91,31 @@ export const fbm1 = (x) => noise1(x) * 0.6 + noise1(x * 2.1 + 17) * 0.3 + noise1
 export const hold = (t, fps) => Math.floor(t * fps + 1e-6) / fps;
 
 // ---------------------------------------------------------------- ball
-// 2D world units are screen pixels at zoom 1. Floor line at FLOOR; the ball rests with its
-// centre R above it. All arcs share one gravity so the motion reads as a single object.
-export const R = 84;
-export const FLOOR = 830;
-export const G = 4150;
-export const VX = 290;
-export const DROP = 0.78;
-export const X0 = 960 - VX * (T.CEL - DROP);
-const BLOCK_V0 = 1750;
+// The ball is simulated (see physics.js). Cut times come from the simulation's impacts, so the
+// world table is filled in once the physics has been solved.
+import { physics, ball2D, R, FLOOR, G, X0, Y0 } from './physics.js';
+export { ball2D, R, FLOOR, G, X0, Y0, physics };
 
-export const ARCS = [
-  { kind: 'drop', t0: DROP, t1: beat(2) },
-  { kind: 'arc', t0: beat(2), t1: T.CEL },
-  { kind: 'arc', t0: T.CEL, t1: beat(6) },
-  { kind: 'arc', t0: beat(6), t1: T.PAPER },
-  { kind: 'arc', t0: T.PAPER, t1: beat(10) },
-  { kind: 'arc', t0: beat(10), t1: T.PIXEL },
-  { kind: 'block', t0: T.PIXEL, t1: beat(14), tHit: beat(13) },
-  { kind: 'arc', t0: beat(14), t1: T.CHROME },
-];
-export const DROP_H = 0.5 * G * (beat(2) - DROP) ** 2;
-export const BLOCK_HIT_H = BLOCK_V0 * BEAT - 0.5 * G * BEAT * BEAT;
-export const IMPACTS = ARCS.map((a) => a.t0).filter((t) => t > DROP).concat([T.CHROME]);
-
-// Height of the ball centre above its resting height, and vertical velocity (up +).
-export function arcHeight(t) {
-  if (t < DROP) return { h: DROP_H, v: 0, arc: null };
-  for (const a of ARCS) {
-    if (t < a.t0 || t >= a.t1) continue;
-    const s = t - a.t0, D = a.t1 - a.t0;
-    if (a.kind === 'drop') return { h: DROP_H - 0.5 * G * s * s, v: -G * s, arc: a };
-    if (a.kind === 'arc') return { h: 0.5 * G * s * (D - s), v: G * (D / 2 - s), arc: a };
-    if (a.kind === 'block') {
-      const up = a.tHit - a.t0;
-      if (s < up) return { h: BLOCK_V0 * s - 0.5 * G * s * s, v: BLOCK_V0 - G * s, arc: a };
-      const s2 = s - up, u = BLOCK_V0 - G * up;
-      return { h: BLOCK_HIT_H - u * s2 - 0.5 * G * s2 * s2, v: -u - G * s2, arc: a };
-    }
+export function syncTimeline() {
+  const P = physics();
+  [T.CEL, T.PAPER, T.PIXEL, T.CHROME] = P.cuts;
+  WORLDS[0].t1 = WORLDS[1].t0 = T.CEL;
+  WORLDS[1].t1 = WORLDS[2].t0 = T.PAPER;
+  WORLDS[2].t1 = WORLDS[3].t0 = T.PIXEL;
+  WORLDS[3].t1 = WORLDS[4].t0 = T.CHROME;
+  SHAKES.length = 0;
+  for (const e of P.events) {
+    if (e.t > T.SHATTER) continue;
+    SHAKES.push([e.t, Math.min(1.6, (e.speed / 2600) ** 1.4 * (e.cut ? 1.4 : 1))]);
   }
-  return { h: 0, v: 0, arc: null };
+  SHAKES.push([T.SHATTER, 1.6], [T.SLAM, 1.8], [T.PERIOD, 0.25]);
+  return P;
 }
+// Events of one kind, in time order (e.g. every landing on the cel floor).
+export const eventsOn = (surface, stage) => physics().events.filter((e) => e.surface === surface && (!stage || e.stage === stage));
 
-// Squash on contact: strongest on the impact frame, gone ~4 frames later, then a small ring.
-export function contactSquash(t, impacts = IMPACTS) {
+// Squash for scripted secondary objects (the full stop in the end card).
+export function contactSquash(t, impacts) {
   let best = Infinity;
   for (const ti of impacts) {
     const d = t - ti;
@@ -146,33 +127,29 @@ export function contactSquash(t, impacts = IMPACTS) {
   return { squash, ring, since: best };
 }
 
-// Full ball state in 2D world space.
-export function ball2D(t) {
-  const { h, v, arc } = arcHeight(t);
-  const x = t < DROP ? X0 : X0 + VX * (t - DROP);
-  const vx = t < DROP ? 0 : VX;
-  const { squash, ring } = contactSquash(t);
-  // Velocity stretch (along motion) fades out while the ball is squashed on the floor.
-  const speed = Math.hypot(vx, v);
-  const k = 1 + clamp((speed - 500) / 2400) * 0.34 * (1 - squash);
-  let along = k, across = 1 / Math.pow(k, 0.75);
-  let angle = Math.atan2(-v, vx); // screen space: up is -y
-  // Squash is vertical, so blend the stretch axis toward vertical as it takes over.
-  const sq = 1 - 0.46 * squash + 0.05 * ring;
-  let sx, sy;
-  if (squash > 0.02) {
-    sy = sq; sx = 1 / Math.pow(sq, 0.8);
-    angle = 0; along = sx; across = sy;
-  } else {
-    sx = along; sy = across;
-  }
-  const y = FLOOR - R * (squash > 0.02 ? sy : 1) - h;
-  return { x, y, h, vx, vy: v, angle, along, across, squash, ring, arc, spin: (x - X0) / R };
-}
-
 // Standard tracking camera shared by the 2D worlds: world point (cx, CAM_CY) at screen centre.
-export const CAM_Z = 1.25, CAM_CY = 558;
-export const camX = (t) => (t < T.CEL ? 960 : X0 + VX * (t - DROP) - 18 * Math.sin(Math.min(1, (t - T.CEL) * 3)));
+export const CAM_Z = 1.15, CAM_CY = 540;
+// Camera operator: follows the ball with a lagged, smoothed x (a weighted look back in time).
+export function camX(t) {
+  let acc = 0, wsum = 0;
+  for (let i = 0; i < 9; i++) {
+    const w = Math.exp(-i * 0.35);
+    acc += ball2D(t - i * 0.03).cx * w; wsum += w;
+  }
+  return acc / wsum + 60;
+}
+// Framing: crane up (and ease out a touch) when the ball flies high, anticipating by ~0.2 s.
+export function camFrame(t) {
+  const top = CAM_CY - H / 2 / CAM_Z + 70;
+  let acc = 0, wsum = 0;
+  for (let i = -6; i <= 6; i++) {
+    const tt = t + i * 0.04;
+    const w = Math.exp(-(i * i) / 18);
+    acc += Math.max(0, top - (ball2D(Math.max(0, tt)).cy - R)) * w; wsum += w;
+  }
+  const lift = acc / wsum;
+  return { x: camX(t), y: CAM_CY - lift * 0.8, z: CAM_Z / (1 + lift / 1400), lift };
+}
 export function applyCam(g, cx, cy, z, sk = { x: 0, y: 0, rot: 0 }) {
   g.translate(W / 2 + sk.x, H / 2 + sk.y);
   g.rotate(sk.rot);
@@ -181,11 +158,7 @@ export function applyCam(g, cx, cy, z, sk = { x: 0, y: 0, rot: 0 }) {
 }
 
 // Camera shake from impacts: returns an offset in px and a small roll.
-export const SHAKES = [
-  [beat(2), 0.35], [T.CEL, 1], [beat(6), 0.4], [T.PAPER, 0.9], [beat(10), 0.4], [T.PIXEL, 0.9],
-  [beat(13), 0.6], [beat(14), 0.4], [T.CHROME, 1.5], [beat(18), 0.6], [beat(20), 0.6], [beat(22), 0.8],
-  [T.SHATTER, 1.6], [T.SLAM, 1.8], [T.PERIOD, 0.25],
-];
+export const SHAKES = [];
 export function shake(t, amp = 22) {
   let e = 0;
   for (const [ti, a] of SHAKES) {
