@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the per-dimension program stubs, validate, and zip the pack.
 
-    python3 tools/build.py            # regenerate stubs + build dist/Clarity.zip
+    python3 tools/build.py            # regenerate stubs + build dist/Clarity-<version>.zip
     python3 tools/build.py --check    # also compile every program with glslangValidator
 
 The real shader code lives in shaders/program and shaders/lib. Each stub in
@@ -152,10 +152,19 @@ def check_compute():
     return 0
 
 
+# Bump on every release. It is baked into the zip name (so a new download
+# never lands as "Clarity (1).zip" next to an old copy) and shown in the
+# shader options menu, so players can see which build is actually loaded.
+VERSION = "2.1"
+
+
 def build_zip():
     dist = os.path.join(ROOT, "dist")
     os.makedirs(dist, exist_ok=True)
-    out = os.path.join(dist, "Clarity.zip")
+    for old in os.listdir(dist):
+        if old.startswith("Clarity") and old.endswith(".zip"):
+            os.remove(os.path.join(dist, old))
+    out = os.path.join(dist, "Clarity-%s.zip" % VERSION)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for base, _, files in os.walk(PACK):
             for fn in sorted(files):

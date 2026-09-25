@@ -1,3 +1,7 @@
+// Keeps the CLARITY_VERSION menu entry referenced (Iris only lists used options).
+#if CLARITY_VERSION < 0
+#endif
+
 // Shared uniforms and small helpers. Dimension comes from the stub:
 // OVERWORLD, NETHER or END.
 

@@ -71,12 +71,12 @@ Things to know:
 
 ## Install on Lunar Client
 
-1. Download `dist/Clarity.zip` from this folder.
+1. Download `dist/Clarity-<version>.zip` from this folder (the version is also shown at the top of Shader Options, so you can confirm the right build is loaded).
 2. Launch Lunar and open a world.
    - **1.8.9:** Options → Video Settings → Shaders.
    - **Modern versions:** Lunar settings → Shaders (Iris). Enable shader support if Lunar asks.
-3. Click **Shaders Folder** and drop `Clarity.zip` into it. Don't unzip it.
-4. Select **Clarity**. The default profile, **RTX 5080 (120 fps)**, is already selected.
+3. Click **Shaders Folder** and drop the zip into it. Don't unzip it. When updating, delete the old Clarity zip first.
+4. Select the Clarity zip. The default profile, **RTX 5080 (120 fps)**, is already selected.
 
 Go to **Shader Options** to adjust anything. Every setting has a readable name, and the menu is split into Lighting, Shadows, Wind, Water, Sky & Fog and Camera.
 
