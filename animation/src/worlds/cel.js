@@ -347,7 +347,7 @@ export default {
     const speed = Math.hypot(b.vx, b.vy);
     if (speed > 1700 && b.pen <= 0) smear(g, t);
     celBall(g, b, b.cx, b.cy);
-    boing(g, ix1 - 330, FLOOR - 600, dBig - 0.02);
+    boing(g, ix1 - 190, FLOOR - 470, dBig - 0.02);
     g.restore();
     vignette(g, 0.22, '120,40,0', 0.55);
     grain(g, t, 0.035);
