@@ -4,20 +4,61 @@
 const bool colortex0MipmapEnabled = true;
 
 varying vec2 texcoord;
+varying float exposure;   // same for every pixel: metered once, in the VSH
+varying float avgLum;
 
 #ifdef VSH
+#include "/lib/common.glsl"
+#include "/lib/atmosphere.glsl"
+uniform sampler2D colortex0;
+uniform sampler2D colortex6;
+uniform sampler2D depthtex0;
+uniform float frameTime;
+
 void main() {
     texcoord = gl_MultiTexCoord0.xy;
     gl_Position = ftransform();
+
+    // Log-average luminance of what is on screen, ignoring open sky so
+    // looking up doesn't darken the ground you are fighting on.
+    float logSum = 0.0;
+    float wSum = 0.0;
+    for (int x = 0; x < 6; x++) {
+        for (int y = 0; y < 6; y++) {
+            vec2 p = (vec2(float(x), float(y)) + 0.5) / 6.0;
+            float sky = step(1.0, texture2DLod(depthtex0, p, 0.0).r);
+            float w = (1.0 - 0.6 * length(p - 0.5)) * mix(1.0, 0.08, sky);
+            logSum += log(luma(texture2DLod(colortex0, p, 6.0).rgb) + 1e-4) * w;
+            wSum += w;
+        }
+    }
+    avgLum = exp(logSum / wSum);
+
+#ifdef AUTO_EXPOSURE
+    float target = clamp(0.30 / avgLum, 0.60, 2.20);
+#if defined OVERWORLD
+    // Nudge caves brighter still, using the game's own eye-light value.
+    target *= mix(sqrt(CAVE_ADAPTATION), 1.0, float(eyeBrightnessSmooth.y) / 240.0);
+#endif
+    float prev = texture2DLod(colortex6, vec2(0.5), 0.0).r;
+    float speed = target > prev ? 3.0 : 5.0;   // quick, but not a flicker
+    exposure = (prev > 0.0 && prev < 100.0) ? mix(prev, target, 1.0 - exp(-frameTime * speed)) : target;
+#else
+    exposure = 1.0;
+#if defined OVERWORLD
+    float eyeSky = float(eyeBrightnessSmooth.y) / 240.0;
+    exposure *= mix(CAVE_ADAPTATION, 1.0, eyeSky);
+    exposure *= 1.0 + (1.0 - dayFactor()) * eyeSky * 1.4;
+#else
+    exposure *= 1.2;
+#endif
+#endif
 }
 #endif
 
 #ifdef FSH
 #include "/lib/common.glsl"
-#include "/lib/atmosphere.glsl"
 uniform sampler2D colortex0;
-uniform sampler2D colortex6;
-uniform float frameTime;
 
 // On a fullscreen pass the base LOD is 0, so the bias selects the mip.
 vec3 bloomTap(float lod) {
@@ -43,44 +84,17 @@ void main() {
     col = mix(col, bloom, BLOOM_STRENGTH);
 #endif
 
-    // Average scene luminance (log mean, centre weighted) from a small mip.
-    float logSum = 0.0;
-    float wSum = 0.0;
-    for (int x = 0; x < 4; x++) {
-        for (int y = 0; y < 4; y++) {
-            vec2 p = (vec2(float(x), float(y)) + 0.5) / 4.0;
-            float w = 1.0 - 0.5 * length(p - 0.5);
-            logSum += log(luma(texture2D(colortex0, p, 7.0).rgb) + 1e-4) * w;
-            wSum += w;
-        }
-    }
-    float avgLum = exp(logSum / wSum);
-
-#ifdef AUTO_EXPOSURE
-    float target = clamp(0.30 / avgLum, 0.50, 2.40);
-#if defined OVERWORLD
-    // Nudge caves brighter still, using the game's own eye-light value.
-    target *= mix(sqrt(CAVE_ADAPTATION), 1.0, float(eyeBrightnessSmooth.y) / 240.0);
+#ifdef NIGHT_SHIFT
+    // Purkinje shift: dim parts of dim scenes drift to cooler, softer colour.
+    // Weighted per pixel, so torches and lava keep their warmth.
+    float night = (1.0 - smoothstep(0.015, 0.10, avgLum)) * 0.25
+                * (1.0 - smoothstep(0.01, 0.15, luma(col)));
 #endif
-    float prev = texture2D(colortex6, vec2(0.5)).r;
-    float speed = target > prev ? 1.1 : 2.6;   // eyes adjust faster to bright
-    float exposure = (prev > 0.0 && prev < 100.0) ? mix(prev, target, 1.0 - exp(-frameTime * speed)) : target;
-#else
-    float exposure = 1.0;
-#if defined OVERWORLD
-    float eyeSky = float(eyeBrightnessSmooth.y) / 240.0;
-    exposure *= mix(CAVE_ADAPTATION, 1.0, eyeSky);
-    exposure *= 1.0 + (1.0 - dayFactor()) * eyeSky * 1.4;
-#else
-    exposure *= 1.2;
-#endif
-#endif
-    float stored = exposure;
     col *= exposure * EXPOSURE * 0.85;
 
-    // Night vision (Purkinje shift): dim scenes drift to cool, softer colour.
-    float night = (1.0 - smoothstep(0.015, 0.10, avgLum)) * 0.35;
+#ifdef NIGHT_SHIFT
     col = mix(col, luma(col) * vec3(0.72, 0.88, 1.20), night);
+#endif
 
     col = aces(col);
     col = pow(col, vec3(1.0 / 2.2));
@@ -91,6 +105,6 @@ void main() {
 
     /* DRAWBUFFERS:06 */
     gl_FragData[0] = vec4(clamp(col, 0.0, 1.0), 1.0);
-    gl_FragData[1] = vec4(stored, avgLum, 0.0, 1.0);
+    gl_FragData[1] = vec4(exposure, avgLum, 0.0, 1.0);
 }
 #endif

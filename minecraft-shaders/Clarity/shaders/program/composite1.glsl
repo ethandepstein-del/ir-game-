@@ -5,10 +5,18 @@
 #include "/lib/settings.glsl"
 
 varying vec2 texcoord;
+varying vec3 ambCol;   // per-frame constants hoisted to the vertex stage
+varying vec3 sunCol;
+varying vec3 lightW;
 
 #ifdef VSH
+#include "/lib/common.glsl"
+#include "/lib/atmosphere.glsl"
 void main() {
     texcoord = gl_MultiTexCoord0.xy;
+    ambCol = ambientColor();
+    sunCol = directLightColor();
+    lightW = lightDirWorld();
     gl_Position = ftransform();
 }
 #endif
@@ -91,10 +99,14 @@ vec4 traceReflection(vec3 viewPos, vec3 R) {
             float hd = texture2D(depthtex1, hit.xy).r;
             if (hd >= 1.0) return vec4(0.0);
             vec3 hitView = screenToView(hit.xy, hd);
-            if (abs(hitView.z - b.z) > length(stepV) * 1.5 + 0.5) return vec4(0.0);
-            vec2 edge = smoothstep(0.0, 0.08, hit.xy) * smoothstep(0.0, 0.08, 1.0 - hit.xy);
-            vec3 c = applyFog(texture2D(colortex0, hit.xy).rgb, hitView, false);
-            return vec4(c, edge.x * edge.y);
+            // Too far behind the surface: the ray passed behind a thin
+            // object (trunk, pillar). Keep marching instead of giving up.
+            if (abs(hitView.z - b.z) <= length(stepV) * 1.5 + 0.5) {
+                vec2 edge = smoothstep(0.0, 0.08, hit.xy) * smoothstep(0.0, 0.08, 1.0 - hit.xy);
+                float reach = 1.0 - smoothstep(20.0, 28.0, float(i));
+                vec3 c = applyFog(texture2D(colortex0, hit.xy).rgb, hitView, false, ambCol, sunCol);
+                return vec4(c, edge.x * edge.y * reach);
+            }
         }
         pos += stepV;
         stepV *= 1.15;
@@ -116,10 +128,13 @@ vec3 shadeWater(vec3 sceneCol, vec2 uv, float d0, vec4 wData, vec3 tint) {
     vec2 refrUV = uv;
 #ifdef WATER_REFRACTION
     {
+        // Bend the view ray at the surface (air->water or water->air) and
+        // see where it lands a short way in.
         float d1c = texture2D(depthtex1, uv).r;
         float thick = d1c < 1.0 ? distance(viewPos0, screenToView(uv, d1c)) : 16.0;
-        vec2 offset = nW.xz * vec2(viewHeight / viewWidth, 1.0) * 0.35 * clamp(thick / 4.0, 0.0, 1.0) / (1.0 + length(viewPos0) * 0.08);
-        vec2 cand = clamp(uv + offset, 0.001, 0.999);
+        vec3 Rr = refract(V, n, below ? 1.333 : 0.75);
+        if (dot(Rr, Rr) < 1e-4) Rr = V;
+        vec2 cand = clamp(viewToScreen(viewPos0 + Rr * min(thick, 3.0) * 0.6).xy, 0.001, 0.999);
         if (texture2D(depthtex1, cand).r > d0) refrUV = cand;
     }
 #endif
@@ -129,8 +144,8 @@ vec3 shadeWater(vec3 sceneCol, vec2 uv, float d0, vec4 wData, vec3 tint) {
     float thickness = d1 < 1.0 ? distance(viewPos0, viewPos1) : 96.0;
 
     vec3 col;
-    vec3 sun = directLightColor();
-    vec3 L = lightDirWorld();
+    vec3 sun = sunCol;
+    vec3 L = lightW;
     vec3 surfPlayer = (gbufferModelViewInverse * vec4(viewPos0, 1.0)).xyz;
     float surfShadow = shadowAt(surfPlayer + (gbufferModelViewInverse * vec4(n, 0.0)).xyz * 0.1)
                      * cloudShadow(surfPlayer + cameraPosition, L) * smoothstep(0.6, 0.95, skyLevel);
@@ -143,11 +158,18 @@ vec3 shadeWater(vec3 sceneCol, vec2 uv, float d0, vec4 wData, vec3 tint) {
             float depthBelow = max(surfPlayer.y - floorPlayer.y, 0.0);
             float c = caustics(floorW.xz + L.xz / max(L.y, 0.2) * depthBelow);
             float lit = shadowAt(floorPlayer + vec3(0.0, 0.1, 0.0)) * surfShadow;
-            behind *= 1.0 + c * 1.6 * lit * exp(-depthBelow * 0.12) * smoothstep(0.0, 1.0, depthBelow) * luma(sun) / 3.0;
+            // Centred on the pattern's mean: focuses light, doesn't add it.
+            behind *= 1.0 + (c - 0.35) * 1.8 * lit * exp(-depthBelow * 0.12) * smoothstep(0.0, 1.0, depthBelow) * luma(sun) / 3.0;
         }
 #endif
-        vec3 T = exp(-waterAbsorption(tint) * thickness);
-        vec3 scatterCol = waterScatterColor(tint, skyLevel) + tint * sun * 0.03 * surfShadow;
+        vec3 absorb = waterAbsorption(tint);
+        if (d1 < 1.0) {
+            // Light reaching the floor already crossed the water above it.
+            float floorDepth = max(surfPlayer.y - (gbufferModelViewInverse * vec4(viewPos1, 1.0)).y, 0.0);
+            behind *= exp(-absorb * floorDepth);
+        }
+        vec3 T = exp(-absorb * thickness);
+        vec3 scatterCol = waterScatterColor(tint, skyLevel, ambCol, sun) + tint * sun * 0.03 * surfShadow;
         col = behind * T + scatterCol * (1.0 - T);
 
 #ifdef WATER_SSS
@@ -167,7 +189,7 @@ vec3 shadeWater(vec3 sceneCol, vec2 uv, float d0, vec4 wData, vec3 tint) {
             float t = frameTimeCounter * 0.35 * WAVE_SPEED;
             float pattern = vnoise(fp * 1.7 + vec2(t, -t * 0.6)) * 0.6 + vnoise(fp * 4.3 - vec2(t * 0.8, t)) * 0.4;
             float foam = (1.0 - smoothstep(0.05, 0.75, shallow)) * smoothstep(0.35, 0.65, pattern + (0.4 - shallow * 0.5));
-            vec3 foamLight = ambientColor() * skyLevel * skyLevel + sun * surfShadow * max(L.y, 0.0) + MIN_LIGHT * 2.0;
+            vec3 foamLight = ambCol * skyLevel * skyLevel + sun * surfShadow * max(L.y, 0.0) + MIN_LIGHT * 2.0;
             col = mix(col, foamLight * 0.75, foam * 0.75);
         }
 #endif
@@ -183,39 +205,46 @@ vec3 shadeWater(vec3 sceneCol, vec2 uv, float d0, vec4 wData, vec3 tint) {
     if (below) {
         // Total internal reflection outside Snell's window.
         F = mix(F, 1.0, 1.0 - smoothstep(0.62, 0.70, cosT));
-        reflection = waterScatterColor(vec3(0.10, 0.38, 0.55), float(eyeBrightnessSmooth.y) / 240.0);
+        reflection = waterScatterColor(vec3(0.10, 0.38, 0.55), float(eyeBrightnessSmooth.y) / 240.0, ambCol, sun);
     } else {
         vec3 R = reflect(V, n);
         vec3 Rw = mat3(gbufferModelViewInverse) * R;
         Rw.y = max(Rw.y, 0.0);
-        reflection = skyFull(normalize(Rw + vec3(0.0, 0.001, 0.0)), false) * smoothstep(0.2, 0.8, skyLevel)
-                   + ambientColor() * 0.05;
+        reflection = skyFull(normalize(Rw + vec3(0.0, 0.001, 0.0)), false, ambCol, sun) * smoothstep(0.2, 0.8, skyLevel)
+                   + ambCol * 0.05;
         vec4 hit = vec4(0.0);
 #ifdef SSR
         hit = traceReflection(viewPos0, R);
 #endif
 #ifdef RT_WATER_REFLECTIONS
         // Off-screen reflections: trace the voxel world where SSR can't see.
-        if (hit.a < 0.99) {
-            vec3 Rt = normalize(mat3(gbufferModelViewInverse) * R);
+        // Skip rays that head up into open sky: the sky fallback is right there.
+        vec3 Rt = normalize(mat3(gbufferModelViewInverse) * R);
+        if (hit.a < 0.99 && (Rt.y < 0.35 || skyLevel < 0.95)) {
             vec3 origin = playerToGrid(surfPlayer + nW * 0.1);
             vec3 hp, hn;
-            vec4 vox;
-            if (insideGrid(origin) && traceVoxels(origin, Rt, 48.0, ign(gl_FragCoord.xy), hp, hn, vox)) {
+            uint vox;
+            bool leftGrid;
+            if (insideGrid(origin) && traceVoxels(origin, Rt, 24.0, ign(gl_FragCoord.xy), hp, hn, vox, leftGrid)) {
                 vec3 hitPlayer = gridToPlayer(hp);
-                vec3 rc = voxelRadiance(vox, hp, hn, sun, ambientColor(), L) + toLinear(vox.rgb) * ambientColor() * 0.35;
-                rc = applyFog(rc, (gbufferModelView * vec4(hitPlayer, 1.0)).xyz, false);
+                vec3 rc = voxelRadiance(vox, hp, hn, sun, ambCol, L);
+                rc = applyFog(rc, (gbufferModelView * vec4(hitPlayer, 1.0)).xyz, false, ambCol, sun);
                 reflection = rc;
             }
         }
 #endif
         reflection = mix(reflection, hit.rgb, hit.a);
         // Sun glint (GGX, very smooth).
-        vec3 H = normalize(L - mat3(gbufferModelViewInverse) * V);
+        vec3 Vw = mat3(gbufferModelViewInverse) * V;
+        vec3 H = normalize(L - Vw);
         float NdotH = max(dot(nW, H), 0.0);
-        float a2 = 0.0025;
+        float NdotL = max(dot(nW, L), 0.0);
+        float NdotV = max(dot(nW, -Vw), 1e-3);
+        // Rougher with distance: tiny far-off facets would only sparkle.
+        float a2 = 0.0025 + 0.02 * smoothstep(8.0, 96.0, length(viewPos0));
         float D = a2 / (PI * pow(NdotH * NdotH * (a2 - 1.0) + 1.0, 2.0));
-        specular = sun * D * 0.02 * surfShadow * step(0.0, L.y);
+        float Fh = 0.02 + 0.98 * pow(1.0 - max(dot(-Vw, H), 0.0), 5.0);
+        specular = sun * D * Fh * NdotL / (4.0 * NdotL * NdotV + 1e-3) * 4.0 * surfShadow;
     }
     return mix(col, reflection, F) + specular;
 }
@@ -226,30 +255,35 @@ vec3 volumetricLight(vec3 viewPos, bool sky) {
     vec3 dirView = normalize(viewPos);
     vec3 dirW = mat3(gbufferModelViewInverse) * dirView;
     float maxDist = min(sky ? 1e5 : length(viewPos), shadowDistance);
-    vec3 sun = directLightColor();
+    bool underwater = isEyeInWater == 1;
+    if (underwater) maxDist = min(maxDist, UNDERWATER_VIEW);
+    // Extinction along the ray, so far shafts fade like the haze does.
+    vec3 sigma = underwater ? waterAbsorption(vec3(0.10, 0.38, 0.55)) * (32.0 / UNDERWATER_VIEW)
+                            : vec3(0.0012 * HAZE * (1.0 + rainStrength * 4.0));
+    vec3 sun = sunCol;
     if (luma(sun) < 1e-4) return vec3(0.0);
 
     vec3 startS = (shadowProjection * (shadowModelView * vec4(0.0, 0.0, 0.0, 1.0))).xyz;
     vec3 endS = (shadowProjection * (shadowModelView * vec4(dirW * maxDist, 1.0))).xyz;
     float jitter = ign(gl_FragCoord.xy);
-    float acc = 0.0;
+    vec3 acc = vec3(0.0);
     for (int i = 0; i < VL_STEPS; i++) {
         float t = (float(i) + jitter) / float(VL_STEPS);
         vec3 p = distortShadow(mix(startS, endS, t)) * 0.5 + 0.5;
         float lit = shadow2D(shadowtex0, vec3(p.xy, p.z - 0.0002)).x;
         float h = cameraPosition.y + dirW.y * maxDist * t;
-        acc += lit * exp(-max(h - 62.0, 0.0) / 70.0);
+        acc += lit * exp(-max(h - 62.0, 0.0) / 70.0) * exp(-sigma * maxDist * t);
     }
     acc *= maxDist / float(VL_STEPS);
 
-    float c = dot(dirW, lightDirWorld());
+    float c = dot(dirW, lightW);
     float eyeSky = float(eyeBrightnessSmooth.y) / 240.0;
-    if (isEyeInWater == 1) {
+    if (underwater) {
         float phase = mix(phaseHG(c, 0.5), 1.0, 0.3);
         return sun * vec3(0.10, 0.38, 0.55) * phase * acc * 0.0045 * VL_STRENGTH * (0.3 + 0.7 * eyeSky);
     }
-    float phase = mix(phaseHG(c, 0.62), 1.0, 0.25);
-    float density = 0.0011 * VL_STRENGTH * (0.35 + sunsetFactor() * 1.4 + rainStrength * 0.4);
+    float phase = mix(phaseHG(c, 0.45), 1.0, 0.25);
+    float density = 0.0011 * VL_STRENGTH * (0.35 + sunsetFactor() * 0.6 + rainStrength * 0.4);
     return sun * phase * acc * density * (0.15 + 0.85 * eyeSky);
 #else
     return vec3(0.0);
@@ -284,12 +318,12 @@ void main() {
     if (isEyeInWater == 1 && opaqueData && !hand && d0 < 1.0 && texture2D(colortex3, texcoord).z < 0.2) {
         vec3 vp = screenToView(texcoord, d0);
         vec3 pp = (gbufferModelViewInverse * vec4(vp, 1.0)).xyz;
-        vec3 L = lightDirWorld();
+        vec3 L = lightW;
         vec3 nW = mat3(gbufferModelViewInverse) * decodeNormal(texture2D(colortex1, texcoord).xy);
         float lit = shadowAt(pp + nW * 0.1) * cloudShadow(pp + cameraPosition, L) * max(dot(nW, L), 0.0);
         float depthBelow = max(cameraPosition.y - (pp.y + cameraPosition.y), 0.0) + 1.0;
         float c = caustics(pp.xz + cameraPosition.xz + L.xz / max(L.y, 0.2) * depthBelow);
-        col *= 1.0 + c * 1.4 * lit * luma(directLightColor()) / 3.0 * (float(eyeBrightnessSmooth.y) / 240.0);
+        col *= 1.0 + c * 1.4 * lit * luma(sunCol) / 3.0 * (float(eyeBrightnessSmooth.y) / 240.0);
     }
 #endif
 
@@ -299,9 +333,11 @@ void main() {
 
     vec3 viewPos = screenToView(texcoord, d0 >= 1.0 ? 1.0 : d0);
     bool sky = d0 >= 1.0;
-    if (!hand) col = applyFog(col, viewPos, sky);
+    if (!hand) col = applyFog(col, viewPos, sky, ambCol, sunCol);
 
     vec3 vl = hand ? vec3(0.0) : volumetricLight(viewPos, sky);
+    // Never let shafts wash out what is behind them (players against a sunset).
+    vl = min(vl, vec3(0.25 * luma(col) + 0.05));
 
     /* DRAWBUFFERS:05 */
     gl_FragData[0] = vec4(col, 1.0);

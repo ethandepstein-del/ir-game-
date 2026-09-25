@@ -20,7 +20,7 @@ void main() {
         vec3 d = normalize(vec3(ndc.x * 1.2, ndc.y * 0.56 - 0.12, -1.0));
         float cy = cos(yaw), sy = sin(yaw);
         d = vec3(cy * d.x - sy * d.z, d.y, sy * d.x + cy * d.z);
-        if (d.y >= 0.0) { col = skyFull(d, true); }
+        if (d.y >= 0.0) { col = skyFull(d, true, ambientColor(), sun); }
         else {
             float t = 4.0 / -d.y;
             vec3 p = vec3(0.0, 4.0, 0.0) + d * t;
@@ -28,7 +28,7 @@ void main() {
             float cosT = clamp(dot(-d, n), 0.0, 1.0);
             float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
             vec3 R = reflect(d, n); R.y = max(R.y, 0.0);
-            vec3 refl = skyFull(normalize(R + vec3(0.0, 0.001, 0.0)), false);
+            vec3 refl = skyFull(normalize(R + vec3(0.0, 0.001, 0.0)), false, ambientColor(), sun);
             vec3 deep = tint * (ambientColor() * 0.55 + sun * 0.04);
             vec3 H = normalize(L - d);
             float NdotH = max(dot(n, H), 0.0);
@@ -46,7 +46,7 @@ void main() {
         float F = 0.02 + 0.98 * pow(1.0 - clamp(dot(-d, n), 0.0, 1.0), 5.0);
         vec3 R = reflect(d, n); R.y = max(R.y, 0.0);
         vec3 floorCol = pow(vec3(0.86, 0.82, 0.62), vec3(2.2)) * (sun + ambientColor()) * exp(-vec3(0.26, 0.07, 0.045) * 2.5);
-        col = mix(floorCol, skyFull(normalize(R + 0.001), false), F);
+        col = mix(floorCol, skyFull(normalize(R + 0.001), false, ambientColor(), sun), F);
         // Shade by slope so the wave and ripple shapes are visible.
         col = (n * 0.5 + 0.5) * 0.7;
         col = pow(col, vec3(2.2)) * 1.6;

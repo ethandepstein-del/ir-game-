@@ -5,6 +5,7 @@
 #define ID_PLANT_TOP  10002.0
 #define ID_WATER      10008.0
 #define ID_EMISSIVE   10010.0
+#define ID_EMISSIVE_SMALL 10011.0
 
 bool isId(float id, float target) { return abs(id - target) < 0.5; }
 

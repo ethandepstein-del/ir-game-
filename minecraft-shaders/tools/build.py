@@ -61,8 +61,18 @@ DIMENSIONS = {
 
 
 # Programs that need a newer GLSL version in a given dimension folder.
-# The overworld shadow pass writes the voxel grid with imageStore.
-VERSION_OVERRIDES = {("", "shadow"): "#version 430 compatibility"}
+# The overworld shadow pass writes the voxel grid with imageAtomicMax.
+COMPAT430 = "#version 430 compatibility"
+VERSION_OVERRIDES = {("", "shadow"): COMPAT430}
+# Programs that read the integer voxel image (usampler3D / texelFetch).
+for _folder in ("", "world-1", "world1"):
+    for _name in ("deferred", "deferred1", "deferred2", "deferred3", "deferred4", "composite1"):
+        VERSION_OVERRIDES[(_folder, _name)] = COMPAT430
+
+
+# Extensions a program's stage needs, placed right after #version.
+# composite3 meters exposure from mip levels in its vertex stage.
+EXTENSIONS = {("composite3", "vsh"): ["#extension GL_ARB_shader_texture_lod : enable"]}
 
 
 def write_stubs():
@@ -72,6 +82,7 @@ def write_stubs():
         for name, (program, defines) in PROGRAMS.items():
             for stage, ext in (("VSH", "vsh"), ("FSH", "fsh")):
                 lines = [VERSION_OVERRIDES.get((folder, name), "#version 120")]
+                lines += EXTENSIONS.get((name, ext), [])
                 lines += ["#define " + d for d in dim_defines + [stage] + defines]
                 lines.append('#include "/program/%s.glsl"' % program)
                 with open(os.path.join(out_dir, "%s.%s" % (name, ext)), "w") as f:
@@ -117,6 +128,28 @@ def check(extra_defines=()):
     return failures
 
 
+def write_compute():
+    """deferred.csh: the barrier pass (overworld only; RT is overworld only)."""
+    lines = ["#version 430", '#include "/program/deferred_barrier.glsl"']
+    with open(os.path.join(SHADERS, "deferred.csh"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def check_compute():
+    tool = shutil.which("glslangValidator")
+    with tempfile.TemporaryDirectory() as tmp:
+        src = expand(os.path.join(SHADERS, "deferred.csh"))
+        path = os.path.join(tmp, "s.comp")
+        with open(path, "w") as f:
+            f.write(src)
+        r = subprocess.run([tool, "-S", "comp", path], capture_output=True, text=True)
+        if r.returncode != 0:
+            print("FAIL deferred.csh")
+            print(r.stdout.strip())
+            return 1
+    return 0
+
+
 def build_zip():
     dist = os.path.join(ROOT, "dist")
     os.makedirs(dist, exist_ok=True)
@@ -131,8 +164,9 @@ def build_zip():
 
 if __name__ == "__main__":
     write_stubs()
+    write_compute()
     if "--check" in sys.argv:
-        failed = check() + check(("MC_RENDER_STAGE_STARS 5", "IS_IRIS")) + check(("RT_GI", "IS_IRIS"))
+        failed = check_compute() + check() + check(("MC_RENDER_STAGE_STARS 5", "IS_IRIS")) + check(("RT_GI", "IS_IRIS"))
         if failed:
             sys.exit("%d program(s) failed to compile" % failed)
         print("all programs compile")

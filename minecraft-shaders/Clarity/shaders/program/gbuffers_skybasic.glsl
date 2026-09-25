@@ -7,10 +7,14 @@
 
 varying vec4 color;
 varying float star;
+varying vec3 ambCol;   // per-frame constants, computed on the few sky vertices
+varying vec3 sunCol;
 
 #ifdef VSH
 void main() {
     color = gl_Color;
+    ambCol = ambientColor();
+    sunCol = directLightColor();
     star = float(color.r == color.g && color.g == color.b && color.r > 0.0);
     gl_Position = ftransform();
 }
@@ -32,7 +36,7 @@ void main() {
     vec3 viewDir = normalize(screenToView(uv, 1.0));
     vec3 dir = normalize(mat3(gbufferModelViewInverse) * viewDir);
 
-    vec3 col = skyFull(dir, true);
+    vec3 col = skyFull(dir, true, ambCol, sunCol);
 
     /* DRAWBUFFERS:0 */
     gl_FragData[0] = vec4(col, 1.0);

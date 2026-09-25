@@ -22,7 +22,7 @@ void main() {
 #if defined RT_GI && defined OVERWORLD
     vec4 gi = texture2D(colortex10, texcoord);
     vec4 mat = texture2D(colortex2, texcoord);
-    if (gi.a > 0.0 && abs(mat.g - 0.5) < 0.1 && mat.r < 0.5 && texture2D(depthtex0, texcoord).r < 1.0) {
+    if (gi.a > 0.0 && abs(mat.g - 0.5) < 0.1 && mat.r < 0.5 && mat.b < 0.5 && texture2D(depthtex0, texcoord).r < 1.0) {
         vec3 albedo = pow(texture2D(colortex7, texcoord).rgb, vec3(2.2));
         col += albedo * max(gi.rgb, vec3(0.0)) * RT_GI_STRENGTH;
     }

@@ -31,9 +31,9 @@ attribute vec4 mc_midTexCoord;
 #define VOXEL_WRITE
 #include "/lib/voxel.glsl"
 in vec3 at_midBlock;
-layout(rgba8) uniform writeonly image3D voxelImg;
+layout(r32ui) uniform uimage3D voxelImg;
 
-void voxelize(vec3 playerPos) {
+void voxelize(vec3 playerPos, float skyLight) {
     vec3 offset = at_midBlock / 64.0;
     if (dot(offset, offset) < 0.01) return;          // entities: no block centre
     float id = mc_Entity.x;
@@ -42,14 +42,18 @@ void voxelize(vec3 playerPos) {
     vec3 g = playerToGrid(playerPos + offset);
     if (!insideGrid(g)) return;
 
-    vec4 tex = texture2DLod(ALBEDO_TEX, mc_midTexCoord.xy, 0.0);
     bool leaves = isId(id, ID_LEAVES);
+    bool emit = isId(id, ID_EMISSIVE);
+    bool emitSmall = isId(id, ID_EMISSIVE_SMALL);
     // Glass and other see-through blocks have a clear centre: skip them.
-    if (!leaves && tex.a < 0.9) return;
+    // (Light sources are kept even when their centre texel is clear.)
+    vec4 tex = texture2DLod(ALBEDO_TEX, mc_midTexCoord.xy, 0.0);
+    if (!leaves && !emit && !emitSmall && tex.a < 0.9) return;
 
     vec3 albedo = texture2DLod(ALBEDO_TEX, mc_midTexCoord.xy, 4.0).rgb * gl_Color.rgb;
-    float material = isId(id, ID_EMISSIVE) ? VOXEL_EMISSIVE : (leaves ? VOXEL_LEAVES : VOXEL_SOLID);
-    imageStore(voxelImg, ivec3(floor(g)), vec4(albedo, material));
+    if (emitSmall) albedo = max(albedo, texture2DLod(ALBEDO_TEX, mc_midTexCoord.xy, 2.0).rgb);
+    uint material = emit ? MAT_EMIT : (emitSmall ? MAT_EMIT_SMALL : (leaves ? MAT_LEAVES : MAT_SOLID));
+    imageAtomicMax(voxelImg, ivec3(floor(g)), packVoxel(albedo, material, skyLight));
 }
 #endif
 
@@ -67,13 +71,15 @@ void main() {
     vec2 lm = clamp(((gl_TextureMatrix[1] * gl_MultiTexCoord1).xy - 0.03125) * 1.06667, 0.0, 1.0);
     vec4 pp = shadowModelViewInverse * (gl_ModelViewMatrix * gl_Vertex);
 #ifdef VOXEL_WRITE
-    voxelize(pp.xyz);
+    voxelize(pp.xyz, lm.y);
 #endif
     bool topVertex = gl_MultiTexCoord0.t < mc_midTexCoord.t;
     pp.xyz += waveVertex(pp.xyz + cameraPosition, mc_Entity.x, topVertex, lm.y);
 
     gl_Position = shadowProjection * (shadowModelView * pp);
     gl_Position.xyz = distortShadow(gl_Position.xyz);
+    // Water never casts: drop it before rasterisation (voxelization is done).
+    if (skip > 0.5) gl_Position = vec4(10.0, 10.0, 10.0, 1.0);
 #endif
 }
 #endif

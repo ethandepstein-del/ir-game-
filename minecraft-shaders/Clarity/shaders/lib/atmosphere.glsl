@@ -143,14 +143,15 @@ float cloudShadow(vec3 worldPos, vec3 L) {
     float t = (CLOUD_HEIGHT - worldPos.y) / L.y;
     if (t < 0.0) return 1.0;
     float d = cloudDensity(worldPos.xz + L.xz * t, 3);
-    return 1.0 - d * 0.72 * CLOUD_OPACITY;
+    return 1.0 - d * CLOUD_SHADOW_STRENGTH * CLOUD_OPACITY;
 #else
     return 1.0;
 #endif
 }
 
 // Clouds seen along dir from the camera. rgb = premultiplied colour, a = coverage.
-vec4 clouds(vec3 dir) {
+// amb/sunCol are ambientColor()/directLightColor(), hoisted by the caller.
+vec4 clouds(vec3 dir, vec3 amb, vec3 sunCol) {
 #if defined CLOUDS && defined OVERWORLD
     vec4 result = vec4(0.0);
     float eyeY = cameraPosition.y;
@@ -162,8 +163,6 @@ vec4 clouds(vec3 dir) {
     float d = cloudDensity(xz, 5);
 
     vec3 L = lightDirWorld();
-    vec3 amb = ambientColor();
-    vec3 sunCol = directLightColor();
     float fade = exp(-t * 0.00011) * smoothstep(0.0, 0.10, abs(dir.y));
 
     if (d > 0.002) {
@@ -248,9 +247,9 @@ vec3 sunDisc(vec3 dir) {
 }
 
 // Everything visible in the open sky along dir.
-vec3 skyFull(vec3 dir, bool withSun) {
+vec3 skyFull(vec3 dir, bool withSun, vec3 amb, vec3 sunCol) {
     vec3 sky = atmosphere(dir) + stars(dir);
     if (withSun) sky += sunDisc(dir);
-    vec4 cl = clouds(dir);
+    vec4 cl = clouds(dir, amb, sunCol);
     return sky * (1.0 - cl.a) + cl.rgb;
 }

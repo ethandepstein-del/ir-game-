@@ -35,7 +35,11 @@ vec3 sampleShadow(vec3 shadowClip) {
         float d = texture2D(shadowtex1, p.xy + vogelDisk(i, 6, phi) * 14.0 * texel).r;
         if (d < p.z) { blockerSum += d; blockers += 1.0; }
     }
-    if (blockers > 0.0) {
+    if (blockers == 0.0) {
+        // No opaque blocker nearby: fully lit unless glass is in the way.
+        float glassTest = shadow2D(shadowtex0, p).x;
+        if (glassTest > 0.999) return vec3(1.0);
+    } else {
         // Depth gap in blocks (256-block shadow depth range, z scaled by 0.2).
         float gap = (p.z - blockerSum / blockers) * 1280.0;
         float penumbra = gap * 0.022 * uvPerBlock;
@@ -45,17 +49,18 @@ vec3 sampleShadow(vec3 shadowClip) {
     radius *= SHADOW_SOFTNESS;
 
     float s0 = 0.0;
-    float s1 = 0.0;
     for (int i = 0; i < SHADOW_SAMPLES; i++) {
-        vec2 q = p.xy + vogelDisk(i, SHADOW_SAMPLES, phi) * radius;
-        s0 += shadow2D(shadowtex0, vec3(q, p.z)).x;
-#ifdef COLORED_SHADOWS
-        s1 += step(p.z, texture2D(shadowtex1, q).r);
-#endif
+        s0 += shadow2D(shadowtex0, vec3(p.xy + vogelDisk(i, SHADOW_SAMPLES, phi) * radius, p.z)).x;
     }
     s0 /= float(SHADOW_SAMPLES);
 #ifdef COLORED_SHADOWS
-    s1 /= float(SHADOW_SAMPLES);
+    // Only pay for the opaque-only pass where translucent shadow is possible.
+    if (s0 > 0.999) return vec3(1.0);
+    float s1 = 0.0;
+    for (int i = 0; i < SHADOW_SAMPLES; i += 2) {
+        s1 += step(p.z, texture2D(shadowtex1, p.xy + vogelDisk(i, SHADOW_SAMPLES, phi) * radius).r);
+    }
+    s1 /= float((SHADOW_SAMPLES + 1) / 2);
     if (s1 > s0 + 0.01) {
         vec4 tint = texture2D(shadowcolor0, p.xy);
         vec3 glass = toLinear(tint.rgb) * (1.0 - tint.a * 0.5);
@@ -86,12 +91,20 @@ vec3 surfaceLight(vec3 viewNormal, vec2 lm, vec3 shadowClip, vec3 playerPos, boo
     vec3 ambient = vec3(0.0);   // replaced by ray-traced sky light and bounce
 #elif defined OVERWORLD
     vec3 ambient = amb * (skyLight * skyLight) * (foliage ? 0.92 : faceShade);
+    // Cheap stand-in for sunlight bounced off the ground onto walls and
+    // undersides: warm fill that RT would otherwise provide.
+    float upN = dot(viewNormal, up);
+    float sunUp = max(dot(normalize(shadowLightPosition), up), 0.0);
+    ambient += sunCol * sunUp * 0.08 * (0.5 - 0.5 * upN) * (skyLight * skyLight);
 #else
     vec3 ambient = amb * (foliage ? 0.92 : faceShade);
 #endif
 
     float bl = lm.x;
     vec3 block = blockLightColor() * (bl * bl * bl * 0.85 + bl * 0.08) * (1.0 + bl * bl * bl * bl);
+#if defined TRACED_AMBIENT
+    block *= 0.75;   // traced emitters add some of this back as bounce
+#endif
 
     vec3 direct = vec3(0.0);
 #if defined OVERWORLD

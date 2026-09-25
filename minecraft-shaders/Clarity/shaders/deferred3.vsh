@@ -1,4 +1,4 @@
-#version 120
+#version 430 compatibility
 #define OVERWORLD
 #define VSH
 #define ATROUS_STEP 4

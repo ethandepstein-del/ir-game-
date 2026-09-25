@@ -11,7 +11,7 @@
 #if defined HAND
 #define NO_SHADOW_LOOKUP
 #endif
-#if defined RT_GI && defined OVERWORLD && !defined HAND
+#if defined RT_GI && defined OVERWORLD && !defined HAND && !defined ENTITIES
 #define TRACED_AMBIENT
 #endif
 
@@ -64,7 +64,7 @@ void main() {
         gl_Position = gl_ProjectionMatrix * (gbufferModelView * pp);
     }
     if (isId(matId, ID_PLANT) || isId(matId, ID_PLANT_TOP) || isId(matId, ID_LEAVES)) matId = 1.0;
-    else if (isId(matId, ID_EMISSIVE)) matId = 2.0;
+    else if (isId(matId, ID_EMISSIVE) || isId(matId, ID_EMISSIVE_SMALL)) matId = 2.0;
     else matId = 0.0;
 #endif
     playerPos = pp.xyz;
@@ -152,6 +152,10 @@ void main() {
 #if defined HAND
     handFlag = 1.0;
 #endif
+    float noTraceFlag = 0.0;   // moving things are lit by raster ambient in RT
+#if defined ENTITIES
+    noTraceFlag = 1.0;
+#endif
 
 #if defined TRACED_AMBIENT
     float dataB = lmcoord.y;   // sky light: the tracer's prior for escaped rays
@@ -162,7 +166,7 @@ void main() {
     /* DRAWBUFFERS:0127 */
     gl_FragData[0] = vec4(col, albedo.a);
     gl_FragData[1] = vec4(encodeNormal(n), dataB, 1.0);
-    gl_FragData[2] = vec4(handFlag, 0.5, 0.0, 1.0);
+    gl_FragData[2] = vec4(handFlag, 0.5, noTraceFlag, 1.0);
     gl_FragData[3] = vec4(pow(base, vec3(1.0 / 2.2)), 1.0);
 }
 

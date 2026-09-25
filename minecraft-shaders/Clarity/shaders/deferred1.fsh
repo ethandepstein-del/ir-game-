@@ -1,4 +1,4 @@
-#version 120
+#version 430 compatibility
 #define OVERWORLD
 #define FSH
 #define ATROUS_STEP 1

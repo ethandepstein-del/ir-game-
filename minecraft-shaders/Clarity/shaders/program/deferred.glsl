@@ -1,8 +1,9 @@
 // RT pass 1: trace diffuse rays through the voxel world for sky light,
 // sunlight bounce and emissive surfaces, then accumulate over time.
-//   out: colortex10 GI (rgb) + history length (a)
+//   out: colortex0  passthrough (keeps loaders that ignore RENDERTARGETS safe)
+//        colortex10 GI (rgb) + history length (a)
 //        colortex8  same, kept for next frame
-//        colortex9  linear depth, kept for next frame
+//        colortex9  linear depth + view normal, kept for next frame
 #include "/lib/settings.glsl"
 
 varying vec2 texcoord;
@@ -19,6 +20,7 @@ void main() {
 #include "/lib/atmosphere.glsl"
 #include "/lib/distort.glsl"
 
+uniform sampler2D colortex0;
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
 uniform sampler2D colortex8;
@@ -46,17 +48,20 @@ float shadowAt(vec3 playerPos) {
 void main() {
     float depth = texture2D(depthtex0, texcoord).r;
     vec4 mat = texture2D(colortex2, texcoord);
-    bool valid = abs(mat.g - 0.5) < 0.1 && mat.r < 0.5 && depth < 1.0;
+    // Skip sky, the hand, and entities (moving things keep raster ambient,
+    // so they never show ghosting or 1-sample noise).
+    bool valid = abs(mat.g - 0.5) < 0.1 && mat.r < 0.5 && mat.b < 0.5 && depth < 1.0;
 
     vec3 gi = vec3(0.0);
     float histLen = 0.0;
     vec3 viewPos = screenToView(texcoord, depth);
     float linDepth = -viewPos.z;
+    vec2 normalEnc = texture2D(colortex1, texcoord).xy;
 
 #if defined RT_GI && defined OVERWORLD
     if (valid) {
         vec4 data = texture2D(colortex1, texcoord);
-        vec3 nView = decodeNormal(data.xy);
+        vec3 nView = decodeNormal(normalEnc);
         vec3 n = normalize(mat3(gbufferModelViewInverse) * nView);
         float lmSky = data.b;
         vec3 playerPos = (gbufferModelViewInverse * vec4(viewPos, 1.0)).xyz;
@@ -81,14 +86,21 @@ void main() {
             vec3 dir = normalize(T * (cos(phi) * s) + B * (sin(phi) * s) + n * sqrt(max(1.0 - n2, 0.0)));
 
             vec3 hitPos, hitN;
-            vec4 voxel;
-            if (traceVoxels(origin, dir, RT_DISTANCE, n1 + frame, hitPos, hitN, voxel)) {
-                traced += voxelRadiance(voxel, hitPos, hitN, sunCol, amb, L);
+            uint voxel;
+            bool leftGrid;
+            vec3 sampleL;
+            if (traceVoxels(origin, dir, RT_DISTANCE, n1 + frame, hitPos, hitN, voxel, leftGrid)) {
+                sampleL = voxelRadiance(voxel, hitPos, hitN, sunCol, amb, L);
+            } else if (leftGrid) {
+                // Ran off the voxel grid: fall back to the raster estimate.
+                sampleL = amb * lmSky * lmSky;
             } else {
-                // Escaped: open sky, trusting vanilla sky light so rays that
-                // leave the grid in a deep cave don't find a sky.
-                traced += atmosphere(dir) * 0.70 * skyPrior;
+                // Open air for RT_DISTANCE: sky, trusting vanilla sky light so
+                // rays in a deep cave don't find one.
+                sampleL = atmosphere(dir) * 0.70 * skyPrior;
             }
+            // Clamp single-sample outliers (bright emitters) to kill fireflies.
+            traced += sampleL * min(1.0, 3.0 / max(luma(sampleL), 1e-3));
         }
         traced /= float(RT_RAYS);
 
@@ -106,9 +118,11 @@ void main() {
         vec2 prevUV = prevClip.xy / prevClip.w * 0.5 + 0.5;
         histLen = 1.0;
         if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0) {
-            float prevDepth = texture2D(colortex9, prevUV).r;
+            vec4 prevData = texture2D(colortex9, prevUV);
             float expected = -prevView.z;
-            if (abs(prevDepth - expected) < expected * 0.04 + 0.08) {
+            vec3 prevN = decodeNormal(prevData.gb);
+            vec3 prevNExpected = mat3(gbufferPreviousModelView) * n;
+            if (abs(prevData.r - expected) < expected * 0.02 + 0.05 && dot(prevN, prevNExpected) > 0.9) {
                 vec4 hist = texture2D(colortex8, prevUV);
                 if (hist.a > 0.0 && dot(hist.rgb, vec3(1.0)) < 1e4) {
                     histLen = min(hist.a + 1.0, float(RT_HISTORY));
@@ -119,9 +133,10 @@ void main() {
     }
 #endif
 
-    /* RENDERTARGETS: 10,8,9 */
-    gl_FragData[0] = vec4(gi, histLen);
+    /* RENDERTARGETS: 0,10,8,9 */
+    gl_FragData[0] = texture2D(colortex0, texcoord);
     gl_FragData[1] = vec4(gi, histLen);
-    gl_FragData[2] = vec4(valid ? linDepth : -1.0, 0.0, 0.0, 1.0);
+    gl_FragData[2] = vec4(gi, histLen);
+    gl_FragData[3] = vec4(valid ? linDepth : -1.0, normalEnc, 1.0);
 }
 #endif

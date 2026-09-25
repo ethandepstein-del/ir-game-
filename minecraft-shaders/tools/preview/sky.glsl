@@ -10,7 +10,7 @@ void main() {
     float az = (uv.x - 0.5) * 2.0 * PI;
     float el = radians(mix(-12.0, 80.0, uv.y));
     vec3 dir = vec3(sin(az) * cos(el), sin(el), -cos(az) * cos(el));
-    vec3 col = skyFull(dir, true);
+    vec3 col = skyFull(dir, true, ambientColor(), directLightColor());
     col = aces(col * exposure * 0.85);
     gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
 }

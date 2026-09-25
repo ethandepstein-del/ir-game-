@@ -69,12 +69,17 @@ void main() {
     vec4 albedo = texture2D(texture, texcoord) * color;
 
     if (matId > 0.5) {
-        vec3 nW = mat3(gbufferModelViewInverse) * safeNormal(normal);
+        vec3 geoW = mat3(gbufferModelViewInverse) * safeNormal(normal);
+        vec3 nW = geoW;
 #ifdef WATER_WAVES
-        if (nW.y > 0.9) nW = waterNormal((playerPos + cameraPosition).xz, length(playerPos));
+        if (geoW.y > 0.9) nW = waterNormal((playerPos + cameraPosition).xz, length(playerPos));
 #endif
-        // Face the camera, so the surface seen from below is lit correctly.
-        if (dot(nW, playerPos) > 0.0) nW = -nW;
+        // Face the camera (decided by the flat surface, so steep wave facets
+        // at grazing angles don't flip), then keep facets from turning away.
+        if (dot(geoW, playerPos) > 0.0) nW = -nW;
+        vec3 toEye = -normalize(playerPos);
+        float facing = dot(nW, toEye);
+        if (facing < 0.02) nW = normalize(nW + toEye * (0.02 - facing));
 
         // Texture detail is kept subtle: blend toward the tile's average.
         vec4 blurred = texture2D(texture, texcoord, 4.0) * color;

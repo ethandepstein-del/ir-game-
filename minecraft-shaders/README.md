@@ -36,18 +36,21 @@ A shader pack that looks good without getting in the way of play. It's tuned so 
 
 ## Ray tracing (optional RT profile)
 
-Choose the **Ray Traced (Iris)** profile. This needs Iris, which is what Lunar uses on Minecraft 1.18 and later. It doesn't work with OptiFine on 1.8.9.
+Choose the **Ray Traced (Iris)** profile. This needs **Iris 1.6 or newer (Minecraft 1.20+)**, which provides custom images and the `at_midBlock` attribute, and OpenGL 4.3 (Windows or Linux; macOS isn't supported). It doesn't work with OptiFine on 1.8.9. On an older Iris the profile still loads, but it falls back to sky-light estimates.
 
 How it works:
 
-- **Voxelization:** the shadow pass writes every block within 64 blocks of you into a 128³ voxel grid, storing each block's colour and whether it is solid, leaves or a light source.
-- **Tracing:** each pixel fires cosine-weighted rays through that grid. A ray that hits a block returns the light on that block: sunlight (with shadows), its colour, and its own glow if it's a light source. A ray that escapes returns the sky.
+- **Voxelization:** the shadow pass writes every block within 64 blocks of you into a 128³ voxel grid. Each voxel is one packed value: the block's colour, its material (solid, leaves, full light source or small light source) and its sky light. It is written with `imageAtomicMax`, so the result is the same every frame (no flicker), and the face with the most sky light wins, so a grass block reads as its green top.
+- **Tracing:** each pixel fires cosine-weighted rays through that grid. A ray that hits a block returns the light on that block: sunlight (with shadows), sky light scaled by the voxel's own sky level (so sealed caves stay dark), its colour, and its own glow if it's a light source. Single-sample outliers are clamped, so light sources don't leave firefly speckles. A ray that reaches open air returns the sky; one that runs off the grid falls back to the raster estimate.
 - **Result:** sky light is truly occluded, so interiors, overhangs and caves get the right darkness. Sunlight bounces off the ground and walls with colour bleeding, glowing blocks light their surroundings, and leaves let dappled light through.
-- **Denoising:** 12 frames of reprojected temporal accumulation plus three edge-aware à-trous passes. At 120 fps, 12 frames is about a tenth of a second of light lag, short enough for gameplay. You can change it with **Temporal Frames**.
+- **Denoising:** 10 frames of reprojected temporal accumulation (rejected on depth *and* normal changes) plus three à-trous passes. Their edge-stopping uses plane distance, so floors seen at a grazing angle still denoise cleanly. At 120 fps, 10 frames is about 80 ms of light lag. You can change it with **Temporal Frames**.
+- **Entities:** mobs and players keep the raster sky light, so moving things never ghost or show 1-sample noise.
 - **Off-screen water reflections:** reflections that screen-space tracing can't find are traced through the same voxel grid.
 - **What stays rasterised:** sun shadows (PCSS) and torch light stay as they are. They're sharp, stable and lag-free.
 
 Things to know:
+
+- Keep **Shadow Distance** at 112 or more in the RT profile: the shadow pass is what builds the voxel grid, and it must reach the grid's corners. The RT profile also turns shadow-chunk culling off for the same reason.
 
 - Beyond the voxel range (64 blocks), lighting fades back to the normal estimate.
 - Glass and water don't block rays, and entities aren't in the voxel grid.
@@ -94,7 +97,36 @@ Minecraft is almost always limited by the CPU, not the GPU. A 5080 runs this pac
 | NVIDIA Control Panel → Power management | Prefer maximum performance |
 | NVIDIA Control Panel → Low latency mode | On |
 
-Shadows cost CPU as well as GPU, because the world is drawn a second time from the sun's view. If you ever drop below 120 fps in heavy areas, lower **Shadow Distance** (112 → 96) first. Next, switch to the **Balanced** profile. The **Cinematic** profile (4096 shadows, 192 blocks) is for screenshots.
+Shadows cost CPU as well as GPU, because the world is drawn a second time from the sun's view. Block entities (chests, signs) are left out of the shadow pass, and entity shadows can be turned off (**Entity Shadows**). If you ever drop below 120 fps in heavy areas, lower **Shadow Distance** (112 → 96) first, but not in the RT profile, which needs 112. Next, switch to the **Balanced** profile. The **Cinematic** profile (4096 shadows, 192 blocks) is for screenshots.
+
+## Changes after the review
+
+Three independent reviews (pipeline correctness, visual quality, performance and gameplay) led to these changes:
+
+**Performance**
+- A PCSS early-out on sunlit ground, and the coloured-shadow pass runs only where glass could matter.
+- Sky and cloud lighting constants are computed once per frame, not per pixel.
+- Exposure metering runs once per frame.
+- The RT denoiser reads stored depth and normals.
+- Ray and reflection traces are capped.
+- The shadow pass stops drawing water, and skips block entities.
+
+**Gameplay**
+- Eye adaptation reacts within about 1 s (was the 10 s default).
+- Exposure ignores the sky, so looking up no longer darkens the ground.
+- Sun shafts can't wash out players against a sunset.
+- No sky haze inside caves.
+- The night colour shift spares lights.
+- Competitive also drops auto exposure, caustics, entity shadows and twinkling.
+
+**Visuals**
+- Water refraction bends the actual view ray.
+- Light is absorbed on its way down to the floor as well as on its way back up.
+- Caustics focus light instead of adding it.
+- Reflections keep marching past thin objects.
+- The sun glint has proper Fresnel and softens in the distance.
+- No dark band at the world edge.
+- Raster mode gets a warm ground-bounce fill.
 
 ## Profiles
 
