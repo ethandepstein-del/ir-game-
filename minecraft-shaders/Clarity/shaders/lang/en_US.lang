@@ -1,9 +1,9 @@
 profile=Profile
 profile.COMPETITIVE=Competitive
-profile.BALANCED=Balanced
-profile.RTX5080=RTX 5080 (120 fps)
-profile.CINEMATIC=Cinematic
-profile.comment=RTX 5080 is the tuned default. Competitive keeps the lighting but drops wind, light shafts, haze and bloom for PvP.
+profile.P4K_60=4K 60 (Ultra + RT)
+profile.P4K_120=4K 120
+profile.P1440_120=1440p 120
+profile.comment=Pick the one that matches your resolution and refresh target. 4K 120 is the default. Competitive keeps the lighting but drops wind, shafts, haze and bloom for PvP.
 
 screen.LIGHTING=Lighting
 screen.SHADOWS=Shadows
@@ -81,7 +81,6 @@ option.BLOOM_STRENGTH=Bloom Strength
 option.FXAA=FXAA
 option.SHARPEN=Sharpening
 
-profile.RT=Ray Traced (Iris)
 screen.RAYTRACING=Ray Tracing
 option.RT_GI=Ray-Traced Lighting
 option.RT_GI.comment=Iris on 1.18+ only. Traces rays through a voxel copy of the world for sky light, bounce light and glowing blocks.

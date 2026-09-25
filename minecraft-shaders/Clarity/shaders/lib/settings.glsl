@@ -7,7 +7,7 @@
 
 // ---------------------------------------------------------------- shadows
 const int   shadowMapResolution = 2048; // [1024 1536 2048 3072 4096]
-const float shadowDistance      = 112.0; // [64.0 80.0 96.0 112.0 128.0 160.0 192.0 256.0]
+const float shadowDistance      = 128.0; // [64.0 80.0 96.0 112.0 128.0 160.0 192.0 256.0]
 const float shadowDistanceRenderMul = 1.0;
 const float sunPathRotation     = -25.0; // [-40.0 -35.0 -30.0 -25.0 -20.0 -15.0 -10.0 0.0 10.0 20.0 30.0]
 const bool  shadowHardwareFiltering0 = true;
@@ -19,7 +19,7 @@ const float eyeBrightnessHalflife = 1.0;
 #define PCSS
 #define COLORED_SHADOWS
 #define SHADOW_SOFTNESS 1.0 // [0.5 0.75 1.0 1.5 2.0 3.0]
-#define SHADOW_SAMPLES 12 // [4 8 12 16 24]
+#define SHADOW_SAMPLES 8 // [4 8 12 16 24]
 #define SHADOW_DISTORT 0.85
 #define ENTITY_SHADOWS
 
@@ -72,7 +72,7 @@ const float eyeBrightnessHalflife = 1.0;
 #define SUN_SIZE 1.00 // [0.50 0.75 1.00 1.50 2.00]
 #define VOLUMETRIC_LIGHT
 #define VL_STRENGTH 1.00 // [0.25 0.50 0.75 1.00 1.50 2.00]
-#define VL_STEPS 12 // [8 12 16 24]
+#define VL_STEPS 10 // [8 10 12 16 24]
 
 // ---------------------------------------------------------------- camera / post
 #define AUTO_EXPOSURE
