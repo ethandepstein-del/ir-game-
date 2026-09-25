@@ -1,9 +1,15 @@
-// Pass 1: light shafts from the sun, screen-space and subtle.
+// Pass 0: screen-space ambient occlusion (raw, blurred in composite1).
 #include "/lib/settings.glsl"
 
 /*
 const int colortex0Format = RGBA16F;
-const bool colortex0Clear = true;
+const int colortex1Format = RGBA16;
+const int colortex2Format = RGBA8;
+const int colortex3Format = RGBA16F;
+const int colortex4Format = RGBA8;
+const int colortex5Format = RGBA16F;
+const int colortex6Format = RGBA16F;
+const bool colortex6Clear = false;
 */
 
 varying vec2 texcoord;
@@ -17,54 +23,44 @@ void main() {
 
 #ifdef FSH
 #include "/lib/common.glsl"
-uniform sampler2D colortex0;
-uniform sampler2D depthtex0;
-uniform mat4 gbufferProjection;
+uniform sampler2D colortex1;
+uniform sampler2D colortex2;
+uniform sampler2D depthtex1;
 
 void main() {
-    vec3 col = texture2D(colortex0, texcoord).rgb;
-    float depth = texture2D(depthtex0, texcoord).r;
+    float ao = 1.0;
+    float depth = texture2D(depthtex1, texcoord).r;
+    vec3 P = screenToView(texcoord, depth);
 
-    // Scrub NaN/Inf so one bad pixel can't spread through the bloom mips.
-    if (!(dot(col, vec3(1.0)) < 1e30)) col = vec3(0.0);
-    col = max(col, vec3(0.0));
-
-#if defined NETHER
-    // The Nether has no sky pass: give empty pixels the linear fog colour.
-    if (depth >= 1.0) col = skyColor(vec3(0.0));
-#endif
-
-#if defined GODRAYS && defined OVERWORLD
-    float e = sunElevation();
-    float eyeSky = float(eyeBrightnessSmooth.y) / 240.0;
-    float visibility = smoothstep(-0.02, 0.10, e) * (1.0 - rainStrength) * eyeSky * float(isEyeInWater == 0);
-    if (visibility > 0.001 && sunPosition.z < 0.0) {
-        vec4 sunClip = gbufferProjection * vec4(sunPosition, 1.0);
-        vec2 sunUV = sunClip.xy / sunClip.w * 0.5 + 0.5;
-
-        vec4 vp = gbufferProjectionInverse * vec4(texcoord * 2.0 - 1.0, 1.0, 1.0);
-        vec3 viewDir = normalize(vp.xyz / vp.w);
-        float cosSun = max(dot(viewDir, normalize(sunPosition)), 0.0);
-        float falloff = pow(cosSun, 5.0);
-
-        if (falloff > 0.002) {
-            const int steps = 16;
-            vec2 delta = (sunUV - texcoord) / float(steps);
-            vec2 pos = texcoord + delta * ign(gl_FragCoord.xy);
-            float acc = 0.0;
-            for (int i = 0; i < steps; i++) {
-                vec2 q = clamp(pos, 0.0, 1.0);
-                acc += float(texture2D(depthtex0, q).r >= 1.0);
-                pos += delta;
-            }
-            acc /= float(steps);
-            vec3 tint = mix(vec3(1.0, 0.55, 0.25), vec3(1.0, 0.88, 0.72), smoothstep(0.05, 0.45, e));
-            col += tint * acc * falloff * visibility * GODRAY_STRENGTH * 0.45;
+#if defined SSAO
+    vec4 mat = texture2D(colortex2, texcoord);
+    bool valid = abs(mat.g - 0.5) < 0.1 && mat.r < 0.5 && depth < 1.0;
+    if (valid) {
+        vec3 N = decodeNormal(texture2D(colortex1, texcoord).xy);
+        float phi = ign(gl_FragCoord.xy) * 6.2831853;
+        vec3 T = normalize(abs(N.y) < 0.99 ? cross(N, vec3(0.0, 1.0, 0.0)) : cross(N, vec3(1.0, 0.0, 0.0)));
+        vec3 B = cross(N, T);
+        const float radius = 0.85;
+        float occ = 0.0;
+        for (int i = 0; i < 8; i++) {
+            float r = sqrt((float(i) + 0.5) / 8.0);
+            float th = float(i) * 2.39996323 + phi;
+            vec2 disk = r * vec2(cos(th), sin(th));
+            float h = sqrt(max(1.0 - r * r, 0.0));
+            float scale = mix(0.25, 1.0, float(i) / 7.0);
+            vec3 S = P + (T * disk.x + B * disk.y + N * (h + 0.1)) * radius * scale;
+            vec3 s = viewToScreen(S);
+            if (s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0) continue;
+            float sceneZ = screenToView(s.xy, texture2D(depthtex1, s.xy).r).z;
+            float range = smoothstep(0.0, 1.0, radius / max(abs(P.z - sceneZ), 1e-3));
+            occ += (sceneZ >= S.z + 0.02 ? 1.0 : 0.0) * range;
         }
+        ao = 1.0 - occ / 8.0;
+        ao = pow(ao, 1.6 * SSAO_STRENGTH);
     }
 #endif
 
-    /* DRAWBUFFERS:0 */
-    gl_FragData[0] = vec4(col, 1.0);
+    /* DRAWBUFFERS:5 */
+    gl_FragData[0] = vec4(ao, -P.z, 0.0, 1.0);
 }
 #endif

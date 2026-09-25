@@ -1,7 +1,13 @@
-// Translucent terrain: water, stained glass, ice, slime, honey...
-// Water stays clear enough to see mobs, ores and the bottom.
+// Translucent terrain. Water is not drawn here: it writes its surface
+// data and the composite pass renders it (refraction, absorption,
+// reflections, caustics). Glass, ice, slime etc. are lit and blended.
+//   colortex3: world wave normal (oct), packed light levels
+//   colortex4: water tint
+// Blending uses each target's own alpha, so alpha 1 overwrites the data
+// targets and alpha 0 leaves the scene colour untouched.
 #include "/lib/settings.glsl"
 #include "/lib/common.glsl"
+#include "/lib/atmosphere.glsl"
 
 varying vec2 texcoord;
 varying vec2 lmcoord;
@@ -9,13 +15,14 @@ varying vec4 color;
 varying vec3 normal;
 varying vec3 playerPos;
 varying vec3 shadowPos;
+varying vec3 ambCol;
+varying vec3 sunCol;
 varying float matId;
 
 #ifdef VSH ////////////////////////////////////////////////////////////////
 
 #include "/lib/waving.glsl"
 #if defined SHADOWS && defined OVERWORLD
-#include "/lib/distort.glsl"
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 #endif
@@ -29,16 +36,17 @@ void main() {
     color    = gl_Color;
     normal   = safeNormal(gl_NormalMatrix * gl_Normal);
     matId    = isId(mc_Entity.x, ID_WATER) ? 1.0 : 0.0;
+    ambCol   = ambientColor();
+    sunCol   = directLightColor();
 
-    vec4 viewPos = gl_ModelViewMatrix * gl_Vertex;
-    vec4 pp = gbufferModelViewInverse * viewPos;
+    vec4 pp = gbufferModelViewInverse * (gl_ModelViewMatrix * gl_Vertex);
     playerPos = pp.xyz;
     gl_Position = ftransform();
 
 #if defined SHADOWS && defined OVERWORLD
     vec3 worldNormal = mat3(gbufferModelViewInverse) * normal;
     float dist = length(pp.xyz);
-    vec3 biased = pp.xyz + worldNormal * (0.035 + dist * 0.0035);
+    vec3 biased = pp.xyz + worldNormal * (0.030 + dist * 0.0030);
     shadowPos = (shadowProjection * (shadowModelView * vec4(biased, 1.0))).xyz;
 #else
     shadowPos = vec3(0.0);
@@ -53,80 +61,48 @@ void main() {
 #include "/lib/distort.glsl"
 #endif
 #include "/lib/lighting.glsl"
+#include "/lib/water.glsl"
 
 uniform sampler2D texture;
 
-// Height of a few layered sine swells, and its analytic gradient.
-vec3 waterNormal(vec2 p) {
-    float t = frameTimeCounter;
-    vec2 grad = vec2(0.0);
-    vec2 d; float f, a, ph;
-    d = normalize(vec2( 1.0,  0.35)); f = 0.55; a = 0.030; ph = dot(d, p) * f + t * 1.10; grad += d * f * a * cos(ph);
-    d = normalize(vec2(-0.6,  1.0 )); f = 0.90; a = 0.020; ph = dot(d, p) * f + t * 1.45; grad += d * f * a * cos(ph);
-    d = normalize(vec2( 0.2, -1.0 )); f = 1.70; a = 0.010; ph = dot(d, p) * f + t * 1.90; grad += d * f * a * cos(ph);
-    d = normalize(vec2(-1.0, -0.4 )); f = 2.90; a = 0.006; ph = dot(d, p) * f + t * 2.60; grad += d * f * a * cos(ph);
-    return normalize(vec3(-grad.x, 1.0, -grad.y));
-}
-
 void main() {
     vec4 albedo = texture2D(texture, texcoord) * color;
-    vec3 viewPos = (gbufferModelView * vec4(playerPos, 1.0)).xyz;
-    vec3 viewDir = normalize(viewPos);
-    vec3 n = safeNormal(normal);
-    float dist = length(playerPos);
-    vec3 col;
-    float alpha;
 
     if (matId > 0.5) {
-        // Soften the busy vanilla texture toward its average colour.
-        vec4 blurred = texture2D(texture, texcoord, 4.0) * color;
-        vec3 base = toLinear(mix(blurred.rgb, albedo.rgb, WATER_TEXTURE));
-
-        vec3 worldNormal = mat3(gbufferModelViewInverse) * n;
+        vec3 nW = mat3(gbufferModelViewInverse) * safeNormal(normal);
 #ifdef WATER_WAVES
-        if (worldNormal.y > 0.9) {
-            vec3 wn = waterNormal((playerPos + cameraPosition).xz);
-            n = normalize(mat3(gbufferModelView) * wn);
-        }
+        if (nW.y > 0.9) nW = waterNormal((playerPos + cameraPosition).xz);
 #endif
-        if (!gl_FrontFacing) n = -n;
+        // Face the camera, so the surface seen from below is lit correctly.
+        if (dot(nW, playerPos) > 0.0) nW = -nW;
 
-        vec3 light = surfaceLight(n, lmcoord, shadowPos, dist, false);
-        col = base * light;
-        alpha = WATER_OPACITY;
+        // Texture detail is kept subtle: blend toward the tile's average.
+        vec4 blurred = texture2D(texture, texcoord, 4.0) * color;
+        vec3 tint = mix(blurred.rgb, albedo.rgb, WATER_TEXTURE);
 
-#ifdef WATER_REFLECTIONS
-        if (isEyeInWater == 0) {
-            float cosTheta = clamp(dot(-viewDir, n), 0.0, 1.0);
-            float fresnel = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
-            vec3 R = reflect(viewDir, n);
-            float skyVis = lmcoord.y * lmcoord.y;
-            vec3 reflection = skyColor(R) * skyVis + ambientColor() * 0.05;
+        float levels = floor(lmcoord.y * 15.0 + 0.5) * 16.0 + floor(lmcoord.x * 15.0 + 0.5);
 
-#if defined OVERWORLD
-            // Sun or moon glint, shadowed like everything else.
-            vec3 L = normalize(shadowLightPosition);
-            float spec = pow(max(dot(R, L), 0.0), 220.0) * 4.0;
-            vec3 glint = directLightColor() * spec * lastShadow;
-#else
-            vec3 glint = vec3(0.0);
-#endif
-            float newAlpha = mix(alpha, 1.0, fresnel);
-            col = (mix(col * alpha, reflection, fresnel) + glint) / newAlpha;
-            alpha = newAlpha;
-        }
-#endif
-    } else {
-        if (albedo.a < 0.02) discard;
-        vec3 base = toLinear(albedo.rgb);
-        col = base * surfaceLight(n, lmcoord, shadowPos, dist, false);
-        alpha = albedo.a;
+        /* DRAWBUFFERS:034 */
+        gl_FragData[0] = vec4(0.0);
+        gl_FragData[1] = vec4(encodeNormal(nW), 0.25 + 0.5 * levels / 255.0, 1.0);
+        gl_FragData[2] = vec4(tint, 1.0);
+        return;
     }
 
-    col = applyFog(col, playerPos, viewDir);
+    if (albedo.a < 0.02) discard;
+    vec3 n = safeNormal(normal);
+    vec3 col = toLinear(albedo.rgb) * surfaceLight(n, lmcoord, shadowPos, playerPos, false, ambCol, sunCol);
 
-    /* DRAWBUFFERS:0 */
-    gl_FragData[0] = vec4(col, alpha);
+    // Glass gets a faint sky reflection so panes read as glass.
+    vec3 V = normalize(playerPos);
+    vec3 nW = mat3(gbufferModelViewInverse) * n;
+    float F = 0.04 + 0.96 * pow(1.0 - abs(dot(V, nW)), 5.0);
+    vec3 R = reflect(V, nW);
+    col = mix(col, atmosphere(R) * lmcoord.y * lmcoord.y, F * 0.6);
+
+    gl_FragData[0] = vec4(col, max(albedo.a, F * 0.5));
+    gl_FragData[1] = vec4(0.0);
+    gl_FragData[2] = vec4(0.0);
 }
 
 #endif // FSH

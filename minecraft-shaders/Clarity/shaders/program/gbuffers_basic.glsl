@@ -1,5 +1,4 @@
 // Untextured geometry: the block selection outline, leads, debug lines.
-// Left crisp and unfogged close up so the outline is always readable.
 #include "/lib/settings.glsl"
 #include "/lib/common.glsl"
 

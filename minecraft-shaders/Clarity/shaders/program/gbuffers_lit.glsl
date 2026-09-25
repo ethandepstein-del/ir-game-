@@ -1,7 +1,11 @@
 // Opaque and cutout geometry: terrain, entities, block entities, hand.
 // Variants: TERRAIN, ENTITIES, BLOCK, HAND (none = generic lit).
+// Writes: colortex0 lit HDR colour (unfogged; fog is a composite pass),
+//         colortex1 view normal + ambient share (for SSAO),
+//         colortex2 material flags.
 #include "/lib/settings.glsl"
 #include "/lib/common.glsl"
+#include "/lib/atmosphere.glsl"
 
 #if defined HAND
 #define NO_SHADOW_LOOKUP
@@ -13,13 +17,14 @@ varying vec4 color;
 varying vec3 normal;
 varying vec3 playerPos;
 varying vec3 shadowPos;
+varying vec3 ambCol;
+varying vec3 sunCol;
 varying float matId;
 
 #ifdef VSH ////////////////////////////////////////////////////////////////
 
 #include "/lib/waving.glsl"
 #if defined SHADOWS && defined OVERWORLD && !defined HAND
-#include "/lib/distort.glsl"
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 #endif
@@ -34,6 +39,8 @@ void main() {
     color    = gl_Color;
     normal   = safeNormal(gl_NormalMatrix * gl_Normal);
     matId    = 0.0;
+    ambCol   = ambientColor();
+    sunCol   = directLightColor();
 
     vec4 viewPos = gl_ModelViewMatrix * gl_Vertex;
     gl_Position = ftransform();
@@ -52,7 +59,6 @@ void main() {
         pp.xyz += offset;
         gl_Position = gl_ProjectionMatrix * (gbufferModelView * pp);
     }
-    // Foliage: treat as lit from both sides.
     if (isId(matId, ID_PLANT) || isId(matId, ID_PLANT_TOP) || isId(matId, ID_LEAVES)) matId = 1.0;
     else if (isId(matId, ID_EMISSIVE)) matId = 2.0;
     else matId = 0.0;
@@ -64,7 +70,7 @@ void main() {
     vec3 worldNormal = mat3(gbufferModelViewInverse) * normal;
     if (matId > 0.5 && matId < 1.5) worldNormal = mat3(gbufferModelViewInverse) * normalize(shadowLightPosition);
     float dist = length(pp.xyz);
-    vec3 biased = pp.xyz + worldNormal * (0.035 + dist * 0.0035) * (2048.0 / float(shadowMapResolution) * 0.5 + 0.5);
+    vec3 biased = pp.xyz + worldNormal * (0.030 + dist * 0.0030) * (2048.0 / float(shadowMapResolution) * 0.5 + 0.5);
     shadowPos = (shadowProjection * (shadowModelView * vec4(biased, 1.0))).xyz;
 #else
     shadowPos = vec3(0.0);
@@ -100,10 +106,29 @@ void main() {
     if (!gl_FrontFacing && foliage) n = -n;
 
 #if defined HAND
-    // The hand has no shadow-map position: it follows the light at the player.
-    vec3 light = surfaceLight(n, lmcoord, vec3(0.0), 0.0, false);
+    vec3 light = surfaceLight(n, lmcoord, vec3(0.0), vec3(0.0), false, ambCol, sunCol);
 #else
-    vec3 light = surfaceLight(n, lmcoord, shadowPos, length(playerPos), foliage);
+    vec3 light = surfaceLight(n, lmcoord, shadowPos, playerPos, foliage, ambCol, sunCol);
+#endif
+
+#if defined TERRAIN && defined WET_SURFACES && defined OVERWORLD
+    // Rain: surfaces darken and up-facing ones gather reflective puddles.
+    vec3 reflection = vec3(0.0);
+    if (wetness > 0.01) {
+        vec3 worldPos = playerPos + cameraPosition;
+        vec3 nW = mat3(gbufferModelViewInverse) * n;
+        float outside = smoothstep(0.88, 0.97, lmcoord.y);
+        float wet = wetness * outside * (foliage ? 0.3 : 1.0);
+        float puddle = smoothstep(0.52, 0.72, vnoise(worldPos.xz * 0.30) * 0.7 + vnoise(worldPos.xz * 1.1) * 0.3);
+        puddle *= step(0.9, nW.y) * wet;
+        base *= 1.0 - 0.28 * wet - 0.20 * puddle;
+        if (puddle > 0.01) {
+            vec3 V = normalize(playerPos);
+            vec3 R = reflect(V, vec3(0.0, 1.0, 0.0));
+            float F = 0.02 + 0.98 * pow(1.0 - clamp(-V.y, 0.0, 1.0), 5.0);
+            reflection = atmosphere(R) * F * puddle * 0.9;
+        }
+    }
 #endif
 
     vec3 col = base * light;
@@ -114,15 +139,20 @@ void main() {
         float l = luma(base);
         col += base * smoothstep(0.15, 0.7, l) * 3.0 * EMISSIVE_STRENGTH;
     }
+#if defined WET_SURFACES && defined OVERWORLD
+    col += reflection;
+#endif
 #endif
 
-#if !defined HAND
-    vec3 viewPos = (gbufferModelView * vec4(playerPos, 1.0)).xyz;
-    col = applyFog(col, playerPos, normalize(viewPos));
+    float handFlag = 0.0;
+#if defined HAND
+    handFlag = 1.0;
 #endif
 
-    /* DRAWBUFFERS:0 */
+    /* DRAWBUFFERS:012 */
     gl_FragData[0] = vec4(col, albedo.a);
+    gl_FragData[1] = vec4(encodeNormal(n), lastAmbientRatio, 1.0);
+    gl_FragData[2] = vec4(handFlag, 0.5, 0.0, 1.0);
 }
 
 #endif // FSH

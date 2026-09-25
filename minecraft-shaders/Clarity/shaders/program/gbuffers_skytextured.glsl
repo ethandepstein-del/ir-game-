@@ -1,4 +1,4 @@
-// Sun, moon and the End sky texture.
+// Moon (the sun is drawn procedurally) and the End sky texture.
 #include "/lib/settings.glsl"
 #include "/lib/common.glsl"
 
@@ -20,9 +20,8 @@ void main() {
 #if defined END
     vec3 col = toLinear(c.rgb) * 0.55;
 #else
-    vec3 col = toLinear(c.rgb) * 2.4 * (1.0 - rainStrength * 0.8);
+    vec3 col = toLinear(c.rgb) * 1.6 * (1.0 - rainStrength * 0.8) * vec3(0.85, 0.92, 1.10);
 #endif
-    if (isEyeInWater != 0 || blindness > 0.0) col *= 0.2;
     /* DRAWBUFFERS:0 */
     gl_FragData[0] = vec4(col, c.a);
 }

@@ -3,13 +3,13 @@ profile.COMPETITIVE=Competitive
 profile.BALANCED=Balanced
 profile.RTX5080=RTX 5080 (120 fps)
 profile.CINEMATIC=Cinematic
-profile.comment=RTX 5080 is the tuned default. Competitive removes wind, rays and bloom for PvP.
+profile.comment=RTX 5080 is the tuned default. Competitive keeps the lighting but drops wind, light shafts, haze and bloom for PvP.
 
 screen.LIGHTING=Lighting
 screen.SHADOWS=Shadows
-screen.WORLD=Wind
 screen.WATER=Water
-screen.ATMOSPHERE=Sky & Fog
+screen.SKY=Sky, Clouds & Fog
+screen.WORLD=Wind
 screen.CAMERA=Camera
 
 option.SUN_BRIGHTNESS=Sunlight
@@ -19,43 +19,61 @@ option.NIGHT_BRIGHTNESS=Night Brightness
 option.MIN_LIGHT=Minimum Light
 option.MIN_LIGHT.comment=Floor for unlit areas so caves are never pitch black.
 option.EMISSIVE_STRENGTH=Glowing Blocks
+option.SSAO=Ambient Occlusion (SSAO)
+option.SSAO.comment=Soft contact shadows in corners and under objects. Only darkens indirect light.
+option.SSAO_STRENGTH=SSAO Strength
+option.ambientOcclusionLevel=Vanilla Corner Shading
+option.FOLIAGE_SSS=Leaf Translucency
+option.WET_SURFACES=Rain Wetness & Puddles
 option.BLOCKLIGHT_R=Torch Red
 option.BLOCKLIGHT_G=Torch Green
 option.BLOCKLIGHT_B=Torch Blue
-option.FOLIAGE_SSS=Leaf Translucency
-option.ambientOcclusionLevel=Corner Shading
 
 option.SHADOWS=Shadows
+option.PCSS=Contact-Hardening Shadows
+option.PCSS.comment=Shadows are sharp where objects touch the ground and soften with distance.
 option.COLORED_SHADOWS=Stained Glass Shadows
 option.shadowMapResolution=Shadow Quality
 option.shadowDistance=Shadow Distance
+option.shadowDistance.comment=Biggest performance lever: shadows redraw the world from the sun (CPU cost).
 option.SHADOW_SOFTNESS=Shadow Softness
 option.SHADOW_SAMPLES=Shadow Filter Samples
 option.sunPathRotation=Sun Angle
+
+option.WATER_WAVES=Water Waves
+option.WATER_REFRACTION=Refraction
+option.SSR=Screen-Space Reflections
+option.CAUSTICS=Caustics
+option.WATER_CLARITY=Water Clarity
+option.WATER_CLARITY.comment=Higher = see deeper into water.
+option.WATER_TEXTURE=Water Texture
+option.UNDERWATER_VIEW=Underwater View Distance
+
+option.CLOUDS=Clouds
+option.CLOUD_SHADOWS=Cloud Shadows
+option.CLOUD_COVERAGE=Cloud Coverage
+option.CLOUD_OPACITY=Cloud Opacity
+option.CLOUD_HEIGHT=Cloud Height
+option.VOLUMETRIC_LIGHT=Volumetric Light
+option.VOLUMETRIC_LIGHT.comment=Sun shafts through trees and windows, and light rays underwater.
+option.VL_STRENGTH=Volumetric Strength
+option.VL_STEPS=Volumetric Quality
+option.HAZE=Atmospheric Haze
+option.FOG_START=Border Fog Start
+option.FOG_START.comment=Fraction of render distance before fog begins.
+option.STAR_BRIGHTNESS=Stars
+option.SUN_SIZE=Sun Size
+option.RAIN_OPACITY=Rain Opacity
 
 option.WAVING_PLANTS=Waving Plants
 option.WAVING_LEAVES=Waving Leaves
 option.WAVING_SPEED=Wind Speed
 option.WAVING_AMOUNT=Wind Strength
 
-option.WATER_WAVES=Water Waves
-option.WATER_REFLECTIONS=Water Reflections
-option.WATER_OPACITY=Water Opacity
-option.WATER_TEXTURE=Water Texture
-option.WATER_TEXTURE.comment=How much of the vanilla water texture shows through.
-option.UNDERWATER_VIEW=Underwater View Distance
-
-option.FOG_START=Fog Start
-option.FOG_START.comment=Fraction of render distance before fog begins.
-option.RAIN_OPACITY=Rain Opacity
-option.CLOUD_OPACITY=Cloud Opacity
-option.STAR_BRIGHTNESS=Stars
-option.GODRAYS=Light Shafts
-option.GODRAY_STRENGTH=Light Shaft Strength
-
+option.AUTO_EXPOSURE=Auto Exposure
+option.AUTO_EXPOSURE.comment=Adapts brightness to what you look at, like your eyes.
 option.EXPOSURE=Exposure
 option.CAVE_ADAPTATION=Cave Brightening
-option.CAVE_ADAPTATION.comment=How much the image brightens underground.
 option.SATURATION=Saturation
 option.CONTRAST=Contrast
 option.BLOOM=Bloom

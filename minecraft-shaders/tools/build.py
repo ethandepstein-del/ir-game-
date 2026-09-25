@@ -43,6 +43,8 @@ PROGRAMS = {
     "gbuffers_beaconbeam":   ("gbuffers_emissive", ["GLOW_BOOST 1.5"]),
     "composite":             ("composite", []),
     "composite1":            ("composite1", []),
+    "composite2":            ("composite2", []),
+    "composite3":            ("composite3", []),
     "final":                 ("final", []),
 }
 

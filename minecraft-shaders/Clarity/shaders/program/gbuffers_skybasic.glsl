@@ -1,7 +1,9 @@
-// Sky dome, horizon, sunrise fan and stars. Everything but the stars is
-// replaced by the analytic sky, so it matches the fog exactly.
+// The whole sky: scattering, sun disc, stars and clouds. Vanilla's dome,
+// sunrise fan and void all get the same colour, so layers never show;
+// vanilla stars are dropped (the procedural ones replace them).
 #include "/lib/settings.glsl"
 #include "/lib/common.glsl"
+#include "/lib/atmosphere.glsl"
 
 varying vec4 color;
 varying float star;
@@ -24,22 +26,15 @@ void main() {
 #ifdef MC_RENDER_STAGE_STARS
     isStar = renderStage == MC_RENDER_STAGE_STARS;
 #endif
+    if (isStar) discard;
 
-    vec3 col;
-    float alpha = 1.0;
-    if (isStar) {
-        col = toLinear(color.rgb) * 1.6 * STAR_BRIGHTNESS * (1.0 - rainStrength);
-        alpha = color.a;
-    } else {
-        vec4 ndc = vec4(gl_FragCoord.xy / vec2(viewWidth, viewHeight) * 2.0 - 1.0, 1.0, 1.0);
-        vec4 vp = gbufferProjectionInverse * ndc;
-        vec3 viewDir = normalize(vp.xyz / vp.w);
-        col = skyColor(viewDir);
-        if (isEyeInWater == 1) col = applyFog(col, viewDir * far, viewDir);
-        if (blindness > 0.0) col *= 1.0 - blindness;
-    }
+    vec2 uv = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
+    vec3 viewDir = normalize(screenToView(uv, 1.0));
+    vec3 dir = normalize(mat3(gbufferModelViewInverse) * viewDir);
+
+    vec3 col = skyFull(dir, true);
 
     /* DRAWBUFFERS:0 */
-    gl_FragData[0] = vec4(col, alpha);
+    gl_FragData[0] = vec4(col, 1.0);
 }
 #endif
