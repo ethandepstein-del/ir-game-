@@ -41,6 +41,7 @@ PROGRAMS = {
     "gbuffers_armor_glint":  ("gbuffers_emissive", []),
     "gbuffers_spidereyes":   ("gbuffers_emissive", ["GLOW_BOOST 1.5"]),
     "gbuffers_beaconbeam":   ("gbuffers_emissive", ["GLOW_BOOST 1.5"]),
+    "prepare":               ("prepare_clouds", []),
     "deferred":              ("deferred", []),
     "deferred1":             ("deferred_atrous", ["ATROUS_STEP 1"]),
     "deferred2":             ("deferred_atrous", ["ATROUS_STEP 2"]),
