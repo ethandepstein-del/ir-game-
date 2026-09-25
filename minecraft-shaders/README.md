@@ -76,7 +76,7 @@ Things to know:
    - **1.8.9:** Options → Video Settings → Shaders.
    - **Modern versions:** Lunar settings → Shaders (Iris). Enable shader support if Lunar asks.
 3. Click **Shaders Folder** and drop the zip into it. Don't unzip it. When updating, delete the old Clarity zip first.
-4. Select the Clarity zip. The default profile, **RTX 5080 (120 fps)**, is already selected.
+4. Select the Clarity zip, then pick your profile (4K 60, 4K 120 or 1440p 120) under Shader Pack Settings → Profile. 4K 120 is the default.
 
 Go to **Shader Options** to adjust anything. Every setting has a readable name, and the menu is split into Lighting, Shadows, Wind, Water, Sky & Fog and Camera.
 
