@@ -4,6 +4,7 @@
 //   node render.mjs video [--workers 3] [--from 0] [--to 900] [--out out/ball-test.mp4]
 //   node render.mjs stills 0.5,1.25,2.0 [--out .stills] [--nomb]
 //   node render.mjs audio [--out out/ball-test.wav]
+//   node render.mjs encode        (re-encode existing .frames + out/ball-test.wav)
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -86,7 +87,7 @@ if (mode === 'stills') {
   const { browser, page } = await openPage(port);
   console.log(await renderAudioFile(page, path.resolve(ROOT, opt('out', 'out/ball-test.wav'))));
   await browser.close();
-} else {
+} else if (mode === 'video') {
   const workers = Number(opt('workers', 3));
   const from = Number(opt('from', 0)), to = Number(opt('to', FRAMES));
   const frameDir = path.resolve(ROOT, '.frames');
@@ -114,19 +115,32 @@ if (mode === 'stills') {
   }));
   const wav = await renderAudioFile(pages[0].page, path.resolve(ROOT, 'out/ball-test.wav'));
   await Promise.all(pages.map(({ browser }) => browser.close()));
-  if (!flag('noencode') && from === 0 && to === FRAMES) {
-    const ff = findFfmpeg();
-    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+  if (!flag('noencode') && from === 0 && to === FRAMES) await encodeAll(wav, started);
+}
+
+// 120 fps master, plus a 60 fps version made by blending each pair of frames (a 360° shutter).
+async function encodeAll(wav, started = Date.now()) {
+  const ff = findFfmpeg();
+  const frameDir = path.resolve(ROOT, '.frames');
+  const outs = [
+    { file: path.resolve(ROOT, 'out/ball-test-120fps.mp4'), vf: null, crf: '16' },
+    // Pairs (2k, 2k+1) blend into 60 fps frame k, so stark single-pair frames stay intact.
+    { file: path.resolve(ROOT, 'out/ball-test.mp4'), vf: 'tmix=frames=2,select=mod(n\\,2),setpts=N/(60*TB)', rate: '60', crf: '15' },
+  ];
+  for (const o of outs) {
+    fs.mkdirSync(path.dirname(o.file), { recursive: true });
     const ffArgs = ['-y', '-framerate', String(FPS), '-i', path.join(frameDir, 'f%04d.png'), '-i', wav,
-      '-c:v', 'libx264', '-preset', 'slow', '-crf', '14', '-pix_fmt', 'yuv420p', '-profile:v', 'high',
+      ...(o.vf ? ['-vf', o.vf] : []), ...(o.rate ? ['-r', o.rate] : []),
+      '-c:v', 'libx264', '-preset', 'slow', '-crf', o.crf, '-pix_fmt', 'yuv420p', '-profile:v', 'high',
       '-tune', 'animation', '-movflags', '+faststart',
-      '-c:a', 'aac', '-b:a', '320k', '-shortest', outFile];
-    console.log('encoding', outFile);
+      '-c:a', 'aac', '-b:a', '320k', '-shortest', o.file];
+    console.log('encoding', o.file);
     await new Promise((res, rej) => {
       const p = spawn(ff, ffArgs, { stdio: ['ignore', 'ignore', 'inherit'] });
       p.on('exit', (c) => (c === 0 ? res() : rej(new Error('ffmpeg ' + c))));
     });
-    console.log('done', outFile, `${((Date.now() - started) / 1000).toFixed(0)}s total`);
   }
+  console.log('done', `${((Date.now() - started) / 1000).toFixed(0)}s total`);
 }
+if (mode === 'encode') await encodeAll(path.resolve(ROOT, 'out/ball-test.wav'));
 srv.close();

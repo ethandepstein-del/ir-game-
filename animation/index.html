@@ -17,9 +17,11 @@
     background: var(--fg); color: #141413; font-weight: 600; letter-spacing: .02em; }
   .play span::before { content: ""; border-left: 14px solid var(--accent); border-top: 9px solid transparent; border-bottom: 9px solid transparent; }
   .play[hidden] { display: none; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+  .loading[hidden] { display: none; }
   .play:focus-visible span { outline: 3px solid var(--accent); outline-offset: 3px; }
   .bar { position: absolute; left: 0; right: 0; bottom: -28px; display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; }
-  body.render .bar, body.render .play { display: none; }
+  body.render .bar, body.render .play, body.render .loading { display: none; }
   body.render { display: block; }
   body.render .stage { width: 1920px; height: 1080px; }
   body.render canvas { border-radius: 0; }
@@ -28,6 +30,7 @@
 <body>
 <div class="stage">
   <canvas id="c" width="1920" height="1080"></canvas>
+  <div class="loading" id="loading">Solving the physics…</div>
   <button class="play" id="play" hidden><span>Play with sound</span></button>
   <div class="bar"><span>Ball Test · 15 s · sound on</span><span id="time">0.00</span></div>
 </div>
@@ -38,6 +41,7 @@
   const canvas = document.getElementById('c');
   await window.BT.init(canvas);
   window.BT.ready = true;
+  document.getElementById('loading').hidden = true;
   if (!render) {
     const btn = document.getElementById('play'), time = document.getElementById('time');
     window.BT.renderFrame(2.25, { motionBlur: false });

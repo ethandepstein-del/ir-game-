@@ -338,4 +338,3 @@ export function plateY(i, t) {
   const k = Math.floor(f);
   return arr[k] + (arr[k + 1] - arr[k]) * (f - k);
 }
-export const __simulate = (p) => simulate(p);
