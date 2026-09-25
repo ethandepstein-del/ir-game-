@@ -3,6 +3,7 @@
 
 #if defined SHADOWS && defined OVERWORLD && !defined NO_SHADOW_LOOKUP
 #define USE_SHADOWMAP
+#include "/lib/noise.glsl"
 uniform sampler2DShadow shadowtex0;   // everything, hardware-filtered
 uniform sampler2D shadowtex1;         // opaque only, raw depth
 uniform sampler2D shadowcolor0;
@@ -21,7 +22,8 @@ vec3 sampleShadow(vec3 shadowClip) {
     p.z -= 0.00005;
 
     float texel = 1.0 / float(shadowMapResolution);
-    float phi = ign(gl_FragCoord.xy) * 6.2831853;
+    // Static blue-noise rotation: fine, even grain with no diagonal streaks.
+    float phi = blueNoise(gl_FragCoord.xy).r * 6.2831853;
     float radius = 1.2 * texel;
 
 #ifdef PCSS

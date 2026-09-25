@@ -1,7 +1,8 @@
 // Pass 1: SSAO resolve, water, fog and volumetric light.
 //   in : colortex0 scene, colortex1/2 surface data, colortex3/4 water data,
 //        colortex5 raw AO
-//   out: colortex0 scene, colortex5 volumetric light (blurred in composite2)
+//   out: colortex0 scene, colortex5 volumetric light (blurred in composite2;
+//        alpha = view depth for its edge-stopping)
 #include "/lib/settings.glsl"
 
 varying vec2 texcoord;
@@ -27,6 +28,7 @@ void main() {
 #include "/lib/distort.glsl"
 #include "/lib/water.glsl"
 #include "/lib/fog.glsl"
+#include "/lib/noise.glsl"
 
 uniform sampler2D colortex0;
 uniform sampler2D colortex1;
@@ -81,7 +83,7 @@ float resolveAO(vec2 uv) {
 vec4 traceReflection(vec3 viewPos, vec3 R) {
     float stepLen = 0.5 + length(viewPos) * 0.025;
     vec3 stepV = R * stepLen;
-    vec3 pos = viewPos + stepV * (0.5 + ign(gl_FragCoord.xy) * 0.5);
+    vec3 pos = viewPos + stepV * (0.5 + blueNoise(gl_FragCoord.xy).b * 0.5);
     for (int i = 0; i < 28; i++) {
         vec3 s = viewToScreen(pos);
         if (s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0 || s.z > 1.0 || pos.z > -0.05) return vec4(0.0);
@@ -225,7 +227,7 @@ vec3 shadeWater(vec3 sceneCol, vec2 uv, float d0, vec4 wData, vec3 tint) {
             vec3 hp, hn;
             uint vox;
             bool leftGrid;
-            if (insideGrid(origin) && traceVoxels(origin, Rt, 24.0, ign(gl_FragCoord.xy), hp, hn, vox, leftGrid)) {
+            if (insideGrid(origin) && traceVoxels(origin, Rt, 24.0, blueNoise(gl_FragCoord.xy).b, hp, hn, vox, leftGrid)) {
                 vec3 hitPlayer = gridToPlayer(hp);
                 vec3 rc = voxelRadiance(vox, hp, hn, sun, ambCol, L);
                 rc = applyFog(rc, (gbufferModelView * vec4(hitPlayer, 1.0)).xyz, false, ambCol, sun);
@@ -265,7 +267,8 @@ vec3 volumetricLight(vec3 viewPos, bool sky) {
 
     vec3 startS = (shadowProjection * (shadowModelView * vec4(0.0, 0.0, 0.0, 1.0))).xyz;
     vec3 endS = (shadowProjection * (shadowModelView * vec4(dirW * maxDist, 1.0))).xyz;
-    float jitter = ign(gl_FragCoord.xy);
+    // Static blue noise: composite2's Gaussian removes it almost completely.
+    float jitter = blueNoise(gl_FragCoord.xy).g;
     vec3 acc = vec3(0.0);
     for (int i = 0; i < VL_STEPS; i++) {
         float t = (float(i) + jitter) / float(VL_STEPS);
@@ -341,6 +344,6 @@ void main() {
 
     /* DRAWBUFFERS:05 */
     gl_FragData[0] = vec4(col, 1.0);
-    gl_FragData[1] = vec4(vl, 1.0);
+    gl_FragData[1] = vec4(vl, -viewPos.z);
 }
 #endif
