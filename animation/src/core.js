@@ -14,7 +14,7 @@ export const T = {
   CHROME: 6.5,
   SHATTER: 9.5,
   SLAM: 11.0,
-  PERIOD: 13.25,
+  PERIOD: 12.5,
   END: 15.0,
 };
 

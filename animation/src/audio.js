@@ -296,11 +296,13 @@ function build(ctx, T0) {
     noise(t, dur, { type: 'highpass', f: 5500, gain, pan, verb: 0.3 });
     noise(t, dur * 0.5, { type: 'bandpass', f: 3500, Q: 0.6, gain: gain * 0.5, pan });
   };
-  const sawChord = (t, notes, dur, { gain = 0.05, cutoff = 3000, cutoff1 = 700, a = 0.005, verb = 0.45, detune = 9 } = {}) => {
+  const sawChord = (t, notes, dur, { gain = 0.05, cutoff = 3000, cutoff1 = 700, a = 0.005, verb = 0.45, detune = 9, hold = 0 } = {}) => {
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8;
     lp.frequency.setValueAtTime(cutoff, at(t)); lp.frequency.exponentialRampToValueAtTime(cutoff1, at(t + dur * 0.7));
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0, at(t)); g.gain.linearRampToValueAtTime(gain, at(t + a)); g.gain.exponentialRampToValueAtTime(0.0001, at(t + dur));
+    g.gain.setValueAtTime(0, at(t)); g.gain.linearRampToValueAtTime(gain, at(t + a));
+    if (hold) { g.gain.linearRampToValueAtTime(gain * 0.75, at(t + hold)); g.gain.linearRampToValueAtTime(0, at(t + dur)); }
+    else g.gain.exponentialRampToValueAtTime(0.0001, at(t + dur));
     lp.connect(g); route(g, { verb });
     notes.forEach((m, i) => {
       for (const d of [-detune, detune]) {
@@ -445,21 +447,21 @@ function build(ctx, T0) {
   sawChord(T.SLAM, [39, 46, 51, 55, 58, 65], 1.9, { gain: 0.05, cutoff: 5000, cutoff1: 500 });
   for (let i = 0; i < 7; i++) woodTick(T.SLAM + 0.1 + i * 0.03, 0.035, 3200, -0.3 + i * 0.1);
   // Light sweep shimmer
-  osc('sine', 2200, 11.62, 0.7, { gain: 0.03, f1: 5200, a: 0.25, verb: 0.6, curve: 'lin', pan: -0.4 });
-  noise(11.62, 0.62, { type: 'highpass', f: 7000, gain: 0.05, a: 0.3, pan: -0.5, pan1: 0.5, verb: 0.4, curve: 'lin' });
+  osc('sine', 2200, 11.34, 0.7, { gain: 0.03, f1: 5200, a: 0.25, verb: 0.6, curve: 'lin', pan: -0.4 });
+  noise(11.34, 0.62, { type: 'highpass', f: 7000, gain: 0.05, a: 0.3, pan: -0.5, pan1: 0.5, verb: 0.4, curve: 'lin' });
   // Quiet bed between the slam and the full stop, so the pause breathes instead of dropping out
-  sawChord(11.5, [39, 46, 51, 58], 2.0, { gain: 0.014, cutoff: 900, cutoff1: 500, a: 0.9, verb: 0.7, detune: 14 });
+  sawChord(11.4, [39, 46, 51, 58], 1.3, { gain: 0.014, cutoff: 900, cutoff1: 500, a: 0.9, verb: 0.7, detune: 14 });
   // The full stop: falls, then each bounce sounds like one of the worlds
-  osc('sine', 1600, 12.86, 0.39, { gain: 0.035, f1: 520, a: 0.02, curve: 'lin' });
+  osc('sine', 1600, T.PERIOD - 0.39, 0.39, { gain: 0.035, f1: 520, a: 0.02, curve: 'lin' });
   softThump(T.PERIOD, 0.2); pencilTap(T.PERIOD, 0.24, 0.3);
-  boing(13.5, 0.14, 0.2, 190);
-  paperCrunch(13.64, 0.05, 0.14, 8, 12, 0.3); pop(13.64, 0.1, 1400, 0.3);
-  chip(13.73, 1568, 0.06, { gain: 0.07, pan: 0.3 });
-  bell(13.79, mtof(87), 0.1, 1.4, 0.3, 0.6);
-  bell(13.79, mtof(94), 0.04, 1.0, 0.3, 0.6);
+  boing(T.PERIOD + 0.25, 0.14, 0.2, 190);
+  paperCrunch(T.PERIOD + 0.39, 0.05, 0.14, 8, 12, 0.3); pop(T.PERIOD + 0.39, 0.1, 1400, 0.3);
+  chip(T.PERIOD + 0.48, 1568, 0.06, { gain: 0.07, pan: 0.3 });
+  bell(T.PERIOD + 0.54, mtof(87), 0.1, 1.4, 0.3, 0.6);
+  bell(T.PERIOD + 0.54, mtof(94), 0.04, 1.0, 0.3, 0.6);
   // Warm pad under the end card
-  sawChord(13.2, [39, 51, 55, 58, 62, 65], 1.8, { gain: 0.035, cutoff: 1400, cutoff1: 700, a: 0.5, verb: 0.6, detune: 12 });
-  sub(13.25, 0.1, 1.2, 52, 38);
+  sawChord(T.PERIOD - 0.05, [39, 51, 55, 58, 62, 65], T.END - T.PERIOD + 0.02, { gain: 0.03, cutoff: 1400, cutoff1: 800, a: 0.5, verb: 0.6, detune: 12, hold: 1.7 });
+  sub(T.PERIOD, 0.1, 1.2, 52, 38);
 
   return { outG };
 }

@@ -8,8 +8,8 @@ import { tau, ball3D, camera3D, project, renderGL } from './chrome.js';
 const BG = '#141413', IVORY = '#f0eee6', MUTED = '#a3a195', ACCENT = '#d97757', INK = '#1b1b2f';
 const FONT_PX = 300, BASE_Y = 668, SPACING = 9;
 const SWARM0 = 9.86, DIM1 = 10.7;
-const PERIOD_FALL = 12.86;
-const CONTACTS = [T.PERIOD, 13.5, 13.64, 13.73, 13.79];
+const PERIOD_FALL = T.PERIOD - 0.39;
+const CONTACTS = [0, 0.25, 0.39, 0.48, 0.54].map((d) => T.PERIOD + d);
 const PG = 9250;
 
 let layout, shards, textCanvas, sweepCanvas, center0, radius0, eyebrow;
@@ -210,7 +210,7 @@ function drawEyebrow(g, t) {
 }
 
 function lightSweep(g, t) {
-  const d = (t - 11.62) / 0.62;
+  const d = (t - 11.34) / 0.62;
   if (d < 0 || d > 1) return;
   const sg = sweepCanvas.getContext('2d');
   sg.clearRect(0, 0, W, H);
@@ -296,6 +296,16 @@ function drawPeriod(g, t) {
       g.fillRect(Math.round(p.x + x), Math.round(p.y + y), s, s);
     }
   } else {
+    // Warm bloom behind the settled full stop, struck by the final bell.
+    const since = t - CONTACTS[4];
+    if (since > 0) {
+      const a = 0.45 * Math.exp(-since * 2.2) + 0.08;
+      const bg = g.createRadialGradient(p.x, p.y, r * 0.6, p.x, p.y, r * 5);
+      bg.addColorStop(0, `rgba(217,119,87,${a})`);
+      bg.addColorStop(1, 'rgba(217,119,87,0)');
+      g.fillStyle = bg;
+      g.fillRect(p.x - r * 5, p.y - r * 5, r * 10, r * 10);
+    }
     const gr = g.createRadialGradient(p.x - rx * 0.35, p.y - ry * 0.4, 1, p.x, p.y, Math.max(rx, ry) * 1.1);
     gr.addColorStop(0, '#f0a184'); gr.addColorStop(0.55, ACCENT); gr.addColorStop(1, '#b85c3f');
     g.fillStyle = gr;
@@ -308,8 +318,8 @@ export default {
   async init() {
     buildShards(buildLayout());
   },
-  // No blur across the two stark impact frames (and the frame after), or they average to grey.
-  shutter: (t) => (t < T.SHATTER + 3 / 60 ? null : t < T.SLAM + 0.3 ? { samples: 5, angle: 220 } : t > PERIOD_FALL && t < 13.9 ? { samples: 3, angle: 180 } : null),
+  // No blur across the stark impact frames or the slam cut, or they average into ghosts.
+  shutter: (t) => (t < T.SHATTER + 3 / 60 ? null : t < T.SLAM - 1 / 120 ? { samples: 5, angle: 220 } : t > PERIOD_FALL && t < T.PERIOD + 0.65 ? { samples: 3, angle: 180 } : null),
   draw(g, t) {
     const sk = shake(t, 20);
     const imp = t - T.SHATTER;
