@@ -62,14 +62,14 @@ vec3 waterNormal(vec2 p, float dist) {
 #ifdef WATER_WAVES
     // Fewer octaves and softer slopes far away keep distant water calm.
     int octaves = int(mix(14.0, 5.0, smoothstep(8.0, 72.0, dist)));
-    float height = 0.42 * WAVE_HEIGHT * (1.0 + rainStrength * 0.6) * mix(1.0, 0.45, smoothstep(16.0, 96.0, dist));
+    float height = 0.42 * WAVE_HEIGHT * (1.0 + OVERCAST * 0.6) * mix(1.0, 0.45, smoothstep(16.0, 96.0, dist));
     const float e = 0.06;
     float h0 = waveHeight(p, octaves);
     float hx = waveHeight(p + vec2(e, 0.0), octaves);
     float hz = waveHeight(p + vec2(0.0, e), octaves);
     vec2 slope = vec2(hx - h0, hz - h0) / e * height;
 #ifdef RAIN_RIPPLES
-    if (rainStrength > 0.01 && dist < 48.0) slope += rainRipples(p) * rainStrength * (1.0 - dist / 48.0);
+    if (RAIN > 0.01 && dist < 48.0) slope += rainRipples(p) * RAIN * (1.0 - dist / 48.0);
 #endif
     return normalize(vec3(-slope.x, 1.0, -slope.y));
 #else

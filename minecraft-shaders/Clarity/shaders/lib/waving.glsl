@@ -16,7 +16,7 @@ vec3 windOffset(vec3 worldPos, float amount) {
     o.x = sin(t * 1.9 + worldPos.x * 0.9 + worldPos.z * 0.4 + worldPos.y * 0.3);
     o.z = sin(t * 1.5 + worldPos.z * 0.8 - worldPos.x * 0.3 + 1.7);
     o.y = sin(t * 2.3 + worldPos.x + worldPos.z) * 0.2;
-    return o * amount * gust * WAVING_AMOUNT * (1.0 + rainStrength * 0.8);
+    return o * amount * gust * WAVING_AMOUNT * (1.0 + OVERCAST * 0.8);
 }
 
 // Offset for a terrain vertex. topVertex: vertex is at the top of its texture.

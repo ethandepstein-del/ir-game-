@@ -136,5 +136,5 @@ option.VL_BLUR_RADIUS=Volumetric Smoothing
 option.BLOOM_THRESHOLD=Bloom Threshold
 option.BLOOM_THRESHOLD.comment=Only light brighter than this blooms. 0 = the old soft-everything glow.
 option.CLARITY_VERSION=Clarity version
-value.CLARITY_VERSION.21=2.1
+value.CLARITY_VERSION.22=2.2
 option.CLARITY_VERSION.comment=If this doesn't match the zip you downloaded, the game is still loading an older copy.

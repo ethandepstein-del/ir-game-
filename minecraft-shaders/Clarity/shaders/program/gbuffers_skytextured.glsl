@@ -20,7 +20,7 @@ void main() {
 #if defined END
     vec3 col = toLinear(c.rgb) * 0.55;
 #else
-    vec3 col = toLinear(c.rgb) * 1.6 * (1.0 - rainStrength * 0.8) * vec3(0.85, 0.92, 1.10);
+    vec3 col = toLinear(c.rgb) * 1.6 * (1.0 - OVERCAST * 0.8) * vec3(0.85, 0.92, 1.10);
 #endif
     /* DRAWBUFFERS:0 */
     gl_FragData[0] = vec4(col, c.a);

@@ -32,7 +32,7 @@ vec3 applyFog(vec3 col, vec3 viewPos, bool sky, vec3 amb, vec3 sun) {
 #if defined OVERWORLD
         // Height haze: thicker low down, at dawn and in rain.
         float avgY = cameraPosition.y + dirW.y * dist * 0.5;
-        float density = 0.0005 * HAZE * (1.0 + rainStrength * 4.0 + sunsetFactor() * 0.8)
+        float density = 0.0005 * HAZE * (1.0 + OVERCAST * 1.5 + sunsetFactor() * 0.8)
                       * exp(-max(avgY - 63.0, 0.0) / 90.0);
         // No sky-coloured haze inside caves.
         density *= smoothstep(0.1, 0.6, float(eyeBrightnessSmooth.y) / 240.0);

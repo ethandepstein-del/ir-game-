@@ -261,7 +261,7 @@ vec3 volumetricLight(vec3 viewPos, bool sky) {
     if (underwater) maxDist = min(maxDist, UNDERWATER_VIEW);
     // Extinction along the ray, so far shafts fade like the haze does.
     vec3 sigma = underwater ? waterAbsorption(vec3(0.10, 0.38, 0.55)) * (32.0 / UNDERWATER_VIEW)
-                            : vec3(0.0012 * HAZE * (1.0 + rainStrength * 4.0));
+                            : vec3(0.0006 * HAZE * (1.0 + OVERCAST * 1.5));
     vec3 sun = sunCol;
     if (luma(sun) < 1e-4) return vec3(0.0);
 
@@ -286,7 +286,7 @@ vec3 volumetricLight(vec3 viewPos, bool sky) {
         return sun * vec3(0.10, 0.38, 0.55) * phase * acc * 0.0045 * VL_STRENGTH * (0.3 + 0.7 * eyeSky);
     }
     float phase = mix(phaseHG(c, 0.45), 1.0, 0.25);
-    float density = 0.0011 * VL_STRENGTH * (0.35 + sunsetFactor() * 0.6 + rainStrength * 0.4);
+    float density = 0.0011 * VL_STRENGTH * (0.35 + sunsetFactor() * 0.6 + OVERCAST * 0.4);
     return sun * phase * acc * density * (0.15 + 0.85 * eyeSky);
 #else
     return vec3(0.0);

@@ -1,5 +1,5 @@
 // Build shown at the top of the shader options (see tools/build.py VERSION).
-#define CLARITY_VERSION 21 // [21]
+#define CLARITY_VERSION 22 // [22]
 
 /*
  * Clarity shader settings.

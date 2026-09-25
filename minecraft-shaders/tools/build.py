@@ -155,7 +155,7 @@ def check_compute():
 # Bump on every release. It is baked into the zip name (so a new download
 # never lands as "Clarity (1).zip" next to an old copy) and shown in the
 # shader options menu, so players can see which build is actually loaded.
-VERSION = "2.1"
+VERSION = "2.2"
 
 
 def build_zip():

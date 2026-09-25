@@ -118,19 +118,19 @@ void main() {
 #if defined TERRAIN && defined WET_SURFACES && defined OVERWORLD
     // Rain: surfaces darken and up-facing ones gather reflective puddles.
     vec3 reflection = vec3(0.0);
-    if (wetness > 0.01) {
+    if (WETNESS > 0.01) {
         vec3 worldPos = playerPos + cameraPosition;
         vec3 nW = mat3(gbufferModelViewInverse) * n;
         float outside = smoothstep(0.88, 0.97, lmcoord.y);
-        float wet = wetness * outside * (foliage ? 0.3 : 1.0);
-        float puddle = smoothstep(0.52, 0.72, vnoise(worldPos.xz * 0.30) * 0.7 + vnoise(worldPos.xz * 1.1) * 0.3);
+        float wet = WETNESS * outside * (foliage ? 0.3 : 1.0);
+        float puddle = smoothstep(0.58, 0.76, vnoise(worldPos.xz * 0.30) * 0.7 + vnoise(worldPos.xz * 1.1) * 0.3);
         puddle *= step(0.9, nW.y) * wet;
         base *= 1.0 - 0.28 * wet - 0.20 * puddle;
         if (puddle > 0.01) {
             vec3 V = normalize(playerPos);
             vec3 R = reflect(V, vec3(0.0, 1.0, 0.0));
             float F = 0.02 + 0.98 * pow(1.0 - clamp(-V.y, 0.0, 1.0), 5.0);
-            reflection = atmosphere(R) * F * puddle * 0.9;
+            reflection = atmosphere(R) * F * puddle * 0.5;
         }
     }
 #endif

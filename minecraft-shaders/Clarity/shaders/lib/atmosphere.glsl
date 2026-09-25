@@ -70,7 +70,7 @@ vec3 atmosphere(vec3 dir) {
     sky *= mix(1.0, 0.30, below);
 
     // Overcast.
-    sky = mix(sky, vec3(luma(sky)) * vec3(0.52, 0.55, 0.60), rainStrength * 0.85);
+    sky = mix(sky, vec3(luma(sky)) * vec3(0.52, 0.55, 0.60), OVERCAST * 0.85);
     return sky;
 #elif defined NETHER
     return toLinear(fogColor) * 0.9;
@@ -86,7 +86,7 @@ vec3 directLightColor() {
     vec3 sunL  = sunTransmit(y) * 3.1 * smoothstep(0.0, 0.07, y);
     vec3 moonL = vec3(0.50, 0.66, 1.00) * 0.17 * NIGHT_BRIGHTNESS * smoothstep(0.0, 0.07, -y);
     vec3 c = y > 0.0 ? sunL : moonL;
-    return c * (1.0 - rainStrength * 0.82) * SUN_BRIGHTNESS;
+    return c * (1.0 - OVERCAST * 0.82) * SUN_BRIGHTNESS;
 #else
     return vec3(0.0);
 #endif
@@ -131,7 +131,7 @@ const float CLOUD_TOP   = CLOUD_HEIGHT - 50.0 + CLOUD_THICKNESS;
 const float CLOUD_CURVE = 1.0 / 120000.0;
 const float CLOUD_SIGMA = 0.11 * CLOUD_DENSITY;   // extinction per block at density 1
 
-float cloudCoverage() { return clamp(CLOUD_COVERAGE + rainStrength * 0.30, 0.0, 1.0); }
+float cloudCoverage() { return clamp(CLOUD_COVERAGE + OVERCAST * 0.30, 0.0, 1.0); }
 
 float cloudNoise(vec2 p, int octaves) {
     float n = 0.0;
@@ -223,7 +223,7 @@ vec3 cloudLightColor() {
     vec3 sunL  = sunTransmit(y + 0.02) * 3.1 * smoothstep(-0.07, 0.05, y);
     vec3 moonL = vec3(0.50, 0.66, 1.00) * 0.17 * NIGHT_BRIGHTNESS * smoothstep(0.0, 0.07, -y);
     vec3 c = y > -0.07 ? sunL : moonL;
-    return c * (1.0 - rainStrength * 0.82) * SUN_BRIGHTNESS;
+    return c * (1.0 - OVERCAST * 0.82) * SUN_BRIGHTNESS;
 #else
     return vec3(0.0);
 #endif
@@ -346,7 +346,7 @@ vec4 cirrus(vec3 dir, vec3 amb, vec3 sunCol) {
     vec2 wind = vec2(1.0, 0.2) * frameTimeCounter * 4.0 * CLOUD_SPEED;
     vec2 p = (cameraPosition.xz + dir.xz * tc + wind) / vec2(1400.0, 520.0);
     float ci = smoothstep(0.58, 0.88, cloudNoise(p, 4)) * 0.22 * CLOUD_OPACITY;
-    ci *= exp(-tc * 0.00008) * smoothstep(0.0, 0.15, dir.y) * (1.0 - rainStrength * 0.5);
+    ci *= exp(-tc * 0.00008) * smoothstep(0.0, 0.15, dir.y) * (1.0 - OVERCAST * 0.5);
     vec3 ccol = sunCol * 0.45 * (0.6 + 0.4 * phaseHG(dot(dir, lightDirWorld()), 0.6)) + amb * 1.1;
     return vec4(ccol * ci, ci);
 #else
@@ -404,7 +404,7 @@ vec4 clouds(vec3 dir, vec3 amb, vec3 sunCol) {
 // ------------------------------------------------------------------ stars / sun
 vec3 stars(vec3 dir) {
 #if defined OVERWORLD
-    float vis = (1.0 - dayFactor()) * (1.0 - rainStrength) * smoothstep(-0.02, 0.12, dir.y);
+    float vis = (1.0 - dayFactor()) * (1.0 - OVERCAST) * smoothstep(-0.02, 0.12, dir.y);
     if (vis <= 0.0) return vec3(0.0);
     // A frame fixed to the celestial sphere, so stars turn with the sun.
     vec3 s = sunDirWorld();
@@ -439,7 +439,7 @@ vec3 sunDisc(vec3 dir) {
     float limb = sqrt(max(1.0 - x * x, 0.0)) * 0.6 + 0.4;
     float edge = 1.0 - smoothstep(0.92, 1.08, ang / r);
     float horizon = smoothstep(-0.02, 0.02, dir.y);
-    return sunTransmit(s.y) * 40.0 * limb * edge * horizon * (1.0 - rainStrength);
+    return sunTransmit(s.y) * 40.0 * limb * edge * horizon * (1.0 - OVERCAST);
 #else
     return vec3(0.0);
 #endif

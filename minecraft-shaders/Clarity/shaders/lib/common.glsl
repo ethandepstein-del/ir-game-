@@ -16,6 +16,22 @@ uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
 uniform float rainStrength;
 uniform float wetness;
+
+// Weather where the player actually is. Vanilla reports rain world-wide,
+// even in deserts where none falls; on Iris, shaders.properties derives
+// biome-aware, smoothed versions from biome_precipitation.
+#ifdef IS_IRIS
+uniform float weatherLocal;   // rain or snow falling here (overcast, haze)
+uniform float rainLocal;      // rain falling here (ripples)
+uniform float wetLocal;       // ground wetness where it rains (puddles)
+#define OVERCAST weatherLocal
+#define RAIN rainLocal
+#define WETNESS wetLocal
+#else
+#define OVERCAST rainStrength
+#define RAIN rainStrength
+#define WETNESS wetness
+#endif
 uniform float nightVision;
 uniform float blindness;
 uniform float far;
