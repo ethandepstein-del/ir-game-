@@ -118,3 +118,13 @@ option.CLOUD_THICKNESS=Cloud Thickness
 option.CLOUD_DENSITY=Cloud Density
 option.CLOUD_SPEED=Cloud Speed
 option.CLOUD_DISTANCE=Cloud Draw Distance
+option.RT_RESOLUTION=Ray-Trace Rate
+option.RT_RESOLUTION.comment=1.0 traces every pixel; 0.7 a checkerboard; 0.5 one pixel per 2x2 block, rotating each frame. Lower is faster but needs more temporal frames.
+value.RT_RESOLUTION.1.0=Full
+value.RT_RESOLUTION.0.7=Checkerboard
+value.RT_RESOLUTION.0.5=Quarter
+option.RT_DENOISE=Denoiser Strength
+option.RT_HISTORY_CLAMP=Light-Change Response
+option.RT_HISTORY_CLAMP.comment=Lower = lighting reacts faster to doors and torches (slightly more noise). 0 turns the clamp off.
+option.RT_HISTORY_FEEDBACK=History Feedback
+option.RT_HISTORY_FEEDBACK.comment=Feeds the first denoise pass back into history for a cleaner image; softens contact detail a little.

@@ -1,4 +1,4 @@
 #version 430 compatibility
 #define OVERWORLD
 #define FSH
-#include "/program/deferred_atrous_first.glsl"
+#include "/program/deferred_apply.glsl"

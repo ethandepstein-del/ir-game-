@@ -88,7 +88,7 @@ const float eyeBrightnessHalflife = 1.0;
 
 // ---------------------------------------------------------------- ray tracing (Iris, 1.18+)
 //#define RT_GI
-#define RT_RAYS 1 // [1 2 3 4]
+#define RT_RAYS 1 // [1 2]
 #define RT_DISTANCE 32.0 // [16.0 24.0 32.0 48.0 64.0]
 #define RT_HISTORY 10 // [4 6 8 10 12 16 24 32]
 #define RT_GI_STRENGTH 1.00 // [0.50 0.75 1.00 1.25 1.50 2.00]

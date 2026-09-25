@@ -2,4 +2,4 @@
 #define NETHER
 #define NO_SHADOW
 #define FSH
-#include "/program/deferred_temporal.glsl"
+#include "/program/deferred_apply.glsl"

@@ -2,4 +2,5 @@
 #define NETHER
 #define NO_SHADOW
 #define FSH
-#include "/program/deferred_apply.glsl"
+#define ATROUS_STEP 4
+#include "/program/deferred_atrous_wide.glsl"

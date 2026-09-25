@@ -2,5 +2,5 @@
 #define NETHER
 #define NO_SHADOW
 #define VSH
-#define ATROUS_STEP 4
-#include "/program/deferred_atrous.glsl"
+#define ATROUS_STEP 2
+#include "/program/deferred_atrous_wide.glsl"
