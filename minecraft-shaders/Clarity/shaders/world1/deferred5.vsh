@@ -2,5 +2,4 @@
 #define END
 #define NO_SHADOW
 #define VSH
-#define ATROUS_STEP 4
-#include "/program/deferred_atrous_wide.glsl"
+#include "/program/deferred_apply.glsl"

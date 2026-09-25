@@ -2,9 +2,10 @@
 // writes every terrain block within VOXEL_RADIUS of the camera into a
 // 3D R32UI image. Each face writes a packed value with imageAtomicMax, so
 // the result is deterministic: the face with the most sky light wins
-// (a grass block reads as its green top), then the brightest vertex.
-//   bits 28-31 sky light (0-15), 25-27 material, 0-23 albedo RGB8
-// Requires common.glsl.
+// (a grass block reads as its green top), then block light, then colour.
+//   bits 28-31 sky light (0-15), 24-27 block light (0-15),
+//        21-23 material, 0-20 albedo RGB7 (gamma)
+// Requires common.glsl (and atmosphere.glsl for the radiance helpers).
 
 #define VOXEL_RADIUS 64
 #define VOXEL_SIZE 128
@@ -25,15 +26,17 @@ bool insideGrid(vec3 g) {
     return all(greaterThanEqual(g, vec3(0.0))) && all(lessThan(g, vec3(float(VOXEL_SIZE))));
 }
 
-uint packVoxel(vec3 albedo, uint material, float sky) {
-    uvec3 c = uvec3(clamp(albedo, 0.0, 1.0) * 255.0 + 0.5);
+uint packVoxel(vec3 albedo, uint material, float sky, float block) {
+    uvec3 c = uvec3(clamp(albedo, 0.0, 1.0) * 127.0 + 0.5);
     uint s = uint(clamp(sky, 0.0, 1.0) * 15.0 + 0.5);
-    return (s << 28u) | (material << 25u) | (c.r << 16u) | (c.g << 8u) | c.b;
+    uint b = uint(clamp(block, 0.0, 1.0) * 15.0 + 0.5);
+    return (s << 28u) | (b << 24u) | (material << 21u) | (c.r << 14u) | (c.g << 7u) | c.b;
 }
-uint voxelMaterial(uint v) { return (v >> 25u) & 7u; }
+uint voxelMaterial(uint v) { return (v >> 21u) & 7u; }
 float voxelSky(uint v) { return float(v >> 28u) / 15.0; }
+float voxelBlock(uint v) { return float((v >> 24u) & 15u) / 15.0; }
 vec3 voxelAlbedo(uint v) {
-    return vec3(float((v >> 16u) & 255u), float((v >> 8u) & 255u), float(v & 255u)) / 255.0;
+    return vec3(float((v >> 14u) & 127u), float((v >> 7u) & 127u), float(v & 127u)) / 127.0;
 }
 
 #ifndef VOXEL_WRITE
@@ -85,14 +88,25 @@ bool traceVoxels(vec3 origin, vec3 dir, float maxDist, float noise,
 
 // Light leaving a voxel face that a ray hit. Needs shadowAt(playerPos)
 // declared before this file is included.
-vec3 voxelRadiance(uint v, vec3 gridHit, vec3 n, vec3 sunCol, vec3 amb, vec3 L) {
+// skyCap limits the voxel's sky light: a voxel stores the sky light of its
+// brightest face, so the underside of a one-block cave ceiling would read
+// as open sky. Vanilla sky light drops one level per block, so the face a
+// ray reached through air can't be much brighter than the ray's origin.
+vec3 voxelRadianceCapped(uint v, vec3 gridHit, vec3 n, vec3 sunCol, vec3 amb, vec3 L, float skyCap) {
     vec3 albedo = toLinear(voxelAlbedo(v));
     uint m = voxelMaterial(v);
     if (m == MAT_EMIT || m == MAT_EMIT_SMALL) return albedo * 4.0 * EMISSIVE_STRENGTH;
     vec3 p = gridToPlayer(gridHit + n * 0.05);
     float sun = max(dot(n, L), 0.0);
     if (sun > 0.0) sun *= shadowAt(p) * cloudShadow(p + cameraPosition, L);
-    float sky = voxelSky(v);
-    return albedo * (sunCol * sun + amb * (sky * sky) * (0.78 + 0.22 * n.y) + MIN_LIGHT);
+    float sky = min(voxelSky(v), skyCap);
+    // Torch-lit surfaces bounce their block light too (same curve as the
+    // raster block light in lighting.glsl).
+    float bl = voxelBlock(v);
+    vec3 block = blockLightColor() * (bl * bl * bl * 0.85 + bl * 0.08) * (1.0 + bl * bl * bl * bl);
+    return albedo * (sunCol * sun + amb * (sky * sky) * (0.78 + 0.22 * n.y) + block + MIN_LIGHT);
+}
+vec3 voxelRadiance(uint v, vec3 gridHit, vec3 n, vec3 sunCol, vec3 amb, vec3 L) {
+    return voxelRadianceCapped(v, gridHit, n, sunCol, amb, L, 1.0);
 }
 #endif

@@ -33,7 +33,7 @@ attribute vec4 mc_midTexCoord;
 in vec3 at_midBlock;
 layout(r32ui) uniform uimage3D voxelImg;
 
-void voxelize(vec3 playerPos, float skyLight) {
+void voxelize(vec3 playerPos, vec2 lm) {
     vec3 offset = at_midBlock / 64.0;
     if (dot(offset, offset) < 0.01) return;          // entities: no block centre
     float id = mc_Entity.x;
@@ -53,7 +53,7 @@ void voxelize(vec3 playerPos, float skyLight) {
     vec3 albedo = texture2DLod(ALBEDO_TEX, mc_midTexCoord.xy, 4.0).rgb * gl_Color.rgb;
     if (emitSmall) albedo = max(albedo, texture2DLod(ALBEDO_TEX, mc_midTexCoord.xy, 2.0).rgb);
     uint material = emit ? MAT_EMIT : (emitSmall ? MAT_EMIT_SMALL : (leaves ? MAT_LEAVES : MAT_SOLID));
-    imageAtomicMax(voxelImg, ivec3(floor(g)), packVoxel(albedo, material, skyLight));
+    imageAtomicMax(voxelImg, ivec3(floor(g)), packVoxel(albedo, material, lm.y, lm.x));
 }
 #endif
 
@@ -71,7 +71,7 @@ void main() {
     vec2 lm = clamp(((gl_TextureMatrix[1] * gl_MultiTexCoord1).xy - 0.03125) * 1.06667, 0.0, 1.0);
     vec4 pp = shadowModelViewInverse * (gl_ModelViewMatrix * gl_Vertex);
 #ifdef VOXEL_WRITE
-    voxelize(pp.xyz, lm.y);
+    voxelize(pp.xyz, lm);
 #endif
     bool topVertex = gl_MultiTexCoord0.t < mc_midTexCoord.t;
     pp.xyz += waveVertex(pp.xyz + cameraPosition, mc_Entity.x, topVertex, lm.y);

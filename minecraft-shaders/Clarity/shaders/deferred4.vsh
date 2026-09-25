@@ -1,4 +1,5 @@
 #version 430 compatibility
 #define OVERWORLD
 #define VSH
-#include "/program/deferred_apply.glsl"
+#define ATROUS_STEP 4
+#include "/program/deferred_atrous_wide.glsl"

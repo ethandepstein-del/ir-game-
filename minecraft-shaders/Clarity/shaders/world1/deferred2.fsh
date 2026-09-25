@@ -2,5 +2,4 @@
 #define END
 #define NO_SHADOW
 #define FSH
-#define ATROUS_STEP 2
-#include "/program/deferred_atrous.glsl"
+#include "/program/deferred_atrous_first.glsl"

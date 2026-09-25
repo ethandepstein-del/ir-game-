@@ -42,10 +42,11 @@ PROGRAMS = {
     "gbuffers_spidereyes":   ("gbuffers_emissive", ["GLOW_BOOST 1.5"]),
     "gbuffers_beaconbeam":   ("gbuffers_emissive", ["GLOW_BOOST 1.5"]),
     "deferred":              ("deferred", []),
-    "deferred1":             ("deferred_atrous", ["ATROUS_STEP 1"]),
-    "deferred2":             ("deferred_atrous", ["ATROUS_STEP 2"]),
-    "deferred3":             ("deferred_atrous", ["ATROUS_STEP 4"]),
-    "deferred4":             ("deferred_apply", []),
+    "deferred1":             ("deferred_temporal", []),
+    "deferred2":             ("deferred_atrous_first", []),
+    "deferred3":             ("deferred_atrous_wide", ["ATROUS_STEP 2"]),
+    "deferred4":             ("deferred_atrous_wide", ["ATROUS_STEP 4"]),
+    "deferred5":             ("deferred_apply", []),
     "composite":             ("composite", []),
     "composite1":            ("composite1", []),
     "composite2":            ("composite2", []),
@@ -66,7 +67,7 @@ COMPAT430 = "#version 430 compatibility"
 VERSION_OVERRIDES = {("", "shadow"): COMPAT430}
 # Programs that read the integer voxel image (usampler3D / texelFetch).
 for _folder in ("", "world-1", "world1"):
-    for _name in ("deferred", "deferred1", "deferred2", "deferred3", "deferred4", "composite1"):
+    for _name in ("deferred", "deferred1", "deferred2", "deferred3", "deferred4", "deferred5", "composite1"):
         VERSION_OVERRIDES[(_folder, _name)] = COMPAT430
 
 
