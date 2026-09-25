@@ -1,6 +1,6 @@
 // Builds the Japan geography quiz page from Natural Earth (world-atlas 10m) borders.
-// Projects two views (East Asia region, Japan close-up), splits Japan into its main
-// islands, and inlines everything into quiz/japan-geography.html from the template.
+// Projects two views that mirror the class handouts (Map 1: Japan close-up, Map 2: East Asia),
+// splits Japan into its main islands, and inlines everything into quiz/japan-geography.html.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { geoConicConformal, geoPath, geoGraticule, geoArea } from 'd3-geo';
@@ -25,6 +25,8 @@ const honshu = biggest(() => true);
 const shikoku = biggest((p) => p.lat > 32.6 && p.lat < 34.5 && p.lon > 132.3 && p.lon < 134.9);
 const kyushu = biggest((p) => p.lat > 30.9 && p.lat < 34 && p.lon > 129.4 && p.lon < 132.2);
 const okinawa = biggest((p) => p.lat > 26 && p.lat < 27 && p.lon > 127.5 && p.lon < 128.5);
+// The Ryukyu arc: south of Kyushu toward Taiwan, leaving out the Daito Islands far to the east.
+const inRyukyu = (p) => p.lat < 30.5 && p.lat > 24 && p.lon > 122.8 && p.lon < 131.5 && !(p.lon > 130.8 && p.lat < 27);
 const groups = { hokkaido: [], honshu: [], shikoku: [], kyushu: [], okinawa: [], ryukyu: [], japan: [] };
 for (const p of japanPolys) {
   if (p === hokkaido) groups.hokkaido.push(p.poly);
@@ -32,7 +34,7 @@ for (const p of japanPolys) {
   else if (p === shikoku) groups.shikoku.push(p.poly);
   else if (p === kyushu) groups.kyushu.push(p.poly);
   else if (p === okinawa) groups.okinawa.push(p.poly);
-  else if (p.lat < 30.5 && p.lat > 24 && p.lon > 122.8 && p.lon < 131.5) groups.ryukyu.push(p.poly);
+  else if (inRyukyu(p)) groups.ryukyu.push(p.poly);
   else groups.japan.push(p.poly);
 }
 const mp = (polys) => ({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: polys } });
@@ -67,14 +69,44 @@ const cities = {
   hiroshima: [132.46, 34.39], nagasaki: [129.87, 32.75],
 };
 
-// Where study-mode labels sit [lon, lat].
+// Where item labels sit [lon, lat].
 const labelAt = {
-  hokkaido: [142.8, 43.4], honshu: [138.9, 37.2], shikoku: [133.5, 33.7], kyushu: [130.8, 32.4],
+  hokkaido: [143.3, 43.9], honshu: [138.9, 37.2], shikoku: [133.5, 33.7], kyushu: [131.2, 32.2],
   ryukyu: [129.4, 28.4], okinawa: [128.4, 26.1],
-  okhotsk: [149, 53.5], japan: [135.3, 41.6], yellow: [122.9, 35.4], ecs: [124.6, 30.4],
+  okhotsk: [149, 53.5], japan: [135.3, 41.6], yellow: [122.2, 35.1], ecs: [125, 30.6],
   russia: [131.5, 49.5], china: [113.5, 33], nkorea: [126.4, 40.3], skorea: [128.1, 36.6], taiwan: [121, 23.6],
-  mongolia: [111, 45],
 };
+
+// Landmarks printed on the class handouts. Not quiz answers; they help you orient.
+// off = [dx em, dy em, text-anchor]
+const contextAt = {
+  japan: [
+    { name: 'Sapporo', ll: [141.35, 43.06], dot: true, off: [0.5, 0.35, 'start'] },
+    { name: 'Hakodate', ll: [140.73, 41.77], dot: true, off: [0.5, 0.35, 'start'] },
+    { name: 'Niigata', ll: [139.02, 37.92], dot: true, off: [0.5, 0.35, 'start'] },
+    { name: 'Kanazawa', ll: [136.65, 36.56], dot: true, off: [-0.5, 0.35, 'end'] },
+    { name: 'Kōbe', ll: [135.19, 34.69], dot: true, off: [-0.5, 0.35, 'end'] },
+    { name: 'Kagoshima', ll: [130.56, 31.6], dot: true, off: [0.5, 0.35, 'start'] },
+    { name: 'Inland Sea', ll: [133.15, 34.1], cls: 'water' },
+    { name: 'Pacific Ocean', ll: [141.8, 32.6], cls: 'water big' },
+  ],
+  region: [
+    { name: 'Vladivostok', ll: [131.89, 43.12], dot: true, off: [-0.5, -0.25, 'end'] },
+    { name: 'Kuril Is.', ll: [151.6, 46.3] },
+    { name: 'JAPAN', ll: [138.4, 36.3], cls: 'caps' },
+    { name: 'Mongolia', ll: [113.5, 44.5] },
+    { name: 'Pacific Ocean', ll: [147.5, 31.5], cls: 'water big' },
+  ],
+};
+// Capital-city squares on Map 2: Beijing, Pyongyang, Seoul, Taipei, Tokyo.
+const capitals = [[116.4, 39.9], [125.75, 39.02], [126.98, 37.57], [121.56, 25.03], [139.69, 35.69]];
+// Degree marks along the map edges, like the handouts.
+const degrees = {
+  japan: { step: 5, lats: [35, 40, 45], latLon: 146.0, lons: [130, 135, 140, 145], lonLat: 30.85 },
+  region: { step: 10, lats: [30, 40], latLon: 156.8, lons: [120, 130, 140, 150], lonLat: 21.1 },
+};
+// A line down the Ryukyu chain, drawn as a wide band to highlight the islands.
+const ryukyuLine = [[130.55, 30.35], [129.7, 29.3], [129.4, 28.3], [128.6, 27.3], [127.9, 26.5], [126.8, 26.3], [125.3, 24.75], [124.1, 24.35], [123.0, 24.45]];
 
 // ---- Projection + path helpers ----------------------------------------------
 function view({ w, lon0, lon1, lat0, lat1, minArea }) {
@@ -93,7 +125,10 @@ function view({ w, lon0, lon1, lat0, lat1, minArea }) {
     const rings = [];
     let cur = null;
     geoPath(proj, {
-      moveTo(x, y) { cur = [[x, y]]; },
+      moveTo(x, y) {
+        if (cur) rings.push({ pts: cur, closed: false });
+        cur = [[x, y]];
+      },
       lineTo(x, y) {
         const [px, py] = cur[cur.length - 1];
         if (Math.hypot(x - px, y - py) >= 0.7) cur.push([x, y]);
@@ -120,12 +155,13 @@ function view({ w, lon0, lon1, lat0, lat1, minArea }) {
   return { w, h, proj, toD, pt };
 }
 
-function build(cfg) {
+function build(key, cfg) {
   const v = view(cfg);
+  const deg = degrees[key];
   return {
     w: v.w,
     h: v.h,
-    grid: v.toD(geoGraticule().step([5, 5])(), 0),
+    grid: v.toD(geoGraticule().step([deg.step, deg.step])(), 0),
     land: land.map(([id, f]) => ({ id, d: v.toD(f, ['ryukyu', 'okinawa'].includes(id) ? 0.3 : cfg.minArea) })).filter((s) => s.d),
     seas: Object.entries(seas).map(([id, ring]) => {
       // d3 wants small polygons wound clockwise; flip any ring that came out as "the whole globe minus a hole".
@@ -135,12 +171,21 @@ function build(cfg) {
     }).filter((s) => s.d),
     cities: Object.entries(cities).map(([id, ll]) => ({ id, p: v.pt(ll) })),
     labels: Object.fromEntries(Object.entries(labelAt).map(([id, ll]) => [id, v.pt(ll)])),
+    context: contextAt[key].map((c) => ({ name: c.name, p: v.pt(c.ll), dot: !!c.dot, off: c.off ?? [0, 0.35, 'middle'], cls: c.cls ?? '' })),
+    caps: key === 'region' ? capitals.map((ll) => v.pt(ll)) : [],
+    degrees: [
+      ...deg.lats.map((l) => ({ t: `${l}°`, p: v.pt([deg.latLon, l]) })),
+      ...deg.lons.map((l) => ({ t: `${l}°`, p: v.pt([l, deg.lonLat]) })),
+    ],
+    band: key === 'region' ? v.toD({ type: 'LineString', coordinates: ryukyuLine }, 0) : '',
+    bandPts: key === 'region' ? ryukyuLine.map((ll) => v.pt(ll)) : [],
+    okinawa: v.pt([127.85, 26.45]),
   };
 }
 
 const data = {
-  region: build({ w: 1000, lon0: 110, lon1: 157, lat0: 20.5, lat1: 56.5, minArea: 1.5 }),
-  japan: build({ w: 900, lon0: 128.4, lon1: 146.2, lat0: 30.6, lat1: 45.8, minArea: 2 }),
+  region: build('region', { w: 1000, lon0: 110, lon1: 157, lat0: 20.5, lat1: 56.5, minArea: 1.5 }),
+  japan: build('japan', { w: 900, lon0: 128.4, lon1: 146.2, lat0: 30.6, lat1: 45.8, minArea: 2 }),
 };
 
 const tpl = readFileSync(new URL('../quiz/template.html', import.meta.url), 'utf8');
