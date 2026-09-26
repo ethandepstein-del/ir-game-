@@ -5,7 +5,7 @@ import { K, W, H } from './world.mjs';
 
 // instant photo: content(P) draws a full 1920x1080 frame that is fitted into the print window.
 // dev < 1 leaves the image partially undeveloped (fades back to bare paper).
-export function photo(P, cx, cy, w, rot, content, { dev = 1, shadow = true, border = 0.06, bottom = 0.2, tint = null, pin = false } = {}) {
+export function photo(P, cx, cy, w, rot, content, { dev = 1, shadow = true, border = 0.06, bottom = 0.2, tint = null, pin = false, caption = null } = {}) {
   const iw = w * (1 - border * 2), ih = iw * (H / W);
   const h = ih + w * border + w * bottom;
   P.save();
@@ -21,6 +21,7 @@ export function photo(P, cx, cy, w, rot, content, { dev = 1, shadow = true, bord
   content(P);
   P.restore();
   if (dev < 1) P.alpha(1 - clamp(dev)).fill(rect(x0, y0, iw, ih), K.paper).alpha(1);
+  if (caption) caption(P, x0 + w * 0.01, y0 + ih + w * 0.105, iw);
   if (pin) P.fill(circle(0, -h / 2 + 12, 10), K.red);
   P.restore();
   return h;
@@ -184,9 +185,13 @@ export function bulb(P, x, y, len, swing, level, { size = 1 } = {}) {
 }
 
 // overhead view of a circle pit: runners loop the ring, a wall of people stands around it
-export function pit(P, t, { n = 22, seed = 5, speed = 0.5, girl = 3, bounce = 0, bf = 0 } = {}) {
+// `turn` is the ring's rotation (radians), so the scene can lock the running to the bar; `floor`
+// draws on the floor under everyone (painted lyrics)
+export function pit(P, t, { n = 22, seed = 5, turn = null, speed = 0.5, girl = 3, bounce = 0, bf = 0, floor = null } = {}) {
   P.fill(rect(-100, -100, W + 200, H + 200), [0.1, 0.5, 0.72]);
   for (let i = 0; i < 9; i++) P.fill(rect(-100, 40 + i * 130, W + 200, 5), [0.1, 0.7, 0.88]);
+  if (floor) floor(P);
+  const rot = turn ?? t * speed;
   const cx = W / 2, cy = H / 2 + 20;
   const r = rng(seed);
   const top = (x, y, dir, s, hair, body, style) => {
@@ -207,7 +212,7 @@ export function pit(P, t, { n = 22, seed = 5, speed = 0.5, girl = 3, bounce = 0,
     const a = (i / 46) * TAU + hs(seed, i) * 0.05;
     const rr = 1 + hash(seed, i, 2) * 0.08;
     const x = cx + Math.cos(a) * 900 * rr, y = cy + Math.sin(a) * 500 * rr;
-    const b = 1 + bounce * 0.06 * Math.abs(Math.sin(t * 9 + i));
+    const b = 1 + bounce * 0.06 * Math.abs(Math.sin(rot * 6 + i));
     top(x, y, a + Math.PI, 1.3 * b, [[0, 1, 1], [0.35, 1, 1], [0, 0.7, 1]][i % 3], [0, 0.85, 1], i % 3);
   }
   const people = [];
@@ -216,12 +221,12 @@ export function pit(P, t, { n = 22, seed = 5, speed = 0.5, girl = 3, bounce = 0,
     const a0 = r() * TAU;
     const w = speed * (1.25 - ring * 0.5) * (0.85 + r() * 0.3);
     const rad = 300 + ring * 300;
-    const a = a0 + t * w;
+    const a = a0 + rot * w / speed;
     people.push({ x: cx + Math.cos(a) * rad * 1.35, y: cy + Math.sin(a) * rad * 0.72, a, i, hair: Math.floor(r() * 5), s: 1.4 + r() * 0.3, style: Math.floor(r() * 3) });
   }
   people.sort((p, q) => p.y - q.y);
   for (const p of people) {
-    const b = 1 + bounce * 0.08 * Math.abs(Math.sin(t * 9 + p.i));
+    const b = 1 + bounce * 0.08 * Math.abs(Math.sin(rot * 9 + p.i));
     const dir = p.a + Math.PI / 2;
     const isG = p.i === girl;
     // motion streaks
@@ -246,16 +251,117 @@ export function comet(P, x, y, ang, len, level) {
   P.fill(star(x, y, 46 * level, 16 * level, 4, ang), K.paper);
 }
 
-export function firework(P, x, y, lt, seed, inks = [1, 0, 0]) {
-  if (lt < 0 || lt > 2.2) return;
+// A firework shell. The rocket rises for `rise` seconds and bursts exactly at t0 (so bursts can sit on
+// beats); stars fly out with drag and gravity, drawing tapered trails, then twinkle and crackle out.
+export function shell(P, t, { t0, x, y, seed = 1, inks = [1, 0, 0], inks2 = null, n = 72, R = 480, rise = 0.6, life = 2.4, lx = null, kind = 'peony' }) {
+  const lt = t - t0;
+  if (lt < -rise || lt > life) return;
   const r = rng(seed);
-  const R = 520 * easeOut(clamp(lt / 1.2));
-  const fade = clamp(1 - (lt - 1.1) / 1.1);
-  for (let i = 0; i < 28; i++) {
-    const a = (i / 28) * TAU + r() * 0.1;
-    const rr = R * (0.8 + r() * 0.3);
-    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr + lt * lt * 40;
-    P.stroke(line([[x + Math.cos(a) * rr * 0.6, y + Math.sin(a) * rr * 0.6 + lt * lt * 30], [px, py]]), inks, 10 * fade);
-    P.fill(star(px, py, 22 * fade, 8 * fade, 4, a), K.paper);
+  const launchX = lx ?? x + (r() - 0.5) * 240;
+  if (lt < 0) {
+    const k = 1 + lt / rise;
+    const at = (kk) => {
+      const e = 1 - (1 - clamp(kk)) ** 2;
+      return [lerp(launchX, x, e) + Math.sin(kk * 18 + seed) * 6 * (1 - kk), lerp(H + 60, y, e)];
+    };
+    for (let j = 7; j >= 0; j--) {
+      const [px, py] = at(k - j * 0.03);
+      P.fill(circle(px, py, 7 - j * 0.8), j < 2 ? K.paper : [1, 0.35 * (j / 7), 0]);
+    }
+    return;
+  }
+  // burst flash lifts the night off the sky
+  if (lt < 0.35) {
+    const f = 1 - lt / 0.35;
+    P.glow(x, y, 180 + 320 * f, [0, 0.9 * f, 1 * f], 'knock', 0.25);
+    P.glow(x, y, 90 + 160 * f, [0.9 * f, 0.25 * f, 0], 'lighter', 0.2);
+  }
+  const willow = kind === 'willow';
+  const drag = willow ? 1.6 : 2.6, g = willow ? 260 : 150;
+  const pos = (vx, vy, tt) => {
+    const k = (1 - Math.exp(-drag * tt)) / drag;
+    return [x + vx * k, y + vy * k + 0.5 * g * tt * tt];
+  };
+  const fade = clamp(1 - (lt - life * 0.5) / (life * 0.5));
+  const trailLen = willow ? 12 : 7, dt = willow ? 0.05 : 0.03;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU + r() * 0.12;
+    const sp = R * drag * (kind === 'ring' ? 1 : 0.7 + r() * 0.45);
+    const vx = Math.cos(a) * sp, vy = Math.sin(a) * sp * (kind === 'ring' ? 0.55 : 1);
+    const col = inks2 && i % 2 ? inks2 : inks;
+    let prev = pos(vx, vy, lt);
+    for (let j = 1; j <= trailLen; j++) {
+      const tt = lt - j * dt;
+      if (tt < 0) break;
+      const p = pos(vx, vy, tt);
+      const w = (willow ? 6 : 8) * (1 - j / (trailLen + 1)) * (0.4 + 0.6 * fade);
+      if (w > 0.4) P.stroke(line([prev, p]), col, w);
+      prev = p;
+    }
+    const [hx, hy] = pos(vx, vy, lt);
+    const twinkleOff = lt > life * 0.45 && hash(seed, i, Math.floor(lt * 18)) > 0.55;
+    if (!twinkleOff && fade > 0.05) {
+      P.fill(circle(hx, hy, 6.5 * fade + 1.5), K.paper);
+      if (lt < 0.6) P.glow(hx, hy, 26, col.map((v) => v * 0.6), 'lighter');
+    }
+    // crackle: stars split into flickering sparks near the end
+    if ((kind === 'crackle' || kind === 'peony') && lt > life * 0.55 && hash(seed, i, 9) > (kind === 'crackle' ? 0.2 : 0.7)) {
+      for (let s = 0; s < 4; s++) {
+        if (hash(seed, i, s, Math.floor(lt * 24)) < 0.5) continue;
+        const ox = hs(seed, i, s, 1) * 34 * (lt - life * 0.55) * 2, oy = hs(seed, i, s, 2) * 34 * (lt - life * 0.55) * 2;
+        P.fill(star(hx + ox, hy + oy, 7, 2.5, 4, hash(i, s) * 3), K.paper);
+      }
+    }
+  }
+}
+
+// kept for older call sites: a single peony at (x, y) bursting at lt = 0
+export function firework(P, x, y, lt, seed, inks = [1, 0, 0]) {
+  shell(P, lt, { t0: 0, x, y, seed, inks, rise: 0.001 });
+}
+
+// a wrecked teenage bedroom: unmade bed, flyers on the wall, clothes everywhere (for the zine)
+export function bedroom(P, t, { lamp = 1 } = {}) {
+  P.fill(rect(-100, -100, W + 200, H + 200), [0.1, 0.55, 0.05]);
+  // window with the night outside
+  P.fill(rect(1180, 120, 520, 420), K.ink);
+  P.fill(rect(1200, 140, 480, 380), [0, 0.6, 1]);
+  P.fill(circle(1580, 230, 46), [0.12, 0, 0]);
+  for (let i = 0; i < 12; i++) P.fill(circle(1220 + hash(i, 1) * 440, 160 + hash(i, 2) * 300, 3), K.paper);
+  P.fill(rect(1436, 140, 10, 380), K.ink);
+  P.fill(rect(1200, 326, 480, 10), K.ink);
+  // flyers taped up
+  const fl = [[260, 200, 200, 260, -0.06, [1, 0, 0]], [520, 160, 170, 230, 0.05, [0, 0, 0.9]], [760, 230, 190, 250, -0.03, [0, 1, 0]], [980, 170, 150, 200, 0.08, [1, 1, 0]]];
+  for (const [x, y, w, h, r, ink] of fl) {
+    P.save(); P.translate(x, y); P.rotate(r);
+    P.fill(rect(-w / 2, -h / 2, w, h), ink);
+    P.fill(circle(0, -h * 0.1, w * 0.28), K.paper);
+    P.fill(rect(-w * 0.35, h * 0.28, w * 0.7, 10), K.paper);
+    P.fill(rect(-18, -h / 2 - 10, 36, 18), [0.25, 0.18, 0.05]);
+    P.restore();
+  }
+  // floor
+  P.fill(rect(-100, 780, W + 200, 400), [0.4, 0.55, 0.3]);
+  for (let i = 0; i < 6; i++) P.fill(rect(-100, 800 + i * 60, W + 200, 4), [0.5, 0.7, 0.4]);
+  // bed with a rumpled blanket and two pillows
+  P.fill(rect(120, 560, 980, 300), K.ink);
+  P.fill(roundRect(90, 420, 60, 460, 12), K.ink);
+  P.fill(roundRect(160, 520, 250, 110, 40), K.paper);
+  P.fill(curve([[180, 640], [360, 590], [520, 650], [700, 580], [900, 640], [1100, 610], [1110, 820], [170, 830]], true, 0.5), [0, 1, 0.1]);
+  for (let i = 0; i < 5; i++) P.stroke(curve([[260 + i * 160, 660], [320 + i * 160, 700], [300 + i * 160, 790]], false), [0.1, 1, 0.5], 6);
+  // guitar on a stand, clothes piles, a lamp
+  P.save(); P.translate(1300, 760); P.rotate(-0.12);
+  P.fill(rect(-8, -420, 16, 300), [0.5, 0.5, 0.15]);
+  P.fill(curve([[-80, -60], [-70, -170], [-20, -200], [0, -150], [30, -200], [80, -170], [90, -60], [40, 10], [-30, 10]], true, 0.5), [0.72, 0.34, 0.04]);
+  P.fill(circle(5, -110, 22), K.ink);
+  P.restore();
+  for (const [x, y, ink] of [[620, 880, [1, 0.1, 0]], [760, 900, [0, 0.2, 0.9]], [1520, 880, [0, 0, 0]], [1640, 910, [1, 1, 0]]]) {
+    P.fill(curve([[x - 110, y + 40], [x - 70, y - 30], [x, y - 50], [x + 80, y - 20], [x + 120, y + 40]], true, 0.5), ink);
+  }
+  P.fill(rect(1760, 520, 16, 300), K.ink);
+  P.fill(poly([[1710, 520], [1830, 520], [1800, 440], [1740, 440]]), [1, 0.1, 0]);
+  if (lamp > 0) {
+    P.glow(1768, 560, 330, [0, 0.6 * lamp, 0.4 * lamp], 'knock', 0.3);
+    P.glow(1768, 560, 220, [0.6 * lamp, 0, 0], 'lighter', 0.3);
   }
 }

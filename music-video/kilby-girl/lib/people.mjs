@@ -310,7 +310,7 @@ export function amp(P, x, floor, w, h, inks = K.navy) {
 
 // ---------------------------------------------------------------- crowd
 // a row of backlit heads & shoulders. arms: 0..1 fraction of people with hands up
-export function crowd(P, { y = 1000, n = 12, seed = 1, x0 = -80, x1 = W_ + 80, scale = 1, bounce = 0, beatPos = 0, arms = 0, bf = 0, inks = K.navy, girlAt = -1, phones = 0, t = 0, clap = 0 } = {}) {
+export function crowd(P, { y = 1000, n = 12, seed = 1, x0 = -80, x1 = W_ + 80, scale = 1, bounce = 0, beatPos = 0, arms = 0, bf = 0, inks = K.navy, girlAt = -1, phones = 0, t = 0, phoneWords = null } = {}) {
   const people = [];
   for (let i = 0; i < n; i++) {
     const x = lerp(x0, x1, (i + 0.5 + hs(seed, i) * 0.3) / n);
@@ -319,23 +319,47 @@ export function crowd(P, { y = 1000, n = 12, seed = 1, x0 = -80, x1 = W_ + 80, s
     const b = Math.abs(Math.sin(Math.PI * (beatPos + ph * 0.25))) * bounce * 26 * s;
     people.push({ x, s, b, i, up: hash(seed, i, 4) < arms, ph });
   }
+  // lyric words shown on held-up phones, left to right
+  if (phoneWords) {
+    const holders = people.filter((q) => q.i !== girlAt).slice(0, phoneWords.length);
+    holders.forEach((q, k) => { q.up = true; q.word = phoneWords[k]; });
+  }
   for (const p of people) {
     const { x, s, b, i } = p;
     const yy = y - b;
     const isGirl = i === girlAt;
     const body = isGirl ? [0.95, 0.35, 0.25] : inks;
-    // raised arms behind the head
+    // raised arms behind the head, pumping on the beat
     if (p.up) {
-      const wave = Math.sin(t * 5 + i) * 0.15 + clap * 0.2;
+      const pump = Math.pow(1 - ((beatPos + p.ph * 0.15) % 1), 3);
       for (const sd of [-1, 1]) {
-        if (hash(seed, i, 5) < 0.4 && sd === 1) continue;
-        const ax = x + sd * 60 * s, ay = yy - 120 * s;
-        const hx = ax + sd * (30 + wave * 80) * s, hy = ay - 190 * s + b * 0.5;
-        P.fill(capsule(ax, ay, hx, hy, 34 * s, 28 * s), body);
-        if (phones && hash(seed, i, 6) < phones && sd === 1) {
-          P.glow(hx, hy - 30 * s, 120 * s, [0, 0.6, 0.8], 'destination-out');
-          P.fill(roundRect(hx - 22 * s, hy - 70 * s, 44 * s, 70 * s, 6 * s), [0.9, 0.2, 0]);
-        } else P.fill(circle(hx, hy - 6 * s, 22 * s), body);
+        if (hash(seed, i, 5) < 0.4 && sd === 1 && !p.word) continue;
+        const ax = x + sd * 62 * s, ay = yy - 112 * s;
+        const hx = ax + sd * (26 + hash(seed, i, sd) * 40) * s, hy = ay - (170 + pump * 26) * s + b * 0.5;
+        const ex = lerp(ax, hx, 0.45) + sd * 22 * s, ey = lerp(ay, hy, 0.5);
+        P.fill(capsule(ax, ay, ex, ey, 36 * s, 30 * s), body);
+        P.fill(capsule(ex, ey, hx, hy, 30 * s, 24 * s), body);
+        if (p.word && sd === 1) {
+          // a phone held sideways with one lyric word lit up when it is sung
+          const on = p.word.on, lit = p.word.hot ? 1 : on ? 0.7 : 0;
+          const pw = 132 * s, ph2 = 76 * s;
+          if (lit) P.glow(hx, hy - 50 * s, 220 * s, [0, 0.7 * lit, 0.85 * lit], 'knock', 0.3);
+          P.fill(roundRect(hx - pw / 2 - 5 * s, hy - 50 * s - ph2 / 2 - 5 * s, pw + 10 * s, ph2 + 10 * s, 10 * s), K.ink);
+          P.fill(roundRect(hx - pw / 2, hy - 50 * s - ph2 / 2, pw, ph2, 7 * s), lit ? [0.95, p.word.hot ? 0.1 : 0.02, 0] : [0.1, 0.3, 0.5]);
+          if (on) P.text(p.word.text, hx, hy - 50 * s + 14 * s, `${Math.min(46, 260 / Math.max(3, p.word.text.length)) * s}px Anton`, p.word.hot ? [0, 1, 0.1] : K.ink);
+        } else if (phones && hash(seed, i, 6) < phones && sd === 1) {
+          P.glow(hx, hy - 34 * s, 120 * s, [0, 0.6, 0.8], 'knock', 0.3);
+          P.fill(roundRect(hx - 20 * s, hy - 74 * s, 40 * s, 70 * s, 7 * s), K.ink);
+          P.fill(roundRect(hx - 16 * s, hy - 70 * s, 32 * s, 62 * s, 5 * s), [0.95, 0.15, 0]);
+        } else if (hash(seed, i, 8) < 0.5) {
+          // fist
+          P.fill(roundRect(hx - 20 * s, hy - 34 * s, 40 * s, 38 * s, 12 * s), body);
+        } else {
+          // open hand: palm + fingers + thumb
+          P.fill(roundRect(hx - 19 * s, hy - 30 * s, 38 * s, 34 * s, 10 * s), body);
+          for (let f = 0; f < 4; f++) P.fill(capsule(hx - 13 * s + f * 8.7 * s, hy - 28 * s, hx - 16 * s + f * 10.5 * s, hy - (52 - Math.abs(f - 1.5) * 5) * s, 8 * s), body);
+          P.fill(capsule(hx - sd * 17 * s, hy - 12 * s, hx - sd * 32 * s, hy - 30 * s, 9 * s), body);
+        }
       }
     }
     P.fill(curve([[x - 110 * s, yy + 200 * s], [x - 100 * s, yy - 60 * s], [x - 40 * s, yy - 110 * s], [x + 40 * s, yy - 110 * s], [x + 100 * s, yy - 60 * s], [x + 110 * s, yy + 200 * s]], true, 0.4), body);

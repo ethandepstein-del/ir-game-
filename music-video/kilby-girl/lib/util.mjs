@@ -88,10 +88,20 @@ export class Clock {
     const len = nx - l.t;
     return { i: l.i, phase: clamp((t - l.t) / len), len };
   }
+  // continuous position along any sorted event list (beats, downbeats): index + phase
+  posIn(name, t, fallback = 0.36) {
+    const a = this.f[name];
+    const l = this.last(name, t);
+    if (l.i < 0) return (t - a[0]) / fallback;
+    const nx = l.i + 1 < a.length ? a[l.i + 1] : l.t + (l.i > 0 ? l.t - a[l.i - 1] : fallback);
+    return l.i + clamp((t - l.t) / (nx - l.t));
+  }
   // continuous beat position (beat index + phase)
   beatPos(t) {
-    const b = this.beat(t);
-    return b.i + b.phase;
+    return this.posIn('beats', t, 0.36);
+  }
+  barPos(t) {
+    return this.posIn('downbeats', t, 1.44);
   }
   // events inside [a, b)
   between(name, a, b) {

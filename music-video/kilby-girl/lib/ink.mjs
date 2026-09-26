@@ -21,9 +21,9 @@ for (const [file, fam] of [
 ]) GlobalFonts.registerFromPath(here('../fonts/' + file), fam);
 
 export const INKS = [
-  { name: 'yellow', rgb: [255, 232, 0], angle: 0, cell: 9.5, seed: 11 },
-  { name: 'pink', rgb: [255, 72, 176], angle: 75, cell: 9.5, seed: 23 },
-  { name: 'blue', rgb: [0, 120, 191], angle: 15, cell: 9.5, seed: 37 },
+  { name: 'yellow', rgb: [255, 232, 0], angle: 0, cell: 6.5, seed: 11 },
+  { name: 'pink', rgb: [255, 72, 176], angle: 75, cell: 6.5, seed: 23 },
+  { name: 'blue', rgb: [0, 120, 191], angle: 15, cell: 6.5, seed: 37 },
 ];
 export const PAPER = [246, 239, 224];
 
@@ -193,7 +193,7 @@ export class Press {
       for (let x = 0; x < W; x++, i++) {
         const vx = (x / W - 0.5) * 2, vy = (y / H - 0.5) * 2;
         const vig = 1 - 0.06 * Math.pow(vx * vx * 0.7 + vy * vy, 1.4);
-        const k = vig * (1 + (m1[i] - 0.5) * 0.035 + (m2[i] - 0.5) * 0.018 + (m3[i] - 0.5) * 0.02);
+        const k = vig * (1 + (m1[i] - 0.5) * 0.03 + (m2[i] - 0.5) * 0.01 + (m3[i] - 0.5) * 0.008);
         for (let ch = 0; ch < 3; ch++) this.paper[i * 3 + ch] = Math.max(0, Math.min(255, PAPER[ch] * k));
       }
     }
@@ -204,11 +204,11 @@ export class Press {
       const s = new Float32Array(N);
       const a = (ink.angle * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
       const cell = ink.cell * scale;
-      const rough = valueNoise(W, H, 1.6 * scale, ink.seed);
+      const rough = valueNoise(W, H, 1.2 * scale, ink.seed);
       for (let y = 0, i = 0; y < H; y++) {
         for (let x = 0; x < W; x++, i++) {
           const u = (x * ca + y * sa) / cell, v = (-x * sa + y * ca) / cell;
-          s[i] = 0.5 - 0.25 * (Math.cos(2 * Math.PI * u) + Math.cos(2 * Math.PI * v)) + (rough[i] - 0.5) * 0.16;
+          s[i] = 0.5 - 0.25 * (Math.cos(2 * Math.PI * u) + Math.cos(2 * Math.PI * v)) + (rough[i] - 0.5) * 0.07;
         }
       }
       // equalise so a density of d inks ~d of the area
@@ -226,8 +226,8 @@ export class Press {
       const b1 = valueNoise(W, H, 60 * scale, ink.seed + 1), b2 = valueNoise(W, H, 3 * scale, ink.seed + 2);
       const t = new Uint8Array(N);
       for (let i = 0; i < N; i++) {
-        let v = 0.9 + (b1[i] - 0.5) * 0.14 + (b2[i] - 0.5) * 0.1;
-        if (b2[i] > 0.93) v -= 0.35;
+        let v = 0.95 + (b1[i] - 0.5) * 0.07 + (b2[i] - 0.5) * 0.03;
+        if (b2[i] > 0.975) v -= 0.18;
         t[i] = Math.max(0, Math.min(255, v * 255));
       }
       this.tex.push(t);
@@ -235,9 +235,10 @@ export class Press {
     // coverage LUT indexed by (density << 8) | threshold, with a ~1px anti-aliased dot edge
     this.lut = new Uint8Array(65536);
     for (let d = 0; d < 256; d++) {
-      const dd = d / 255 * 1.1 - 0.03;
+      // solids print solid (d=1 covers every threshold); edges keep a ~1px anti-aliased ramp
+      const dd = d / 255 * 1.15 - 0.03;
       for (let t = 0; t < 256; t++) {
-        const c = Math.max(0, Math.min(1, (dd - t / 255) * 5 + 0.5));
+        const c = Math.max(0, Math.min(1, (dd - t / 255) * 6 + 0.5));
         this.lut[(d << 8) | t] = d < 4 ? 0 : Math.round(c * 255);
       }
     }
