@@ -3,16 +3,16 @@
 // flickering through every style it has been on each little bounce.
 import { W, H, T, clamp, lerp, invLerp, ease, rng, smooth, shake, TAU, wobble, noise1, contactSquash } from '../core.js';
 import { makeCanvas, freeCanvas, bloom, vignette, grain } from '../fx.js';
-import { tau, ball3D, camera3D, project, renderGL, hitTime } from './chrome.js';
+import chromeWorld, { tau, ball3D, camera3D, project, hitTime } from './chrome.js';
 
 const BG = '#141413', IVORY = '#f0eee6', MUTED = '#a3a195', ACCENT = '#d97757', INK = '#1b1b2f';
 const FONT_PX = 300, BASE_Y = 668, SPACING = 9;
-const SWARM0 = 9.86, DIM1 = 10.7;
+const SWARM0 = 9.86;
 const PERIOD_FALL = T.PERIOD - 0.39;
 const CONTACTS = [0, 0.25, 0.39, 0.48, 0.54].map((d) => T.PERIOD + d);
 const PG = 9250;
 
-let layout, shards, textCanvas, sweepCanvas, center0, radius0, eyebrow;
+let layout, shards, sweepCanvas, center0, radius0, eyebrow, frozen, panes, crackEdges;
 
 function buildLayout() {
   const c = makeCanvas(), g = c.getContext('2d');
@@ -41,35 +41,78 @@ function buildLayout() {
   return pts;
 }
 
+// The lens pane fractures radially from the impact: spokes, wobbly rings, big cells split in two.
+function buildPanes() {
+  const r = rng(271);
+  const c = center0, N = 22;
+  const rays = Array.from({ length: N }, (_, i) => (i / N) * TAU + (r() - 0.5) * 0.18);
+  const rings = [0, 38, 95, 175, 290, 450, 660, 930, 1300, 1800];
+  const R = rays.map(() => rings.map((rr, k) => (k ? rr * (0.86 + r() * 0.28) : 0)));
+  const pt = (i, k) => { const ii = i % N; return [c.x + Math.cos(rays[ii]) * R[ii][k], c.y + Math.sin(rays[ii]) * R[ii][k]]; };
+  panes = []; crackEdges = [];
+  const onScreen = (poly) => poly.some(([x, y]) => x > -60 && x < W + 60 && y > -60 && y < H + 60);
+  for (let i = 0; i < N; i++) {
+    for (let k = 0; k < rings.length - 1; k++) {
+      const quad = k === 0 ? [pt(i, 0), pt(i, 1), pt(i + 1, 1)] : [pt(i, k), pt(i, k + 1), pt(i + 1, k + 1), pt(i + 1, k)];
+      const pieces = k >= 4 ? (r() < 0.5 ? [[quad[0], quad[1], quad[2]], [quad[0], quad[2], quad[3]]] : [[quad[0], quad[1], quad[3]], [quad[1], quad[2], quad[3]]]) : [quad];
+      for (const poly of pieces) {
+        if (!onScreen(poly)) continue;
+        const cx = poly.reduce((a, p) => a + p[0], 0) / poly.length, cy = poly.reduce((a, p) => a + p[1], 0) / poly.length;
+        const d = Math.hypot(cx - c.x, cy - c.y);
+        panes.push({
+          poly, cx, cy, d,
+          dir: Math.atan2(cy - c.y, cx - c.x) + (r() - 0.5) * 0.4,
+          sp: 120 + r() * 520 + d * 0.35, vz: 0.5 + r() * 1.6 + (1 - Math.min(1, d / 900)) * 1.2,
+          axis: r() * TAU, om: (r() < 0.5 ? -1 : 1) * (2.5 + r() * 7), phase: r() * TAU, spin: (r() - 0.5) * 3,
+          breakAt: 9.585 + (d / 1800) * 0.16 + r() * 0.035,
+          off: [(r() - 0.5) * 5, (r() - 0.5) * 5], tone: 0.9 + r() * 0.2,
+        });
+      }
+      // Fracture lines: jagged spokes everywhere, but only some ring cracks (real glass is
+      // dominated by radial fractures), both drawn as wandering polylines.
+      const jag = (A, B, amp) => {
+        const pts = [A], n = 4, dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy) || 1;
+        for (let j = 1; j < n; j++) { const u = j / n, o = (r() - 0.5) * amp; pts.push([A[0] + dx * u - (dy / L) * o, A[1] + dy * u + (dx / L) * o]); }
+        pts.push(B);
+        return pts;
+      };
+      crackEdges.push({ a: pt(i, k), b: pt(i, k + 1), pts: jag(pt(i, k), pt(i, k + 1), 14), r0: R[i][k], radial: true });
+      if (k > 0 && r() < 0.6 - k * 0.06) crackEdges.push({ a: pt(i, k), b: pt(i + 1, k), pts: jag(pt(i, k), pt(i + 1, k), 8), r0: R[i][k], radial: false });
+    }
+  }
+}
+
+// Glass dust shed along the fracture lines; it swirls and assembles the word.
 function buildShards(targets) {
-  // Shatter origin: where the ball was on screen at the moment of the break.
   const tt = tau(T.SHATTER - 1e-3);
   const cam = camera3D(T.SHATTER - 1e-3, tt);
   const b = ball3D(hitTime());
   const pc = project(cam, b.c) || { x: W / 2, y: H / 2, z: 1 };
-  // At the lens the ball fills the frame; shards start across a disc a bit larger than the screen.
-  center0 = { x: pc.x, y: pc.y };
-  radius0 = Math.min(1150, (1 / Math.max(0.05, pc.z) / cam.tanHalf) * (H / 2));
+  center0 = { x: clamp(pc.x, 200, W - 200), y: clamp(pc.y, 150, H - 150) };
+  radius0 = 1100;
+  buildPanes();
   const r = rng(99);
   targets.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const minX = targets[0][0], maxX = targets[targets.length - 1][0];
+  const onScreen = crackEdges.filter((e) => [e.a, e.b].some(([x, y]) => x > 0 && x < W && y > 0 && y < H));
   shards = targets.map(([tx, ty]) => {
-    const a = r() * TAU, d = Math.sqrt(r()) * radius0 * 0.95;
-    const x0 = center0.x + Math.cos(a) * d, y0 = center0.y + Math.sin(a) * d;
-    const out = Math.atan2(y0 - center0.y, x0 - center0.x) + (r() - 0.5) * 0.5;
-    const sp = (900 + r() * 2200) * (0.4 + d / radius0);
-    const nv = 3 + Math.floor(r() * 3), size = 16 + r() * 46;
+    const e = onScreen[Math.floor(r() * onScreen.length)], u = r();
+    const x0 = e.a[0] + (e.b[0] - e.a[0]) * u, y0 = e.a[1] + (e.b[1] - e.a[1]) * u;
+    const d = Math.hypot(x0 - center0.x, y0 - center0.y);
+    const out = Math.atan2(y0 - center0.y, x0 - center0.x) + (r() - 0.5) * 1.2;
+    const sp = 250 + r() * 900 + d * 0.4;
+    const nv = 3, size = 2.5 + r() * 6;
     const verts = [];
     for (let k = 0; k < nv; k++) {
       const aa = (k / nv) * TAU + (r() - 0.5) * 0.9;
-      verts.push([Math.cos(aa) * size * (0.6 + r() * 0.6), Math.sin(aa) * size * (0.6 + r() * 0.6)]);
+      verts.push([Math.cos(aa) * size * (0.5 + r()), Math.sin(aa) * size * (0.5 + r())]);
     }
     const order = (tx - minX) / (maxX - minX);
     return {
-      x0, y0, vx: Math.cos(out) * sp, vy: Math.sin(out) * sp - 200 * r(), vz: (r() - 0.35) * 1.6,
-      rx: r() * TAU, ry: r() * TAU, wx: (r() - 0.5) * 22, wy: (r() - 0.5) * 22, spin: (r() - 0.5) * 10,
+      x0, y0, vx: Math.cos(out) * sp, vy: Math.sin(out) * sp - 150 * r(), vz: (r() - 0.3) * 1.2,
+      rx: r() * TAU, ry: r() * TAU, wx: (r() - 0.5) * 30, wy: (r() - 0.5) * 30, spin: (r() - 0.5) * 14,
       verts, tx, ty, start: SWARM0 + order * 0.38 + r() * 0.12, dur: 0.5 + r() * 0.16,
-      swirl: (r() < 0.5 ? -1 : 1) * (150 + r() * 350), tint: r(),
+      swirl: (r() < 0.5 ? -1 : 1) * (150 + r() * 350), tint: r(), born: 9.585 + (d / 1800) * 0.16,
     };
   });
 }
@@ -86,12 +129,15 @@ function shardTime(t) {
 }
 
 function explodePos(s, st) {
-  const drag = 1.6, k = (1 - Math.exp(-drag * st)) / drag;
-  return { x: s.x0 + s.vx * k, y: s.y0 + s.vy * k + 180 * st * st, z: 1 + s.vz * st };
+  const tl = Math.max(0, st - shardTime(s.born));
+  const drag = 1.6, k = (1 - Math.exp(-drag * tl)) / drag;
+  return { x: s.x0 + s.vx * k, y: s.y0 + s.vy * k + 220 * tl * tl, z: 1 + s.vz * tl };
 }
 
 function drawShards(g, t, mode) {
   const st = shardTime(t);
+  g.save();
+  g.globalCompositeOperation = t < T.SLAM - 0.25 ? 'lighter' : 'source-over';
   for (const s of shards) {
     const e = explodePos(s, st);
     const k = clamp((t - s.start) / s.dur);
@@ -113,15 +159,12 @@ function drawShards(g, t, mode) {
     // Metallic glint from the tumbling normal: bright when it faces the key light.
     const nyv = Math.sin(rx) * cyr, nxv = Math.sin(ry);
     const glint = Math.pow(clamp(0.5 + 0.5 * (nyv * 0.8 - nxv * 0.4)), 4);
-    let col;
-    if (mode === 'white') col = [0, 0, 0];
-    else if (mode === 'black') col = [255, 255, 255];
-    else {
-      const base = lerp(22, 255, glint);
-      const warm = s.tint < 0.15 ? [1.08, 0.95, 0.85] : s.tint > 0.7 ? [0.82, 0.92, 1.12] : [0.95, 0.97, 1.0];
-      col = [base * warm[0], base * warm[1], base * warm[2]];
-      if (flat > 0) col = col.map((c, i) => lerp(c, [240, 238, 230][i], flat));
-    }
+    if (t < s.born) continue;
+    // Glass glints: mostly faint, flaring as a facet turns through the light.
+    const base = lerp(60, 255, glint);
+    const warm = s.tint < 0.35 ? [1.0, 0.86, 0.66] : [0.9, 0.95, 1.0];
+    let col = [base * warm[0], base * warm[1], base * warm[2]];
+    if (flat > 0) col = col.map((c, i) => lerp(c, [240, 238, 230][i], flat));
     const sq = lerp(1, SPACING * 0.62, flat);
     g.save();
     g.translate(x, y);
@@ -139,30 +182,114 @@ function drawShards(g, t, mode) {
       g.closePath();
     }
     g.fill();
-    if (mode === 'chrome' && flat < 0.5 && glint > 0.15) {
-      g.strokeStyle = `rgba(255,250,240,${Math.min(1, glint * 1.4) * (1 - flat * 2)})`;
-      g.lineWidth = 1.5;
+    g.restore();
+  }
+  g.restore();
+}
+
+// How far a pane has slipped out of true: nothing until the fracture front reaches it.
+function offK(p, t) {
+  const front = 2000 * ease.outQuart(clamp((t - T.SHATTER) / 0.085));
+  return clamp((front - p.d) / 220);
+}
+
+// Pushes each vertex out from the centroid and winds the polygon counter-clockwise.
+function dilate(poly, cx, cy, by) {
+  let area = 0;
+  poly.forEach(([x0, y0], i) => { const [x1, y1] = poly[(i + 1) % poly.length]; area += x0 * y1 - x1 * y0; });
+  const out = poly.map(([x, y]) => { const l = Math.hypot(x - cx, y - cy) || 1; return [x + ((x - cx) / l) * by, y + ((y - cy) / l) * by]; });
+  return area < 0 ? out.reverse() : out;
+}
+
+// Big pieces of the lens: each carries its patch of the frozen frame, cracked in place first,
+// then breaking away toward the camera, tumbling in 3D (foreshortened), glinting, falling.
+function drawPanes(g, t) {
+  const st = shardTime(t);
+  // The intact part of the lens as one sheet first: the union of slightly dilated intact panes
+  // (all wound the same way, so overlaps stay filled), so the anti-aliased clip edges of
+  // neighbouring panes never leave hairline seams of background between them.
+  const intact = panes.filter((p) => t < p.breakAt);
+  if (intact.length) {
+    g.save();
+    g.beginPath();
+    for (const p of intact) {
+      if (!p.dil) p.dil = dilate(p.poly, p.cx, p.cy, 1.6);
+      const k = offK(p, t), dx = p.off[0] * k, dy = p.off[1] * k;
+      p.dil.forEach(([px, py], i) => (i ? g.lineTo(px + dx, py + dy) : g.moveTo(px + dx, py + dy)));
+      g.closePath();
+    }
+    g.clip();
+    g.drawImage(frozen, 0, 0);
+    g.restore();
+  }
+  const order = panes.filter((p) => t < p.breakAt).concat(panes.filter((p) => t >= p.breakAt));
+  for (const p of order) {
+    const broken = t >= p.breakAt;
+    const tl = broken ? Math.max(0, st - shardTime(p.breakAt)) : 0;
+    const z = Math.min(0.9, p.vz * tl * 0.8);
+    const scale = 1 / (1 - z);
+    if (scale > 6) continue;
+    const ox = Math.cos(p.dir) * p.sp * tl, oy = Math.sin(p.dir) * p.sp * tl + 1300 * tl * tl;
+    const x = center0.x + (p.cx - center0.x) * scale + ox * scale, y = center0.y + (p.cy - center0.y) * scale + oy * scale;
+    if (x < -900 || x > W + 900 || y < -900 || y > H + 1200) continue;
+    const th = p.om * tl, fc = Math.cos(th);
+    g.save();
+    const k = broken ? 0 : offK(p, t);
+    g.translate(x + p.off[0] * k, y + p.off[1] * k);
+    g.rotate(p.spin * tl + p.axis);
+    g.scale(scale * (Math.abs(fc) < 0.05 ? 0.05 * Math.sign(fc || 1) : fc), scale);
+    g.rotate(-p.axis);
+    g.beginPath();
+    p.poly.forEach(([px, py], i) => (i ? g.lineTo(px - p.cx, py - p.cy) : g.moveTo(px - p.cx, py - p.cy)));
+    g.closePath();
+    g.save();
+    g.clip();
+    g.drawImage(frozen, -p.cx, -p.cy);
+    // Shading from the facet's tilt, plus a specular flare as it swings through the key light.
+    const shade = (0.74 + 0.26 * Math.abs(fc)) * p.tone;
+    if (shade < 1) { g.fillStyle = `rgba(0,0,0,${1 - shade})`; g.fillRect(-2000, -2000, 4000, 4000); }
+    // Glass reflects more at grazing angles (Fresnel), so edge-on pieces catch the warm room light.
+    const fres = broken ? 0.3 * (1 - Math.abs(fc)) ** 3 : 0;
+    const glint = broken ? Math.pow(Math.max(0, Math.sin(th + p.phase)), 26) : 0;
+    const add = fres + 0.6 * glint;
+    if (add > 0.02) { g.fillStyle = `rgba(255,236,212,${Math.min(0.85, add)})`; g.fillRect(-2000, -2000, 4000, 4000); }
+    g.restore();
+    if (broken) {
+      g.lineJoin = 'round';
+      g.strokeStyle = `rgba(255,250,240,${0.22 + 0.5 * glint})`;
+      g.lineWidth = 1.2 / Math.max(0.3, scale * Math.abs(fc));
       g.stroke();
     }
     g.restore();
   }
 }
 
-function embers(g, t) {
-  const st = shardTime(t);
-  if (st > 1.2) return;
-  const r = rng(123);
+// Fracture front racing out from the impact across the still-intact pane.
+function drawCracks(g, t) {
+  const d = t - T.SHATTER;
+  if (d < 0 || d > 0.4) return;
+  const front = 2000 * ease.outQuart(clamp(d / 0.085));
+  const fade = 1 - smooth(clamp((d - 0.12) / 0.25));
   g.save();
-  g.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 160; i++) {
-    const a = r() * TAU, sp = 300 + r() * 1400, life = 0.4 + r() * 0.8;
-    if (st > life) { r(); continue; }
-    const k = (1 - Math.exp(-2 * st)) / 2;
-    const x = center0.x + Math.cos(a) * (radius0 * 0.6 + sp * k), y = center0.y + Math.sin(a) * (radius0 * 0.6 + sp * k) + 120 * st * st;
-    const f = 1 - st / life;
-    g.fillStyle = `rgba(255,${150 + (100 * f) | 0},${60 + (120 * f) | 0},${f})`;
-    g.beginPath(); g.arc(x, y, 1.5 + 3 * f * r(), 0, TAU); g.fill();
+  g.lineCap = 'round';
+  for (const e of crackEdges) {
+    if (e.r0 > front) continue;
+    const u = clamp((front - e.r0) / 160);
+    const n = Math.max(1, Math.ceil(u * (e.pts.length - 1)));
+    const near = 1 - 0.55 * Math.min(1, e.r0 / 1300);
+    for (const [lw, col] of [[3, `rgba(0,0,0,${0.25 * fade * near})`], [e.radial ? 1.3 : 0.9, `rgba(255,252,245,${0.9 * fade * near})`]]) {
+      g.strokeStyle = col; g.lineWidth = lw;
+      g.beginPath();
+      for (let j = 0; j <= n; j++) j ? g.lineTo(e.pts[j][0], e.pts[j][1]) : g.moveTo(e.pts[0][0], e.pts[0][1]);
+      g.stroke();
+    }
   }
+  // Stress bloom at the point of impact.
+  const gl = g.createRadialGradient(center0.x, center0.y, 0, center0.x, center0.y, 260);
+  gl.addColorStop(0, `rgba(255,248,236,${0.9 * Math.exp(-d / 0.05)})`);
+  gl.addColorStop(1, 'rgba(255,248,236,0)');
+  g.fillStyle = gl;
+  g.fillRect(center0.x - 260, center0.y - 260, 520, 520);
   g.restore();
 }
 
@@ -314,82 +441,21 @@ function drawPeriod(g, t) {
   g.restore();
 }
 
-// The lens glass cracks where the ball struck: radial fractures and a few concentric rings.
-let cracks = null;
-function lensCracks(g, t) {
-  const d = t - T.SHATTER;
-  if (d < 0 || d > 0.55) return;
-  if (!cracks) {
-    const r = rng(314);
-    cracks = [];
-    for (let i = 0; i < 16; i++) {
-      const a0 = (i / 16) * TAU + (r() - 0.5) * 0.3;
-      const pts = [[0, 0]];
-      let a = a0, rad = 0;
-      while (rad < 1400) { rad += 40 + r() * 90; a += (r() - 0.5) * 0.25; pts.push([Math.cos(a) * rad, Math.sin(a) * rad]); }
-      cracks.push({ pts, w: 1 + r() * 2.5 });
-    }
-    for (const rr of [90, 190, 330]) {
-      for (let i = 0; i < 16; i++) {
-        if (r() < 0.3) continue;
-        const a0 = (i / 16) * TAU, a1 = ((i + 1) / 16) * TAU;
-        const k0 = rr * (0.85 + r() * 0.3), k1 = rr * (0.85 + r() * 0.3);
-        cracks.push({ pts: [[Math.cos(a0) * k0, Math.sin(a0) * k0], [Math.cos(a1) * k1, Math.sin(a1) * k1]], w: 1.2, ring: true });
-      }
-    }
-  }
-  const grow = ease.outExpo(clamp(d / 0.08));
-  const fade = 1 - smooth(clamp((d - 0.2) / 0.35));
-  g.save();
-  g.translate(center0.x, center0.y);
-  g.lineCap = 'round';
-  for (const c of cracks) {
-    const n = Math.max(2, Math.ceil(c.pts.length * (c.ring ? (grow > 0.6 ? 1 : 0) : grow)));
-    if (n < 2) continue;
-    for (const [lw, col] of [[c.w + 3, `rgba(0,0,0,${0.35 * fade})`], [c.w, `rgba(235,245,255,${0.9 * fade})`]]) {
-      g.strokeStyle = col; g.lineWidth = lw;
-      g.beginPath();
-      c.pts.slice(0, n).forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-      g.stroke();
-    }
-  }
-  g.restore();
-}
-
 export default {
   async init() {
     buildShards(buildLayout());
+    // The last frame the lens saw (the boule filling it), used as the texture of the glass.
+    frozen = makeCanvas();
+    const fg = frozen.getContext('2d');
+    chromeWorld.draw(fg, T.SHATTER - 1e-3);
+    chromeWorld.post(fg, T.SHATTER - 1e-3, frozen);
   },
-  // No blur across the stark impact frames or the slam cut, or they average into ghosts.
-  shutter: (t) => (t < T.SHATTER + 3 / 60 ? null : t < T.SLAM - 1 / 120 ? { samples: 5, angle: 220 } : t > PERIOD_FALL && t < T.PERIOD + 0.65 ? { samples: 3, angle: 180 } : null),
+  // Motion blur on the flying glass; none across the slam cut, or it ghosts.
+  shutter: (t) => (t < T.SHATTER + 1 / 120 ? null : t < T.SLAM - 1 / 120 ? { samples: 4, angle: 200 } : t > PERIOD_FALL && t < T.PERIOD + 0.65 ? { samples: 3, angle: 180 } : null),
   draw(g, t) {
     const sk = shake(t, 20);
-    const imp = t - T.SHATTER;
-    // Impact frames: two frames of stark black/white silhouettes right at the break.
-    if (imp < 1 / 60) {
-      g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
-      g.save(); g.translate(sk.x, sk.y); drawShards(g, t, 'white'); g.restore();
-      return;
-    }
-    if (imp < 2 / 60) {
-      g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
-      g.save(); g.translate(sk.x, sk.y); drawShards(g, t, 'black'); g.restore();
-      return;
-    }
-    // Background: the chrome studio keeps drifting, dimming to the title black.
-    const dim = 1 - smooth(clamp((t - 9.75) / (DIM1 - 9.75)));
-    if (dim > 0.001) {
-      const tt = tau(t);
-      const cam = camera3D(t, tt);
-      g.drawImage(renderGL({ cam, ball: ball3D(hitTime()), ballOn: false, dim, tt }), 0, 0);
-      g.fillStyle = BG;
-      g.globalAlpha = 1 - dim;
-      g.fillRect(0, 0, W, H);
-      g.globalAlpha = 1;
-    } else {
-      g.fillStyle = BG;
-      g.fillRect(0, 0, W, H);
-    }
+    g.fillStyle = BG;
+    g.fillRect(0, 0, W, H);
     // Warm glow behind the title
     const gl = g.createRadialGradient(W / 2, BASE_Y - 100, 0, W / 2, BASE_Y - 100, 900);
     const glowA = 0.1 * smooth(clamp((t - 10.2) / 0.8)) + 0.12 * Math.exp(-Math.max(0, t - T.SLAM) * 3) * (t > T.SLAM ? 1 : 0);
@@ -398,8 +464,17 @@ export default {
     g.fillStyle = gl;
     g.fillRect(0, 0, W, H);
 
-    lensCracks(g, t);
     const slam = t - T.SLAM;
+    if (slam < 0) {
+      g.save();
+      // A touch of overscan (read as a punch-in under the flash) so the shake never bares an edge.
+      g.translate(W / 2 + sk.x, H / 2 + sk.y);
+      g.scale(1.045, 1.045);
+      g.translate(-W / 2, -H / 2);
+      drawPanes(g, t);
+      drawCracks(g, t);
+      g.restore();
+    }
     g.save();
     // Gentle push-in over the hold, plus the slam punch.
     const push = 1 + 0.025 * smooth(clamp((t - T.SLAM) / 4));
@@ -409,8 +484,7 @@ export default {
     g.scale(push * punch, push * punch);
     g.translate(-W / 2, -H / 2);
     if (slam < 0) {
-      drawShards(g, t, 'chrome');
-      embers(g, t);
+      drawShards(g, t, 'glass');
     } else {
       drawTitle(g, t);
       drawEyebrow(g, t);
@@ -436,6 +510,11 @@ export default {
       }
     }
     g.restore();
+    const imp = t - T.SHATTER;
+    if (imp >= 0 && imp < 0.06) {
+      g.fillStyle = `rgba(255,250,242,${0.32 * Math.exp(-imp / 0.014)})`;
+      g.fillRect(0, 0, W, H);
+    }
     // White pop on the slam
     if (slam >= 0 && slam < 0.15) {
       g.fillStyle = `rgba(255,250,240,${0.55 * Math.exp(-slam / 0.035)})`;
@@ -443,7 +522,6 @@ export default {
     }
   },
   post(g, t, out) {
-    if (t - T.SHATTER < 2 / 60) return;
     const s = t < T.SLAM ? 0.8 : 0.35 + 0.4 * Math.exp(-(t - T.SLAM) * 4);
     bloom(g, out, { strength: s, radius: 24, cut: t < T.SLAM ? 1.3 : 1.8, streak: t < T.SLAM ? 0.45 : 0.15 });
     vignette(g, 0.55, '0,0,0', 0.45);
