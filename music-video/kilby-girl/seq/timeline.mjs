@@ -9,22 +9,26 @@ import { rect } from '../lib/shapes.mjs';
 import { clamp, hs, inv } from '../lib/util.mjs';
 import { H, K, W } from '../lib/world.mjs';
 import { loadSong, makeS } from './common.mjs';
-import { T } from './songmap.mjs';
-import * as intro from './intro.mjs';
-import * as verse1 from './verse1.mjs';
-import * as hook1 from './hook1.mjs';
-import * as break1 from './break1.mjs';
-import * as verse2 from './verse2.mjs';
-import * as hook2 from './hook2.mjs';
-import * as bridge from './bridge.mjs';
-import * as finale from './finale.mjs';
-import * as outro from './outro.mjs';
-
-const SEQS = [intro, verse1, hook1, break1, verse2, hook2, bridge, finale, outro];
+import { SECTIONS, T } from './songmap.mjs';
+// Sequences load independently: while the team works in parallel, a sequence that fails to
+// import renders as an error card instead of taking every other sequence down with it.
+const NAMES = ['intro', 'verse1', 'hook1', 'break1', 'verse2', 'hook2', 'bridge', 'finale', 'outro'];
+const SEQS = await Promise.all(NAMES.map((n) => import(`./${n}.mjs`).catch((e) => {
+  process.stderr.write(`seq/${n}.mjs failed to load: ${e.stack || e}\n`);
+  const [a, b] = SECTIONS.find(([, , name]) => name === n) ?? [0, 0];
+  return { SHOTS: [[a, b, errorCard(n, e)]] };
+})));
 export const SHOTS = SEQS.flatMap((m) => m.SHOTS).sort((a, b) => a[0] - b[0]);
 const FLASHES = SEQS.flatMap((m) => m.FLASHES ?? []);
 // sequences may export NO_PUNCH = [[t0, t1], ...]: ranges where the global downbeat punch is off
 const NO_PUNCH = SEQS.flatMap((m) => m.NO_PUNCH ?? []);
+
+function errorCard(name, e) {
+  return (P) => {
+    P.fill(rect(-200, -200, W + 400, H + 400), [0, 1, 0]);
+    P.text(`seq/${name}.mjs: ${String(e.message || e).slice(0, 90)}`, W / 2, H / 2, '40px "Special Elite"', K.paper);
+  };
+}
 
 function flashAt(t) {
   let f = 0;
@@ -40,11 +44,21 @@ function shotIndex(t) {
   return i < 0 ? SHOTS.length - 1 : i;
 }
 
+const failed = new Set();
 function drawShot(P, t, i) {
   const [t0, t1, fn, o] = SHOTS[i];
   const S = makeS(t);
   S.t0 = t0; S.t1 = t1; S.lt = t - t0;
-  fn(P, S, o || {});
+  if (process.env.STRICT) return fn(P, S, o || {});
+  P.save();
+  try {
+    fn(P, S, o || {});
+  } catch (e) {
+    if (!failed.has(i)) process.stderr.write(`shot at ${t0}s failed (t=${t.toFixed(2)}): ${e.stack || e}\n`);
+    failed.add(i);
+    errorCard(`shot ${t0}`, e)(P);
+  }
+  P.restore();
 }
 
 // which transition (if any) is active at t: [u, kind, opts, fromIndex, toIndex]
