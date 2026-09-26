@@ -7,9 +7,31 @@ import { K } from './world.mjs';
 export const appear = (w, t, dur = 0.12) => clamp((t - w.t + 0.02) / dur);
 export const hot = (w, t) => t >= w.t - 0.02 && t < (w.e ?? w.t + 0.4);
 
+// line ids in song order, for lyric files written before lines carried their own ids
+const LEGACY_IDS = ['v1_1', 'v1_2', 'v1_3', 'v1_4', 'h1_1', 'h1_2', 'h1_3', 'h1_4', 'h1_5', 'h1_6', 'h1_7',
+  'v2_1', 'v2_2', 'v2_3', 'v2_4', 'h2_1', 'h2_2', 'h2_3', 'h2_4', 'h2_5', 'h2_6', 'h2_7'];
+const NO_LINE = Object.freeze({ id: null, text: '', start: Infinity, end: Infinity, words: Object.freeze([]) });
+
 export class Lyrics {
   constructor(data) {
     this.lines = data?.lines ?? [];
+    this.byId = new Map();
+    this.lines.forEach((l, i) => {
+      const id = l.id ?? LEGACY_IDS[i];
+      if (id) this.byId.set(id, l);
+    });
+  }
+  // a line by id ('h1_2'); a missing line is empty, so scenes never need to check
+  line(id) {
+    return this.byId.get(id) ?? NO_LINE;
+  }
+  // the words of several lines by id, in order
+  wordsOf(...ids) {
+    return ids.flatMap((id) => this.line(id).words);
+  }
+  // every line whose id starts with a prefix ('fin_'), in song order
+  section(prefix) {
+    return this.lines.filter((l, i) => (l.id ?? LEGACY_IDS[i] ?? '').startsWith(prefix));
   }
   // words of lines [a, b] as one flat list
   words(a, b = a) {
