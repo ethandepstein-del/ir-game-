@@ -1,0 +1,11 @@
+node_modules
+out
+fonts/*.ttf
+.segs-*
+*.mp4
+*.wav
+*.m4a
+*.flac
+*.mp3
+features.json
+__pycache__

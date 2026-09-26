@@ -1,0 +1,12 @@
+{
+  "name": "kilby-girl-video",
+  "private": true,
+  "type": "module",
+  "description": "Renderer for the Kilby Girl (The Bed Heads) music video.",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.80"
+  }
+}
