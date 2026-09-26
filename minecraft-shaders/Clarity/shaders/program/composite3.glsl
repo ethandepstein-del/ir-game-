@@ -71,6 +71,42 @@ vec3 aces(vec3 x) {
     return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
 
+// AgX (Troy Sobotka), polynomial fit by bwrensch, with the "punchy" look.
+// Rolls highlights off toward white without the hue skew of ACES, so low
+// sun on sand stays golden instead of turning olive. Returns linear.
+vec3 agxContrast(vec3 x) {
+    vec3 x2 = x * x;
+    vec3 x4 = x2 * x2;
+    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+}
+vec3 agx(vec3 v) {
+    const mat3 toAgx = mat3(0.842479062253094, 0.0423282422610123, 0.0423756549057051,
+                            0.0784335999999992, 0.878468636469772, 0.0784336,
+                            0.0792237451477643, 0.0791661274605434, 0.879142973793104);
+    const mat3 fromAgx = mat3(1.19687900512017, -0.0528968517574562, -0.0529716355144438,
+                              -0.0980208811401368, 1.15190312990417, -0.0980434501171241,
+                              -0.0990297440797205, -0.0989611768448433, 1.15107367264116);
+    const float minEv = -12.47393;
+    const float maxEv = 4.026069;
+    v = toAgx * max(v, vec3(1e-10));
+    v = (clamp(log2(v), minEv, maxEv) - minEv) / (maxEv - minEv);
+    v = agxContrast(v);
+    float l = dot(v, vec3(0.2126, 0.7152, 0.0722));
+    v = l + 1.4 * (v - l);
+    return pow(max(fromAgx * v, vec3(0.0)), vec3(2.2));
+}
+
+vec3 tonemap(vec3 x) {
+#if TONEMAP == 1
+    vec3 c = clamp(agx(x * 1.4), 0.0, 1.0);
+    // AgX lifts the darkest tones; a soft toe restores deep shadows and
+    // night without touching midtones or highlights.
+    return c * c / (c + 0.012);
+#else
+    return aces(x);
+#endif
+}
+
 void main() {
     vec4 c0 = texture2D(colortex0, texcoord);
     vec3 col = c0.rgb;
@@ -102,7 +138,7 @@ void main() {
     col = mix(col, luma(col) * vec3(0.72, 0.88, 1.20), night);
 #endif
 
-    col = aces(col);
+    col = tonemap(col);
     col = pow(col, vec3(1.0 / 2.2));
 
     float l = luma(col);

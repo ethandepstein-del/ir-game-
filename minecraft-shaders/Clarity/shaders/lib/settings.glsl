@@ -1,5 +1,5 @@
 // Build shown at the top of the shader options (see tools/build.py VERSION).
-#define CLARITY_VERSION 22 // [22]
+#define CLARITY_VERSION 23 // [23]
 
 /*
  * Clarity shader settings.
@@ -84,9 +84,12 @@ const float eyeBrightnessHalflife = 1.0;
 // clamped. The low limit lets bright scenes (deserts, snow) stop down.
 #define EXPOSURE_KEY 0.25
 #define EXPOSURE_MIN 0.30
-#define EXPOSURE_MAX 1.30
+#define EXPOSURE_MAX 1.10
 #define EXPOSURE 1.00 // [0.60 0.70 0.80 0.90 1.00 1.10 1.20 1.30 1.50]
 #define CAVE_ADAPTATION 1.80 // [1.00 1.40 1.80 2.20 2.60]
+// 1 = AgX (punchy look): natural highlight roll-off, keeps warm light golden.
+// 0 = ACES (Narkowicz fit): stronger contrast, shifts bright colours.
+#define TONEMAP 1 // [0 1]
 #define SATURATION 1.10 // [0.80 0.90 1.00 1.03 1.06 1.10 1.15 1.20 1.30]
 #define CONTRAST 1.00 // [0.90 0.95 1.00 1.05 1.10]
 #define BLOOM

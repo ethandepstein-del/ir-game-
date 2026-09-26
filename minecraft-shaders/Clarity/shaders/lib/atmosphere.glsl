@@ -36,7 +36,10 @@ float phaseHG(float c, float g) {
 
 // Single-scattering-style sky lit by one source L with intensity E.
 vec3 scatter(vec3 dir, vec3 L, float E) {
-    float yv = max(dir.y, 0.0);
+    // Floor the elevation a little above the horizon: the horizon reads as
+    // clear blue-white rather than milky, and fog (which uses the same
+    // function) meets the sky with no seam.
+    float yv = max(dir.y, 0.035);
     float mv = airMass(yv);
     float c = dot(dir, L);
     // Light scattered high in the sky has crossed less air: redden it less.
@@ -129,7 +132,7 @@ const float CLOUD_TOP   = CLOUD_HEIGHT - 50.0 + CLOUD_THICKNESS;
 // Parabolic planet (R = 60000 blocks): the slab falls away toward the
 // horizon, so clouds reach it instead of stretching to infinity.
 const float CLOUD_CURVE = 1.0 / 120000.0;
-const float CLOUD_SIGMA = 0.11 * CLOUD_DENSITY;   // extinction per block at density 1
+const float CLOUD_SIGMA = 0.15 * CLOUD_DENSITY;   // extinction per block at density 1
 
 float cloudCoverage() { return clamp(CLOUD_COVERAGE + OVERCAST * 0.30, 0.0, 1.0); }
 
@@ -167,7 +170,7 @@ vec2 cloudWind() { return vec2(1.0, 0.35) * frameTimeCounter * 2.5 * CLOUD_SPEED
 
 // Weather map (0..1) at a world XZ position: 0 = clear sky, 1 = cloud core.
 float cloudWeather(vec2 xz, int octaves) {
-    float n = cloudNoise((xz + cloudWind()) / 520.0, octaves);
+    float n = cloudNoise((xz + cloudWind()) / 400.0, octaves);
     float threshold = mix(0.62, 0.30, cloudCoverage());
     return smoothstep(threshold, threshold + 0.22, n);
 }
@@ -180,15 +183,15 @@ float cloudDensity3D(vec3 wp, float h, float w, bool detail) {
     float shape = w * smoothstep(0.0, 0.07, h) * (1.0 - smoothstep(top * 0.45, top, h));
     if (shape <= 0.0) return 0.0;
     vec2 wind = cloudWind();
-    vec3 q = (wp + vec3(wind.x, -frameTimeCounter * 0.4 * CLOUD_SPEED, wind.y)) / 95.0;
+    vec3 q = (wp + vec3(wind.x, -frameTimeCounter * 0.4 * CLOUD_SPEED, wind.y)) / 72.0;
     float n = vnoise3(q) * 0.62 + vnoise3(q * 2.61 + 7.3) * 0.38;
     n = smoothstep(0.18, 0.78, n);
     float d = shape + n - 1.0;
-    if (detail && d > 0.0 && d < 0.35) {
+    if (detail && d > 0.0 && d < 0.45) {
         // Wispy underside, billowy top.
         float dn = vnoise3(q * 6.3 + 3.7);
         dn = mix(1.0 - dn, dn, clamp(h * 3.0, 0.0, 1.0));
-        d -= (1.0 - dn) * 0.16;
+        d -= (1.0 - dn) * 0.26;
     }
     return clamp(d * 2.2, 0.0, 1.0);
 }

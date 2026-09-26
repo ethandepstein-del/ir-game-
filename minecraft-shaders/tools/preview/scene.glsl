@@ -10,7 +10,32 @@
 uniform vec2 tileOrigin;
 uniform float avgLumGuess;
 
+uniform float tonemapMode;
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+vec3 agxContrast(vec3 x) { vec3 x2 = x * x; vec3 x4 = x2 * x2;
+    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232; }
+vec3 agx(vec3 v) {
+    mat3 m = mat3(0.842479062253094, 0.0423282422610123, 0.0423756549057051,
+                  0.0784335999999992, 0.878468636469772, 0.0784336,
+                  0.0792237451477643, 0.0791661274605434, 0.879142973793104);
+    mat3 mi = mat3(1.19687900512017, -0.0528968517574562, -0.0529716355144438,
+                   -0.0980208811401368, 1.15190312990417, -0.0980434501171241,
+                   -0.0990297440797205, -0.0989611768448433, 1.15107367264116);
+    const float lo = -12.47393, hi = 4.026069;
+    v = m * max(v, vec3(1e-10));
+    v = (clamp(log2(v), lo, hi) - lo) / (hi - lo);
+    v = agxContrast(v);
+    float l = dot(v, vec3(0.2126, 0.7152, 0.0722));
+    v = l + 1.4 * (v - l);                     // "punchy" look
+    return pow(max(mi * v, vec3(0.0)), vec3(2.2));
+}
+vec3 hable(vec3 x) { const float A=0.15,B=0.50,C=0.10,D=0.20,E=0.02,F=0.30;
+    return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F; }
+vec3 tonemap(vec3 x) {
+    if (tonemapMode < 0.5) return aces(x);
+    if (tonemapMode < 1.5) { vec3 c = clamp(agx(x * 1.4), 0.0, 1.0); return c * c / (c + 0.012); }
+    return hable(x * 2.2) / hable(vec3(11.2));
+}
 
 // Boxes: min, max, albedo (sRGB)
 const int NB = 9;
@@ -87,7 +112,7 @@ void main() {
     // composite3-style exposure and tonemap
     float target = clamp(EXPOSURE_KEY / avgLumGuess, EXPOSURE_MIN, EXPOSURE_MAX);
     col *= target * EXPOSURE * 0.85;
-    col = aces(col);
+    col = tonemap(col);
     col = pow(col, vec3(1.0 / 2.2));
     col = mix(vec3(luma(col)), col, SATURATION);
     col = (col - 0.5) * CONTRAST + 0.5;

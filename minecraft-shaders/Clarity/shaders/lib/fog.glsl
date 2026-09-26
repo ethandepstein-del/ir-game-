@@ -38,9 +38,9 @@ vec3 applyFog(vec3 col, vec3 viewPos, bool sky, vec3 amb, vec3 sun) {
         density *= smoothstep(0.1, 0.6, float(eyeBrightnessSmooth.y) / 240.0);
         float T = exp(-density * dist);
         // Horizon colour for anything below it: no dark band at the world edge.
-        // Sky colour a little above the horizon: bluer, less milky haze, and
-        // no dark band at the world edge.
-        vec3 fogCol = atmosphere(normalize(vec3(dirW.x, max(dirW.y, 0.06), dirW.z)));
+        // The horizon colour exactly as the sky draws it (below the horizon
+        // too, so there is no dark band at the world edge).
+        vec3 fogCol = atmosphere(normalize(vec3(dirW.x, max(dirW.y, 0.0), dirW.z)));
         col = col * T + fogCol * (1.0 - T);
         // Border fog hides chunk edges and matches the horizon exactly.
         float border = smoothstep(far * FOG_START, far, length(dirW.xz * dist));
