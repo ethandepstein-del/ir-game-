@@ -7,11 +7,13 @@ import { drawFrame } from './scenes.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); if (i < 0) return d; const v = args[i + 1]; args.splice(i, 2); return v; };
+const smooth = args.includes('--smooth');
+if (smooth) args.splice(args.indexOf('--smooth'), 1);
 const scale = +opt('--scale', 0.5), cols = +opt('--cols', 2), feat = opt('--features', process.env.FEATURES);
 const [out, ...times] = args;
 const W = Math.round(1920 * scale), H = Math.round(1080 * scale);
 const clock = new Clock(JSON.parse(fs.readFileSync(feat, 'utf8')));
-const press = new Press(W, H, scale), P = new Painter(W, H);
+const press = new Press(W, H, scale, { smooth }), P = new Painter(W, H);
 const rows = Math.ceil(times.length / cols);
 const sheet = createCanvas(W * Math.min(cols, times.length), H * rows);
 const sc = sheet.getContext('2d');

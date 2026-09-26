@@ -183,7 +183,8 @@ function valueNoise(W, H, scale, seed) {
 }
 
 export class Press {
-  constructor(W, H, scale = 1) {
+  // smooth: print each ink as a flat tint instead of a halftone screen (for heavily compressed copies)
+  constructor(W, H, scale = 1, { smooth = false } = {}) {
     this.W = W; this.H = H;
     const N = W * H;
     // paper colour with fibres, mottling and a soft vignette (static, so it costs no bitrate)
@@ -238,7 +239,7 @@ export class Press {
       // solids print solid (d=1 covers every threshold); edges keep a ~1px anti-aliased ramp
       const dd = d / 255 * 1.15 - 0.03;
       for (let t = 0; t < 256; t++) {
-        const c = Math.max(0, Math.min(1, (dd - t / 255) * 6 + 0.5));
+        const c = smooth ? d / 255 : Math.max(0, Math.min(1, (dd - t / 255) * 6 + 0.5));
         this.lut[(d << 8) | t] = d < 4 ? 0 : Math.round(c * 255);
       }
     }

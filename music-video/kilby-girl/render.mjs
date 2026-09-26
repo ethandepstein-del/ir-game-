@@ -1,7 +1,9 @@
 // Render the video: every frame is drawn at 30 fps, split across worker processes, encoded in
 // segments, then joined and muxed.
 //
-//   node render.mjs --audio master.wav --features features.json --out kilby_girl.mp4 [--scale 1] [--workers 4]
+//   node render.mjs --audio master.wav --features features.json --out kilby_girl.mp4 [--scale 1] [--workers 4] [--smooth]
+//
+// --smooth prints flat ink tints instead of halftone dots, for copies that must survive low bitrates.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -30,7 +32,7 @@ async function worker(k0, k1, segPath) {
   const { Clock } = await import('./lib/util.mjs');
   const { drawFrame } = await import('./scenes.mjs');
   const clock = new Clock(feat);
-  const press = new Press(W, H, scale), P = new Painter(W, H);
+  const press = new Press(W, H, scale, { smooth: args.includes('--smooth') }), P = new Painter(W, H);
   const ff = spawn(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${W}x${H}`, '-r', String(FPS), '-i', '-',
     '-c:v', 'libx264', '-preset', 'medium', '-tune', 'animation', '-crf', opt('--crf', '12'), '-pix_fmt', 'yuv420p', segPath], { stdio: ['pipe', 'inherit', 'inherit'] });
   const done = new Promise((res, rej) => ff.on('close', (c) => (c === 0 ? res() : rej(new Error('ffmpeg ' + c)))));
