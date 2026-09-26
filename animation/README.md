@@ -1,6 +1,6 @@
 # Ball Test
 
-A 15-second animation built entirely from code: no stock footage, no samples, no textures. It's the classic first exercise every animator does, a bouncing ball. The ball changes art style every time it lands on a new surface, and each new style ripples out from the point of contact.
+A 20-second animation built entirely from code: no stock footage, no samples, no textures. It's the classic first exercise every animator does, a bouncing ball. The ball changes art style every time it lands on a new surface, and each new style ripples out from the point of contact.
 
 ## Physics
 
@@ -20,9 +20,12 @@ One deterministic rigid-body simulation (`src/physics.js`) drives the ball throu
 | 3.3–4.8 | **Cut paper** | An accordion-folded paper spring pops the ball up. Pop-up flowers and confetti follow. |
 | 4.8–5.8 | **8-bit** | A spring block launches the ball into a bonus block, which pays out three coins. |
 | 5.8–9.5 | **3D chrome** | A ray-traced steel boule skips down a polished-stone slope through a colonnade of black glass fins with tungsten light strips, lit like a night-time product shoot. The bounces shorten and quicken as gravity feeds it speed. The camera was placed exactly where the ball would be, and the ball hits the lens in slow motion. |
-| 9.5–15.0 | **Finale** | The lens cracks and about 900 shards swarm into "Claude". The ball comes back as the full stop and flickers through every style on its last bounces. |
+| 9.5–11.0 | **Lens** | The lens cracks: a jagged fracture web races out, the panes slip out of true, then break away toward the camera carrying their piece of the frame. Beyond them is a tunnel of 400 mirror shards, each carrying a moment from one of the earlier worlds. |
+| 11.0–12.5 | **Mirror ball** | The shards spiral in and lock together, facet by facet, into a 320-facet mirror ball: the ball rebuilt from its own history. It spins up, winds back and bursts. |
+| 12.5–14.0 | **Swarm** | The ball's dust swarms left to right into "Claude" and slams into crisp type. |
+| 14.0–20.0 | **End card** | The ball comes back in all five styles, half a beat apart, hopping letter to letter on true ballistic arcs. Each letter dips and flashes when it's hit. Each ball lands in the full stop and repaints it, until the last turns it Claude orange and "MADE BY" slides in. |
 
-The soundtrack is synthesized with WebAudio and driven by the same simulation: each contact sounds at a level set by its impact speed, launchers twang and clank, and the chrome bounces ring higher as they shrink. Each world's groove runs on the shared 160 bpm grid.
+The soundtrack is synthesized with WebAudio and driven by the same simulation: each contact sounds at a level set by its impact speed, launchers twang and clank, and the chrome bounces ring higher as they shrink. Each world's groove runs on the shared 160 bpm grid. In the finale, every shard that flies past the lens gets a whoosh, every facet seating in the mirror ball a glass tink, and every letter contact a note in the timbre of the ball that made it, pitched by the letter, so the five balls play a canon up the word.
 
 The master is rendered at 120 fps with speed-adaptive sub-frame motion blur (2–6 samples); the 60 fps version is derived from it.
 
@@ -34,7 +37,7 @@ The master is rendered at 120 fps with speed-adaptive sub-frame motion blur (2�
 - `out/ball-test.mp4`: the 60 fps version (pairs of 120 fps frames blended).
 - `src/physics.js`: the ball simulation, launchers and beat solver.
 - `src/core.js`: timing grid, easing, camera framing, shake.
-- `src/worlds/*.js`: one module per style.
+- `src/worlds/*.js`: one module per style; the finale is `finale.js` (the lens), `vortex.js` (shard tunnel and mirror ball, true 3D with quaternions and affine texture mapping) and `endcard.js` (the title and the procession).
 - `src/audio.js`: the score and sound design.
 - `render.mjs`: headless Chromium renderer (parallel workers, motion blur by sub-frame accumulation) plus ffmpeg mux.
 

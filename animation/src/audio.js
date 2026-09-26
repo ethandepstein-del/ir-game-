@@ -2,8 +2,10 @@
 // scheduled against the same timeline as the picture. Works offline (render) and live (player).
 import { T, BEAT, beat, rng, physics, ball2D, camFrame, W } from './core.js';
 import { rampStart } from './worlds/chrome.js';
+import { passBys, facetLandTimes } from './worlds/vortex.js';
+import { endcardEvents } from './worlds/endcard.js';
 
-const SR = 48000, LEN = 15;
+const SR = 48000;
 const mtof = (m) => 440 * 2 ** ((m - 69) / 12);
 
 function makeIR(ctx, dur, decay) {
@@ -323,6 +325,7 @@ function build(ctx, T0) {
   const lvl = (sp, ref = 2800) => Math.min(1.3, Math.pow(sp / ref, 1.1));
   const grid = (a, b, step) => { const out = []; for (let k = Math.ceil((a - 0.5) / step - 1e-6); 0.5 + k * step < b - 1e-6; k++) out.push({ k, t: 0.5 + k * step }); return out; };
   const { P1, P2, P3 } = P.run.plates;
+  const SWARM0 = T.BURST + 0.28;
   const tr = P.params.tRelease;
 
   // --- 1. Pencil test
@@ -433,7 +436,7 @@ function build(ctx, T0) {
   osc('sawtooth', 110, R0, T.SHATTER - R0, { gain: 0.08, f1: 28, a: 0.01, curve: 'lin' });
   swell(T.SHATTER, 0.2, 0.12, 3000, 14000);
 
-  // --- 6. Shatter → title
+  // --- 6. The lens breaks
   const r6 = rng(66);
   for (let i = 0; i < 70; i++) {
     const d = Math.abs(r6() + r6() - 1) * 0.35;
@@ -444,46 +447,135 @@ function build(ctx, T0) {
   sub(T.SHATTER, 1.0, 1.4, 80, 26);
   kick(T.SHATTER, 0.9, 180, 38, 0.6);
   metal(T.SHATTER, 0.18, 262, 0);
-  // Slow-motion drone, then the gather: shimmering chimes rising into the slam
-  osc('sine', 55, 9.55, 0.7, { gain: 0.18, f1: 41, a: 0.05, curve: 'lin' });
+  osc('sine', 55, 9.55, 1.4, { gain: 0.16, f1: 41, a: 0.05, curve: 'lin' });
+
+  // --- 7. The tunnel: wind that circles the listener, a whoosh for every shard that flies past
+  // the lens, and a tiny glass tink for every facet as it seats in the mirror ball.
+  {
+    const s0 = ctx.createBufferSource(); s0.buffer = noiseBuf; s0.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(220, at(9.65)); bp.frequency.exponentialRampToValueAtTime(1400, at(12.4));
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, at(9.65)); g.gain.linearRampToValueAtTime(0.09, at(10.2)); g.gain.linearRampToValueAtTime(0.05, at(11.6)); g.gain.linearRampToValueAtTime(0.12, at(12.45)); g.gain.linearRampToValueAtTime(0, at(12.5));
+    const pn = ctx.createStereoPanner();
+    const lfo = ctx.createOscillator(); lfo.frequency.setValueAtTime(0.7, at(9.65)); lfo.frequency.exponentialRampToValueAtTime(4, at(12.45));
+    const ld = ctx.createGain(); ld.gain.value = 0.75;
+    lfo.connect(ld); ld.connect(pn.pan);
+    s0.connect(bp); bp.connect(g); g.connect(pn); pn.connect(master);
+    const vs = ctx.createGain(); vs.gain.value = 0.3; pn.connect(vs); vs.connect(verbIn);
+    s0.start(at(9.65)); s0.stop(at(12.55)); lfo.start(at(9.65)); lfo.stop(at(12.55));
+  }
+  for (const p of passBys()) {
+    if (p.rho > 1.25 || p.alpha < 0.25) continue;
+    const gn = 0.05 * (1.3 - p.rho) * p.alpha + 0.012;
+    whoosh(p.t - 0.13, 0.26, gn, 900, 5200, p.pan * 0.4, p.pan);
+  }
+  const rt = rng(71);
+  for (const t of facetLandTimes()) osc('sine', 3200 + rt() * 5200, t, 0.06 + rt() * 0.12, { gain: 0.009 + rt() * 0.008, a: 0.001, pan: rt() * 1.6 - 0.8, verb: 0.5 });
+  // Gather: the beat returns on the downbeat, a bell arpeggio accelerates as the ball builds.
+  kick(T.GATHER, 0.8, 160, 40, 0.5);
+  sub(T.GATHER, 0.5, 1.2, 60, 34);
+  sawChord(T.GATHER, [39, 46, 51, 55], 1.5, { gain: 0.03, cutoff: 500, cutoff1: 3200, a: 1.2, verb: 0.5, detune: 14 });
+  {
+    const pent = [0, 2, 4, 7, 9];
+    let t = T.GATHER + 0.05, i = 0;
+    while (t < T.BURST - 0.06) {
+      const u = (t - T.GATHER) / (T.BURST - T.GATHER);
+      bell(t, mtof(63 + pent[i % 5] + 12 * Math.floor(i / 5) % 36), 0.03 + 0.03 * u, 0.35, Math.sin(i * 2.1) * 0.7, 0.45);
+      t += BEAT / 2 * Math.pow(1 - u, 1.3) + 0.03; i++;
+    }
+  }
+  for (const k of [0, 1, 2, 3]) hat(T.GATHER + 0.75 + k * BEAT / 2, 0.03 + k * 0.01, false, 0.25);
+  // Wind-back: the ball draws everything in before letting go.
+  swell(T.BURST, 0.45, 0.22, 300, 12000);
+  osc('sine', 38, T.BURST - 0.34, 0.34, { gain: 0.2, f1: 96, a: 0.02, curve: 'lin' });
+  osc('sawtooth', 70, T.BURST - 0.34, 0.34, { gain: 0.04, f1: 280, a: 0.05, curve: 'lin' });
+
+  // --- 8. Burst
+  for (let i = 0; i < 90; i++) {
+    const d = Math.abs(r6() + r6() - 1) * 0.5;
+    osc('sine', 2200 + r6() * 8000, T.BURST + d, 0.05 + r6() * 0.4, { gain: 0.03 + r6() * 0.03, a: 0.001, pan: r6() * 2 - 1, verb: 0.45 });
+  }
+  kick(T.BURST, 1.0, 190, 36, 0.7);
+  sub(T.BURST, 1.0, 1.6, 85, 26);
+  noise(T.BURST, 0.5, { type: 'highpass', f: 2000, gain: 0.35, verb: 0.5 });
+  cymbal(T.BURST, 0.22, 2.0, 0);
+  sawChord(T.BURST, [39, 46, 51, 55, 58], 1.1, { gain: 0.045, cutoff: 6000, cutoff1: 400 });
+  metal(T.BURST, 0.12, 330, 0);
+  // The swarm: shimmering chimes rising into the slam
   const pent = [0, 2, 4, 7, 9];
   for (let i = 0; i < 46; i++) {
     const u = i / 45;
-    const t = 9.86 + Math.pow(u, 0.8) * 1.1;
+    const t = SWARM0 + Math.pow(u, 0.8) * (T.SLAM - 0.1 - SWARM0);
     const m = 75 + pent[i % 5] + 12 * Math.floor(u * 2.2);
     bell(t, mtof(m), 0.025 + 0.02 * u, 0.4, Math.sin(i * 2.3) * 0.8, 0.5);
   }
-  whoosh(9.95, 1.05, 0.07, 400, 6000, 0.6, -0.6);
+  whoosh(SWARM0, T.SLAM - SWARM0, 0.07, 400, 6000, 0.6, -0.6);
   swell(T.SLAM, 1.0, 0.2, 400, 12000);
-  // Slam
+
+  // --- 9. Slam
   kick(T.SLAM, 1.0, 190, 38, 0.6);
   sub(T.SLAM, 0.9, 1.6, 70, 28);
   noise(T.SLAM, 0.3, { type: 'bandpass', f: 2100, Q: 0.7, gain: 0.45, verb: 0.4 });
   cymbal(T.SLAM, 0.22, 2.2, 0);
   sawChord(T.SLAM, [39, 46, 51, 55, 58, 65], 1.9, { gain: 0.05, cutoff: 5000, cutoff1: 500 });
   for (let i = 0; i < 7; i++) woodTick(T.SLAM + 0.1 + i * 0.03, 0.035, 3200, -0.3 + i * 0.1);
-  // Light sweep shimmer
-  osc('sine', 2200, 11.34, 0.7, { gain: 0.03, f1: 5200, a: 0.25, verb: 0.6, curve: 'lin', pan: -0.4 });
-  noise(11.34, 0.62, { type: 'highpass', f: 7000, gain: 0.05, a: 0.3, pan: -0.5, pan1: 0.5, verb: 0.4, curve: 'lin' });
-  // Quiet bed between the slam and the full stop, so the pause breathes instead of dropping out
-  sawChord(11.4, [39, 46, 51, 58], 1.3, { gain: 0.014, cutoff: 900, cutoff1: 500, a: 0.9, verb: 0.7, detune: 14 });
-  // The full stop: falls, then each bounce sounds like one of the worlds
-  osc('sine', 1600, T.PERIOD - 0.39, 0.39, { gain: 0.035, f1: 520, a: 0.02, curve: 'lin' });
-  softThump(T.PERIOD, 0.2); pencilTap(T.PERIOD, 0.24, 0.3);
-  boing(T.PERIOD + 0.25, 0.14, 0.2, 190);
-  paperCrunch(T.PERIOD + 0.39, 0.05, 0.14, 8, 12, 0.3); pop(T.PERIOD + 0.39, 0.1, 1400, 0.3);
-  chip(T.PERIOD + 0.48, 1568, 0.06, { gain: 0.07, pan: 0.3 });
-  bell(T.PERIOD + 0.54, mtof(87), 0.1, 1.4, 0.3, 0.6);
-  bell(T.PERIOD + 0.54, mtof(94), 0.04, 1.0, 0.3, 0.6);
-  // Warm pad under the end card
-  sawChord(T.PERIOD - 0.05, [39, 51, 55, 58, 62, 65], T.END - T.PERIOD + 0.02, { gain: 0.03, cutoff: 1400, cutoff1: 800, a: 0.5, verb: 0.6, detune: 12, hold: 1.7 });
-  sub(T.PERIOD, 0.1, 1.2, 52, 38);
+  osc('sine', 2200, T.SLAM + 0.34, 0.7, { gain: 0.03, f1: 5200, a: 0.25, verb: 0.6, curve: 'lin', pan: -0.4 });
+  noise(T.SLAM + 0.34, 0.62, { type: 'highpass', f: 7000, gain: 0.05, a: 0.3, pan: -0.5, pan1: 0.5, verb: 0.4, curve: 'lin' });
+
+  // --- 10. The procession: every contact rings in the timbre of the ball that made it, pitched
+  // by the letter (a pentatonic run up the word); the five balls half a beat apart make a canon.
+  const { hits, merges } = endcardEvents();
+  const run = [0, 2, 4, 7, 9, 12];
+  const xPan = (x) => Math.max(-0.7, Math.min(0.7, ((x - W / 2) / (W / 2)) * 0.8));
+  merges.forEach((m) => whoosh(m.t - 6 * BEAT - BEAT * 1.5, BEAT * 1.6, 0.05, 500, 3000, -0.8, -0.4));
+  for (const h of hits) {
+    const m = 75 + run[h.letter], pn = xPan(h.x);
+    if (h.style === 'pencil') { pencilTap(h.t, 0.16, pn); osc('sine', mtof(m), h.t, 0.22, { gain: 0.06, a: 0.002, pan: pn, verb: 0.2 }); }
+    else if (h.style === 'cel') { xylo(h.t, m, 0.085, pn); woodTick(h.t, 0.08, 900, pn); }
+    else if (h.style === 'paper') { kalimba(h.t, m - 12, 0.1, pn); pop(h.t + 0.01, 0.06, 1200 + h.letter * 90, pn); }
+    else if (h.style === 'pixel') chip(h.t, mtof(m), 0.09, { gain: 0.05, wave: P25, pan: pn });
+    else { bell(h.t, mtof(m + 12), 0.04, 0.5, pn, 0.4); noise(h.t, 0.01, { type: 'highpass', f: 6000, gain: 0.05, pan: pn }); }
+  }
+  // Groove under it: kick on the beat, hats, and a plucked bass moving Eb, Cm, Ab, Bb.
+  const bassAt = (t) => (t < 15.5 ? 39 : t < 16.25 ? 36 : t < 17.0 ? 44 : 46);
+  for (const { k, t } of grid(T.PROC, T.PERIOD - 0.01, BEAT)) { kick(t, 0.5, 140, 44, 0.24); if (k % 2) clap(t, 0.1, 0.1); }
+  for (const { k, t } of grid(T.PROC, T.PERIOD - 0.01, BEAT / 2)) {
+    hat(t, k % 2 ? 0.035 : 0.018, false, 0.3);
+    const b = bassAt(t) + (k % 2 ? 12 : 0);
+    osc('triangle', mtof(b), t, BEAT / 2 - 0.02, { gain: 0.17, a: 0.003, pan: -0.1 });
+  }
+  sawChord(T.PROC, [51, 55, 58], 0.75, { gain: 0.012, cutoff: 1200, cutoff1: 700, a: 0.2, verb: 0.6 });
+  sawChord(15.5, [48, 51, 55], 0.75, { gain: 0.012, cutoff: 1200, cutoff1: 700, a: 0.2, verb: 0.6 });
+  sawChord(16.25, [48, 51, 56], 0.75, { gain: 0.012, cutoff: 1200, cutoff1: 700, a: 0.2, verb: 0.6 });
+  sawChord(17.0, [50, 53, 58], 1.1, { gain: 0.014, cutoff: 1400, cutoff1: 800, a: 0.2, verb: 0.6 });
+  // Each ball landing in the full stop: its world's own impact, and a note stacking up the chord.
+  merges.forEach((m, i) => {
+    const note = [63, 67, 70, 74, 77][i];
+    if (m.style === 'pencil') { softThump(m.t, 0.22); pencilTap(m.t, 0.22, 0.3); }
+    else if (m.style === 'cel') boing(m.t, 0.12, 0.22, 190);
+    else if (m.style === 'paper') { paperCrunch(m.t, 0.05, 0.14, 8, 12, 0.3); pop(m.t, 0.1, 1400, 0.3); }
+    else if (m.style === 'pixel') chip(m.t, 1568, 0.08, { gain: 0.07, pan: 0.3, steps: [[0.04, 2093]] });
+    else metal(m.t, 0.1, 660, 0.3);
+    kalimba(m.t + 0.005, note, 0.08, 0.3);
+    sub(m.t, 0.25, 0.4, 70, 45);
+  });
+  // The full stop turns Claude orange: final bell, warm chord, a sparkle up and out.
+  swell(T.PERIOD, 0.38, 0.12, 1500, 12000);
+  kick(T.PERIOD, 0.7, 160, 40, 0.5);
+  bell(T.PERIOD, mtof(87), 0.1, 1.6, 0.3, 0.6);
+  bell(T.PERIOD, mtof(94), 0.04, 1.2, 0.3, 0.6);
+  [75, 79, 82, 87, 91, 94].forEach((m, i) => bell(T.PERIOD + 0.06 + i * 0.045, mtof(m + 12), 0.018, 0.6, -0.4 + i * 0.16, 0.6));
+  for (let i = 0; i < 7; i++) woodTick(T.PERIOD + 0.1 + i * 0.03, 0.03, 3600, -0.3 + i * 0.1);
+  osc('sine', 2200, T.PERIOD + 0.42, 0.75, { gain: 0.025, f1: 5200, a: 0.25, verb: 0.6, curve: 'lin', pan: -0.4 });
+  sawChord(T.PERIOD - 0.03, [39, 51, 55, 58, 62, 65], T.END - T.PERIOD + 0.02, { gain: 0.032, cutoff: 1800, cutoff1: 800, a: 0.25, verb: 0.6, detune: 12, hold: 1.5 });
+  sub(T.PERIOD, 0.3, 1.4, 52, 38);
 
   return { outG };
 }
 
 export async function renderAudio() {
-  const ctx = new OfflineAudioContext(2, SR * LEN, SR);
+  const ctx = new OfflineAudioContext(2, Math.ceil(SR * T.END), SR);
   build(ctx, 0);
   return ctx.startRendering();
 }

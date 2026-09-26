@@ -1,45 +1,24 @@
-// World 6: the chrome ball shatters (impact frames, speed ramp), ~900 tumbling shards swarm into
-// the word "Claude", slam into crisp type, a light sweep, and the ball drops in as the full stop,
-// flickering through every style it has been on each little bounce.
-import { W, H, T, clamp, lerp, invLerp, ease, rng, smooth, shake, TAU, wobble, noise1, contactSquash } from '../core.js';
+// World 6, the finale, in three acts.
+//   I.   The boule hits the lens: a fracture web races out, the panes slip, then break away toward
+//        the camera carrying their piece of the frame, shedding glints of dust.
+//   II.  Beyond the lens, a tunnel of mirror shards spirals in and locks into a faceted mirror ball
+//        that spins up, winds back and bursts (vortex.js); its dust swarms into "Claude".
+//   III. "Claude" slams in and the ball comes back in all five styles to make the full stop
+//        (endcard.js).
+import { W, H, T, clamp, lerp, ease, rng, smooth, shake, TAU } from '../core.js';
 import { makeCanvas, freeCanvas, bloom, vignette, grain } from '../fx.js';
 import chromeWorld, { tau, ball3D, camera3D, project, hitTime } from './chrome.js';
+import pencilWorld from './pencil.js';
+import celWorld from './cel.js';
+import paperWorld from './paper.js';
+import pixelWorld from './pixel.js';
+import { initVortex, drawVortex, burstPoint, VC, ballScreenRadius } from './vortex.js';
+import { buildLayout, drawEndcard, processionActive, SPACING, BASE_Y } from './endcard.js';
 
-const BG = '#141413', IVORY = '#f0eee6', MUTED = '#a3a195', ACCENT = '#d97757', INK = '#1b1b2f';
-const FONT_PX = 300, BASE_Y = 668, SPACING = 9;
-const SWARM0 = 9.86;
-const PERIOD_FALL = T.PERIOD - 0.39;
-const CONTACTS = [0, 0.25, 0.39, 0.48, 0.54].map((d) => T.PERIOD + d);
-const PG = 9250;
+const BG = '#141413';
+const SWARM0 = T.BURST + 0.28;
 
-let layout, shards, sweepCanvas, center0, radius0, eyebrow, frozen, panes, crackEdges;
-
-function buildLayout() {
-  const c = makeCanvas(), g = c.getContext('2d');
-  g.font = `600 ${FONT_PX}px Fraunces`;
-  const word = 'Claude';
-  const widths = [...word].map((ch) => g.measureText(ch).width);
-  const textW = g.measureText(word).width;
-  const r = 30, gap = 16;
-  const left = (W - (textW + gap + r * 2)) / 2;
-  // Per-letter x positions (using full-word kerning via prefix widths).
-  const xs = [...word].map((_, i) => left + g.measureText(word.slice(0, i)).width);
-  layout = { word, widths, textW, left, r, gap, xs, ballX: left + textW + gap + r, ballY: BASE_Y - r };
-  // Text mask used for shard targets.
-  g.fillStyle = '#fff';
-  g.textBaseline = 'alphabetic';
-  g.fillText(word, left, BASE_Y);
-  const img = g.getImageData(0, 0, W, H).data;
-  const pts = [];
-  const rr = rng(77);
-  for (let y = 0; y < H; y += SPACING) for (let x = 0; x < W; x += SPACING) {
-    const jx = x + Math.floor(rr() * 3), jy = y + Math.floor(rr() * 3);
-    if (img[(jy * W + jx) * 4 + 3] > 128) pts.push([jx, jy]);
-  }
-  freeCanvas(c);
-  sweepCanvas = makeCanvas();
-  return pts;
-}
+let motes, dust, center0, frozen, panes, crackEdges;
 
 // The lens pane fractures radially from the impact: spokes, wobbly rings, big cells split in two.
 function buildPanes() {
@@ -82,39 +61,114 @@ function buildPanes() {
   }
 }
 
-// Glass dust shed along the fracture lines; it swirls and assembles the word.
-function buildShards(targets) {
-  const tt = tau(T.SHATTER - 1e-3);
-  const cam = camera3D(T.SHATTER - 1e-3, tt);
-  const b = ball3D(hitTime());
-  const pc = project(cam, b.c) || { x: W / 2, y: H / 2, z: 1 };
-  center0 = { x: clamp(pc.x, 200, W - 200), y: clamp(pc.y, 150, H - 150) };
-  radius0 = 1100;
-  buildPanes();
+// Glints of glass dust shed along the fracture lines as the lens breaks.
+function buildDust() {
   const r = rng(99);
-  targets.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  const minX = targets[0][0], maxX = targets[targets.length - 1][0];
   const onScreen = crackEdges.filter((e) => [e.a, e.b].some(([x, y]) => x > 0 && x < W && y > 0 && y < H));
-  shards = targets.map(([tx, ty]) => {
+  dust = Array.from({ length: 520 }, () => {
     const e = onScreen[Math.floor(r() * onScreen.length)], u = r();
     const x0 = e.a[0] + (e.b[0] - e.a[0]) * u, y0 = e.a[1] + (e.b[1] - e.a[1]) * u;
     const d = Math.hypot(x0 - center0.x, y0 - center0.y);
     const out = Math.atan2(y0 - center0.y, x0 - center0.x) + (r() - 0.5) * 1.2;
     const sp = 250 + r() * 900 + d * 0.4;
-    const nv = 3, size = 2.5 + r() * 6;
-    const verts = [];
-    for (let k = 0; k < nv; k++) {
-      const aa = (k / nv) * TAU + (r() - 0.5) * 0.9;
-      verts.push([Math.cos(aa) * size * (0.5 + r()), Math.sin(aa) * size * (0.5 + r())]);
-    }
+    return { x0, y0, vx: Math.cos(out) * sp, vy: Math.sin(out) * sp - 150 * r(), vz: (r() - 0.3) * 1.2, ...facetsOf(r), born: 9.585 + (d / 1800) * 0.16 };
+  });
+}
+function facetsOf(r) {
+  const nv = 3, size = 2.5 + r() * 6, verts = [];
+  for (let k = 0; k < nv; k++) {
+    const aa = (k / nv) * TAU + (r() - 0.5) * 0.9;
+    verts.push([Math.cos(aa) * size * (0.5 + r()), Math.sin(aa) * size * (0.5 + r())]);
+  }
+  return { verts, rx: r() * TAU, ry: r() * TAU, wx: (r() - 0.5) * 30, wy: (r() - 0.5) * 30, spin: (r() - 0.5) * 14, tint: r() };
+}
+
+// The mirror ball's dust: born on its surface as it bursts, thrown out, then swarming into the
+// letters left to right on curved paths.
+function buildMotes(targets) {
+  const r = rng(123);
+  targets.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const minX = targets[0][0], maxX = targets[targets.length - 1][0];
+  motes = targets.map(([tx, ty]) => {
+    const [x0, y0, rr] = burstPoint(r);
+    const out = Math.atan2(y0 - VC.y, x0 - VC.x) + (r() - 0.5) * 0.5;
+    const sp = (600 + r() * 1500) * (0.35 + 0.65 * rr);
     const order = (tx - minX) / (maxX - minX);
     return {
-      x0, y0, vx: Math.cos(out) * sp, vy: Math.sin(out) * sp - 150 * r(), vz: (r() - 0.3) * 1.2,
-      rx: r() * TAU, ry: r() * TAU, wx: (r() - 0.5) * 30, wy: (r() - 0.5) * 30, spin: (r() - 0.5) * 14,
-      verts, tx, ty, start: SWARM0 + order * 0.38 + r() * 0.12, dur: 0.5 + r() * 0.16,
-      swirl: (r() < 0.5 ? -1 : 1) * (150 + r() * 350), tint: r(), born: 9.585 + (d / 1800) * 0.16,
+      x0, y0, vx: Math.cos(out) * sp, vy: Math.sin(out) * sp, vz: (r() - 0.35) * 1.6, ...facetsOf(r),
+      tx, ty, start: SWARM0 + order * 0.42 + r() * 0.12, dur: 0.5 + r() * 0.16,
+      swirl: (r() < 0.5 ? -1 : 1) * (150 + r() * 350),
     };
   });
+}
+
+// A glass fleck: tumbling triangle whose glint flares as a facet turns through the key light,
+// optionally flattening into a crisp square of the lettering.
+function fleck(g, s, x, y, scale, rx, ry, rot, flat, lo = 60) {
+  const cxr = Math.cos(rx), cyr = Math.cos(ry);
+  const glint = Math.pow(clamp(0.5 + 0.5 * (Math.sin(rx) * cyr * 0.8 - Math.sin(ry) * 0.4)), 4);
+  const base = lerp(lo, 255, glint);
+  const warm = s.tint < 0.35 ? [1.0, 0.86, 0.66] : [0.9, 0.95, 1.0];
+  let col = [base * warm[0], base * warm[1], base * warm[2]];
+  if (flat > 0) col = col.map((c, i) => lerp(c, [240, 238, 230][i], flat));
+  const sq = lerp(1, SPACING * 0.62, flat);
+  g.save();
+  g.translate(x, y);
+  g.rotate(rot);
+  g.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
+  g.beginPath();
+  if (flat >= 0.999) g.rect(-sq, -sq, sq * 2, sq * 2);
+  else {
+    s.verts.forEach(([vx, vy], i) => {
+      const l = Math.max(1, Math.hypot(vx, vy));
+      const px = lerp(vx * cyr * scale, (vx / l) * sq * 1.4, flat), py = lerp(vy * cxr * scale, (vy / l) * sq * 1.4, flat);
+      i ? g.lineTo(px, py) : g.moveTo(px, py);
+    });
+    g.closePath();
+  }
+  g.fill();
+  g.restore();
+}
+
+function drawDust(g, t) {
+  const fade = 1 - smooth(clamp((t - 10.15) / 0.5));
+  if (fade <= 0) return;
+  const st = shardTime(t);
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = fade;
+  for (const s of dust) {
+    if (t < s.born) continue;
+    const tl = Math.max(0, st - shardTime(s.born));
+    const k = (1 - Math.exp(-1.6 * tl)) / 1.6;
+    fleck(g, s, s.x0 + s.vx * k, s.y0 + s.vy * k + 220 * tl * tl, Math.max(0.2, 1 + s.vz * tl), s.rx + s.wx * st, s.ry + s.wy * st, s.spin * st, 0);
+  }
+  g.restore();
+}
+
+function drawMotes(g, t) {
+  if (t < T.BURST) return;
+  const tb = t - T.BURST;
+  g.save();
+  g.globalCompositeOperation = t < T.SLAM - 0.25 ? 'lighter' : 'source-over';
+  for (const s of motes) {
+    const kd = (1 - Math.exp(-3 * tb)) / 3;
+    const ex = s.x0 + s.vx * kd, ey = s.y0 + s.vy * kd + 90 * tb * tb, ez = Math.max(0.25, 1 + s.vz * kd);
+    const k = clamp((t - s.start) / s.dur), kk = ease.inOutCubic(k);
+    let x = ex, y = ey, scale = ez, flat = 0;
+    if (k > 0) {
+      // Quadratic arc toward the letter target with a sideways swirl.
+      const mx = (ex + s.tx) / 2, my = (ey + s.ty) / 2;
+      const dx = s.tx - ex, dy = s.ty - ey, len = Math.hypot(dx, dy) || 1;
+      const cx = mx - (dy / len) * s.swirl, cy = my + (dx / len) * s.swirl;
+      x = (1 - kk) * (1 - kk) * ex + 2 * (1 - kk) * kk * cx + kk * kk * s.tx;
+      y = (1 - kk) * (1 - kk) * ey + 2 * (1 - kk) * kk * cy + kk * kk * s.ty;
+      scale = lerp(scale, 1, kk);
+      flat = smooth(clamp((k - 0.55) / 0.45));
+    }
+    fleck(g, s, x, y, scale, s.rx + s.wx * tb * (1 - flat), s.ry + s.wy * tb * (1 - flat), s.spin * tb * (1 - flat), flat, 120);
+  }
+  g.restore();
 }
 
 // Shard clock: continues the slow motion briefly, then ramps back to full speed.
@@ -128,64 +182,6 @@ function shardTime(t) {
   return Math.max(0, acc);
 }
 
-function explodePos(s, st) {
-  const tl = Math.max(0, st - shardTime(s.born));
-  const drag = 1.6, k = (1 - Math.exp(-drag * tl)) / drag;
-  return { x: s.x0 + s.vx * k, y: s.y0 + s.vy * k + 220 * tl * tl, z: 1 + s.vz * tl };
-}
-
-function drawShards(g, t, mode) {
-  const st = shardTime(t);
-  g.save();
-  g.globalCompositeOperation = t < T.SLAM - 0.25 ? 'lighter' : 'source-over';
-  for (const s of shards) {
-    const e = explodePos(s, st);
-    const k = clamp((t - s.start) / s.dur);
-    const kk = ease.inOutCubic(k);
-    let x = e.x, y = e.y, scale = Math.max(0.2, e.z), flat = 0;
-    if (k > 0) {
-      // Quadratic arc toward the letter target with a sideways swirl.
-      const mx = (e.x + s.tx) / 2, my = (e.y + s.ty) / 2;
-      const dx = s.tx - e.x, dy = s.ty - e.y, len = Math.hypot(dx, dy) || 1;
-      const cx = mx - (dy / len) * s.swirl, cy = my + (dx / len) * s.swirl;
-      const u = kk;
-      x = (1 - u) * (1 - u) * e.x + 2 * (1 - u) * u * cx + u * u * s.tx;
-      y = (1 - u) * (1 - u) * e.y + 2 * (1 - u) * u * cy + u * u * s.ty;
-      scale = lerp(scale, 1, kk);
-      flat = smooth(clamp((k - 0.55) / 0.45));
-    }
-    const rx = s.rx + s.wx * st * (1 - flat), ry = s.ry + s.wy * st * (1 - flat);
-    const cxr = Math.cos(rx), cyr = Math.cos(ry);
-    // Metallic glint from the tumbling normal: bright when it faces the key light.
-    const nyv = Math.sin(rx) * cyr, nxv = Math.sin(ry);
-    const glint = Math.pow(clamp(0.5 + 0.5 * (nyv * 0.8 - nxv * 0.4)), 4);
-    if (t < s.born) continue;
-    // Glass glints: mostly faint, flaring as a facet turns through the light.
-    const base = lerp(60, 255, glint);
-    const warm = s.tint < 0.35 ? [1.0, 0.86, 0.66] : [0.9, 0.95, 1.0];
-    let col = [base * warm[0], base * warm[1], base * warm[2]];
-    if (flat > 0) col = col.map((c, i) => lerp(c, [240, 238, 230][i], flat));
-    const sq = lerp(1, SPACING * 0.62, flat);
-    g.save();
-    g.translate(x, y);
-    g.rotate(s.spin * st * (1 - flat));
-    g.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
-    g.beginPath();
-    if (flat >= 0.999) {
-      g.rect(-sq, -sq, sq * 2, sq * 2);
-    } else {
-      s.verts.forEach(([vx, vy], i) => {
-        const px = lerp(vx * cyr * scale, (vx / Math.max(1, Math.hypot(vx, vy))) * sq * 1.4, flat);
-        const py = lerp(vy * cxr * scale, (vy / Math.max(1, Math.hypot(vx, vy))) * sq * 1.4, flat);
-        i ? g.lineTo(px, py) : g.moveTo(px, py);
-      });
-      g.closePath();
-    }
-    g.fill();
-    g.restore();
-  }
-  g.restore();
-}
 
 // How far a pane has slipped out of true: nothing until the fracture front reaches it.
 function offK(p, t) {
@@ -293,172 +289,41 @@ function drawCracks(g, t) {
   g.restore();
 }
 
-// The title, with per-letter offsets (for the dip when the period lands) and optional scale.
-function drawTitle(g, t, { alpha = 1, color = '#e4e1d6' } = {}) {
-  const { word, xs } = layout;
-  g.save();
-  g.globalAlpha = alpha;
-  g.font = `600 ${FONT_PX}px Fraunces`;
-  g.textBaseline = 'alphabetic';
-  g.fillStyle = color;
-  [...word].forEach((ch, i) => {
-    const delay = (word.length - 1 - i) * 0.028;
-    const dy = 16 * wobble(t - T.PERIOD - delay, 3.4, 7) * (t > T.PERIOD ? 1 : 0);
-    g.fillText(ch, xs[i], BASE_Y + dy);
-  });
-  g.restore();
-}
-
-function drawEyebrow(g, t) {
-  const d = t - (T.SLAM + 0.08);
-  if (d < 0) return;
-  const text = 'MADE BY';
-  g.save();
-  g.font = '600 38px Inter';
-  g.textBaseline = 'alphabetic';
-  const track = lerp(26, 15, ease.outCubic(clamp(d / 0.6)));
-  let w = 0;
-  const cw = [...text].map((ch) => g.measureText(ch).width);
-  cw.forEach((c) => (w += c + track));
-  w -= track;
-  let x = W / 2 - w / 2;
-  const y = BASE_Y - FONT_PX * 0.9;
-  g.beginPath();
-  g.rect(0, y - 44, W, 56);
-  g.clip();
-  [...text].forEach((ch, i) => {
-    const u = ease.outCubic(clamp((d - i * 0.03) / 0.32));
-    g.fillStyle = MUTED;
-    g.globalAlpha = u;
-    g.fillText(ch, x, y + (1 - u) * 46);
-    x += cw[i] + track;
-  });
-  g.restore();
-}
-
-function lightSweep(g, t) {
-  const d = (t - 11.34) / 0.62;
-  if (d < 0 || d > 1) return;
-  const sg = sweepCanvas.getContext('2d');
-  sg.clearRect(0, 0, W, H);
-  drawTitle(sg, t, { color: '#fff' });
-  sg.save();
-  sg.globalCompositeOperation = 'source-in';
-  const x = lerp(layout.left - 300, layout.left + layout.textW + 300, ease.inOutQuad(d));
-  const gr = sg.createLinearGradient(x - 220, 0, x + 220, 0);
-  gr.addColorStop(0, 'rgba(255,200,150,0)');
-  gr.addColorStop(0.35, 'rgba(255,215,170,0.5)');
-  gr.addColorStop(0.5, 'rgba(255,255,255,1)');
-  gr.addColorStop(0.65, 'rgba(255,215,170,0.5)');
-  gr.addColorStop(1, 'rgba(255,200,150,0)');
-  sg.setTransform(1, 0, -0.35, 1, 0, 0);
-  sg.fillStyle = gr;
-  sg.fillRect(-1000, 0, W + 2000, H);
-  sg.restore();
-  g.save();
-  g.globalCompositeOperation = 'lighter';
-  g.drawImage(sweepCanvas, 0, 0);
-  g.filter = 'blur(18px)';
-  g.globalAlpha = 0.8;
-  g.drawImage(sweepCanvas, 0, 0);
-  g.restore();
-}
-
-// ---------------------------------------------------------------- the full stop
-function periodState(t) {
-  const { ballX, ballY, r } = layout;
-  if (t < PERIOD_FALL) return null;
-  if (t < CONTACTS[0]) {
-    const s = CONTACTS[0] - t;
-    return { x: ballX, y: ballY - 0.5 * PG * s * s, sx: 0.85, sy: 1.25, style: 'final' };
-  }
-  let h = 0, idx = CONTACTS.length - 1;
-  for (let i = 0; i < CONTACTS.length - 1; i++) {
-    if (t >= CONTACTS[i] && t < CONTACTS[i + 1]) {
-      const s = t - CONTACTS[i], D = CONTACTS[i + 1] - CONTACTS[i];
-      h = 0.5 * PG * s * (D - s);
-      idx = i;
-    }
-  }
-  const { squash } = contactSquash(t, CONTACTS);
-  const amp = idx === 0 || t - CONTACTS[0] < 0.05 ? 0.5 : 0.3;
-  const sy = 1 - amp * squash, sx = 1 / Math.pow(sy, 0.8);
-  const styles = ['pencil', 'cel', 'paper', 'pixel', 'final'];
-  const style = t > CONTACTS[4] + 0.06 ? 'final' : styles[idx];
-  return { x: ballX, y: ballY + r * (1 - sy) - h, sx, sy, style };
-}
-
-function drawPeriod(g, t) {
-  const p = periodState(t);
-  if (!p) return;
-  const { r } = layout;
-  const rx = r * p.sx, ry = r * p.sy;
-  g.save();
-  if (p.style === 'pencil') {
-    g.fillStyle = IVORY;
-    g.beginPath(); g.ellipse(p.x, p.y, rx, ry, 0, 0, TAU); g.fill();
-    g.strokeStyle = '#34322f'; g.lineWidth = 3;
-    for (let k = 0; k < 2; k++) { g.beginPath(); g.ellipse(p.x + k, p.y - k, rx * (1 + k * 0.04), ry, 0.1 * k, -2.2, -2.2 + TAU * 1.05); g.stroke(); }
-  } else if (p.style === 'cel') {
-    g.fillStyle = '#ef3e36';
-    g.beginPath(); g.ellipse(p.x, p.y, rx, ry, 0, 0, TAU); g.fill();
-    g.fillStyle = '#fff'; g.beginPath(); g.ellipse(p.x - rx * 0.35, p.y - ry * 0.4, rx * 0.28, ry * 0.16, -0.6, 0, TAU); g.fill();
-    g.strokeStyle = INK; g.lineWidth = 4;
-    g.beginPath(); g.ellipse(p.x, p.y, rx, ry, 0, 0, TAU); g.stroke();
-  } else if (p.style === 'paper') {
-    g.shadowColor = 'rgba(0,0,0,0.5)'; g.shadowBlur = 8; g.shadowOffsetX = 4; g.shadowOffsetY = 5;
-    g.fillStyle = '#e4572e';
-    g.beginPath(); g.ellipse(p.x, p.y, rx, ry, 0, 0, TAU); g.fill();
-    g.shadowColor = 'transparent';
-    g.save(); g.clip();
-    g.fillStyle = '#fff6e8'; g.fillRect(p.x - rx * 0.2, p.y - ry, rx * 0.4, ry * 2);
-    g.restore();
-  } else if (p.style === 'pixel') {
-    const s = 7;
-    for (let y = -ry; y < ry; y += s) for (let x = -rx; x < rx; x += s) {
-      const cx = x + s / 2, cy = y + s / 2;
-      if ((cx * cx) / (rx * rx) + (cy * cy) / (ry * ry) > 1) continue;
-      const l = -cx / rx * 0.6 - cy / ry * 0.75;
-      g.fillStyle = l > 0.55 ? '#fff1e8' : l < -0.35 ? '#7e2553' : '#ff004d';
-      g.fillRect(Math.round(p.x + x), Math.round(p.y + y), s, s);
-    }
-  } else {
-    // Warm bloom behind the settled full stop, struck by the final bell.
-    const since = t - CONTACTS[4];
-    if (since > 0) {
-      const a = 0.45 * Math.exp(-since * 2.2) + 0.08;
-      const bg = g.createRadialGradient(p.x, p.y, r * 0.6, p.x, p.y, r * 5);
-      bg.addColorStop(0, `rgba(217,119,87,${a})`);
-      bg.addColorStop(1, 'rgba(217,119,87,0)');
-      g.fillStyle = bg;
-      g.fillRect(p.x - r * 5, p.y - r * 5, r * 10, r * 10);
-    }
-    const gr = g.createRadialGradient(p.x - rx * 0.35, p.y - ry * 0.4, 1, p.x, p.y, Math.max(rx, ry) * 1.1);
-    gr.addColorStop(0, '#f0a184'); gr.addColorStop(0.55, ACCENT); gr.addColorStop(1, '#b85c3f');
-    g.fillStyle = gr;
-    g.beginPath(); g.ellipse(p.x, p.y, rx, ry, 0, 0, TAU); g.fill();
-  }
-  g.restore();
-}
-
 export default {
   async init() {
-    buildShards(buildLayout());
+    // Where the boule meets the lens, in screen space: the centre of the fracture.
+    const cam = camera3D(T.SHATTER - 1e-3, tau(T.SHATTER - 1e-3));
+    const pc = project(cam, ball3D(hitTime()).c) || { x: W / 2, y: H / 2, z: 1 };
+    center0 = { x: clamp(pc.x, 200, W - 200), y: clamp(pc.y, 150, H - 150) };
+    buildPanes();
+    buildDust();
     // The last frame the lens saw (the boule filling it), used as the texture of the glass.
     frozen = makeCanvas();
     const fg = frozen.getContext('2d');
     chromeWorld.draw(fg, T.SHATTER - 1e-3);
     chromeWorld.post(fg, T.SHATTER - 1e-3, frozen);
+    // A moment from every world, for the mirror shards to carry.
+    const tmp = makeCanvas(), tg = tmp.getContext('2d');
+    const snaps = [[pencilWorld, 1.05], [celWorld, 2.62], [paperWorld, 4.12], [pixelWorld, 5.42], [chromeWorld, 7.7]].map(([wm, t]) => {
+      tg.save(); wm.draw(tg, t); tg.restore();
+      if (wm.post) { tg.save(); wm.post(tg, t, tmp); tg.restore(); }
+      const c = makeCanvas(800, 450);
+      c.getContext('2d').drawImage(tmp, 0, 0, 800, 450);
+      return c;
+    });
+    freeCanvas(tmp);
+    initVortex(snaps);
+    buildMotes(buildLayout());
   },
-  // Motion blur on the flying glass; none across the slam cut, or it ghosts.
-  shutter: (t) => (t < T.SHATTER + 1 / 120 ? null : t < T.SLAM - 1 / 120 ? { samples: 4, angle: 200 } : t > PERIOD_FALL && t < T.PERIOD + 0.65 ? { samples: 3, angle: 180 } : null),
+  // Motion blur on everything that flies; none across the slam cut, or it ghosts.
+  shutter: (t) => (t < T.SHATTER + 1 / 120 ? null : t < T.SLAM - 1 / 120 ? { samples: 4, angle: 200 } : processionActive(t) ? { samples: 3, angle: 180 } : null),
   draw(g, t) {
     const sk = shake(t, 20);
     g.fillStyle = BG;
     g.fillRect(0, 0, W, H);
     // Warm glow behind the title
     const gl = g.createRadialGradient(W / 2, BASE_Y - 100, 0, W / 2, BASE_Y - 100, 900);
-    const glowA = 0.1 * smooth(clamp((t - 10.2) / 0.8)) + 0.12 * Math.exp(-Math.max(0, t - T.SLAM) * 3) * (t > T.SLAM ? 1 : 0);
+    const glowA = 0.1 * smooth(clamp((t - (T.SLAM - 0.8)) / 0.8)) + 0.12 * Math.exp(-Math.max(0, t - T.SLAM) * 3) * (t > T.SLAM ? 1 : 0);
     gl.addColorStop(0, `rgba(217,119,87,${glowA})`);
     gl.addColorStop(1, 'rgba(217,119,87,0)');
     g.fillStyle = gl;
@@ -467,29 +332,33 @@ export default {
     const slam = t - T.SLAM;
     if (slam < 0) {
       g.save();
-      // A touch of overscan (read as a punch-in under the flash) so the shake never bares an edge.
-      g.translate(W / 2 + sk.x, H / 2 + sk.y);
-      g.scale(1.045, 1.045);
-      g.translate(-W / 2, -H / 2);
-      drawPanes(g, t);
-      drawCracks(g, t);
+      g.translate(sk.x, sk.y);
+      drawVortex(g, t);
       g.restore();
+      if (t < 10.9) {
+        g.save();
+        // A touch of overscan (read as a punch-in under the flash) so the shake never bares an edge.
+        g.translate(W / 2 + sk.x, H / 2 + sk.y);
+        g.scale(1.045, 1.045);
+        g.translate(-W / 2, -H / 2);
+        drawPanes(g, t);
+        drawCracks(g, t);
+        drawDust(g, t);
+        g.restore();
+      }
     }
     g.save();
     // Gentle push-in over the hold, plus the slam punch.
-    const push = 1 + 0.025 * smooth(clamp((t - T.SLAM) / 4));
+    const push = 1 + 0.03 * smooth(clamp((t - T.SLAM) / (T.END - T.SLAM)));
     const punch = slam >= 0 ? 1 + 0.06 * Math.exp(-slam * 9) * Math.cos(slam * 30) : 1;
     g.translate(W / 2 + sk.x, H / 2 + sk.y);
     g.rotate(sk.rot);
     g.scale(push * punch, push * punch);
     g.translate(-W / 2, -H / 2);
     if (slam < 0) {
-      drawShards(g, t, 'glass');
+      drawMotes(g, t);
     } else {
-      drawTitle(g, t);
-      drawEyebrow(g, t);
-      lightSweep(g, t);
-      drawPeriod(g, t);
+      drawEndcard(g, t);
       // Slam shockwave ring and leftover glitter bursting out of the letters
       if (slam < 0.5) {
         const u = slam / 0.5;
@@ -500,7 +369,7 @@ export default {
         const r = rng(9);
         g.globalCompositeOperation = 'lighter';
         for (let i = 0; i < 120; i++) {
-          const s = shards[Math.floor(r() * shards.length)];
+          const s = motes[Math.floor(r() * motes.length)];
           const a = r() * TAU, sp = 200 + r() * 700;
           const k = (1 - Math.exp(-5 * slam)) / 5;
           g.fillStyle = `rgba(255,236,210,${(1 - u) * 0.9})`;
@@ -510,9 +379,24 @@ export default {
       }
     }
     g.restore();
+    // The burst: a shockwave off the mirror ball
+    const tb = t - T.BURST;
+    if (tb >= 0 && tb < 0.6) {
+      const u = tb / 0.6, R = ballScreenRadius() * (0.9 + 5 * ease.outCubic(u));
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.strokeStyle = `rgba(255,214,176,${0.5 * (1 - u) ** 2})`;
+      g.lineWidth = 3 + 26 * (1 - u);
+      g.beginPath(); g.arc(VC.x, VC.y, R, 0, TAU); g.stroke();
+      g.restore();
+    }
     const imp = t - T.SHATTER;
     if (imp >= 0 && imp < 0.06) {
       g.fillStyle = `rgba(255,250,242,${0.32 * Math.exp(-imp / 0.014)})`;
+      g.fillRect(0, 0, W, H);
+    }
+    if (tb >= 0 && tb < 0.12) {
+      g.fillStyle = `rgba(255,246,236,${0.6 * Math.exp(-tb / 0.03)})`;
       g.fillRect(0, 0, W, H);
     }
     // White pop on the slam
@@ -522,7 +406,7 @@ export default {
     }
   },
   post(g, t, out) {
-    const s = t < T.SLAM ? 0.8 : 0.35 + 0.4 * Math.exp(-(t - T.SLAM) * 4);
+    const s = t < T.SLAM ? 0.8 : 0.35 + 0.4 * Math.exp(-(t - T.SLAM) * 4) + 0.3 * Math.exp(-Math.max(0, t - T.PERIOD) * 3) * (t > T.PERIOD ? 1 : 0);
     bloom(g, out, { strength: s, radius: 24, cut: t < T.SLAM ? 1.3 : 1.8, streak: t < T.SLAM ? 0.45 : 0.15 });
     vignette(g, 0.55, '0,0,0', 0.45);
     grain(g, t, 0.05);

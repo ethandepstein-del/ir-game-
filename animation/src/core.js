@@ -1,7 +1,7 @@
 // Shared timing, math and the master ball trajectory.
 // Everything is a pure function of time so any frame can be rendered in any order.
 
-export const W = 1920, H = 1080, FPS = 60, DURATION = 15;
+export const W = 1920, H = 1080, FPS = 60, DURATION = 20;
 
 // Music grid: 160 bpm, bars start at 0.5s (the pencil sketch is the pickup).
 export const BPM = 160, BEAT = 60 / BPM, GRID0 = 0.5;
@@ -12,10 +12,14 @@ export const T = {
   PAPER: 3.5,
   PIXEL: 5.0,
   CHROME: 6.5,
-  SHATTER: 9.5,
-  SLAM: 11.0,
-  PERIOD: 12.5,
-  END: 15.0,
+  SHATTER: 9.5,   // the boule hits the lens
+  VORTEX: 9.6,    // the tunnel of mirror shards beyond it
+  GATHER: 11.0,   // the shards lock into a mirror ball
+  BURST: 12.5,    // which bursts; its dust swarms into the title
+  SLAM: 14.0,     // "Claude"
+  PROC: 14.75,    // the five balls' first contact on the lettering
+  PERIOD: 18.125, // the full stop turns Claude orange
+  END: 20.0,
 };
 
 export const WORLDS = [
@@ -108,7 +112,7 @@ export function syncTimeline() {
     if (e.t > T.SHATTER) continue;
     SHAKES.push([e.t, Math.min(1.6, (e.speed / 2600) ** 1.4 * (e.cut ? 1.4 : 1))]);
   }
-  SHAKES.push([T.SHATTER, 1.6], [T.SLAM, 1.8], [T.PERIOD, 0.25]);
+  SHAKES.push([T.SHATTER, 1.6], [T.BURST, 1.5], [T.SLAM, 1.8], [T.PERIOD, 0.3]);
   return P;
 }
 // Events of one kind, in time order (e.g. every landing on the cel floor).
