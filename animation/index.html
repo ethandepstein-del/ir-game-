@@ -39,7 +39,8 @@
   const render = new URLSearchParams(location.search).has('render');
   if (render) document.body.classList.add('render');
   const canvas = document.getElementById('c');
-  await window.BT.init(canvas);
+  try { await window.BT.init(canvas); }
+  catch (e) { document.getElementById('loading').textContent = 'This device could not start the animation. Try the video file instead.'; throw e; }
   window.BT.ready = true;
   document.getElementById('loading').hidden = true;
   if (!render) {
@@ -50,10 +51,14 @@
     btn.onclick = async () => {
       btn.hidden = true;
       const clock = await window.BT.playAudio();
+      let failed = 0;
       const tick = () => {
         const t = clock();
         const tt = Math.min(t, window.BT.T.END - 1e-3);
-        window.BT.renderFrame(Math.max(0, tt), { motionBlur: false });
+        // A frame that throws (e.g. a device refusing a canvas) is skipped, never allowed to
+        // stop playback and freeze the picture while the sound carries on.
+        try { window.BT.renderFrame(Math.max(0, tt), { motionBlur: false }); }
+        catch (e) { if (failed++ < 3) console.error('frame', tt.toFixed(2), e); }
         time.textContent = tt.toFixed(2);
         if (t < window.BT.T.END) requestAnimationFrame(tick);
         else btn.hidden = false;

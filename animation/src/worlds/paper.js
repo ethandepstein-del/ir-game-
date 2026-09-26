@@ -2,7 +2,7 @@
 // of field, a paper-puppet ball on a brass split pin, pop-up flowers and confetti. Shot on 12s.
 import { W, H, T, R, FLOOR, CAM_Z, CAM_CY, camFrame, applyCam, physics, eventsOn, clamp, lerp, invLerp, ease, rng, shake, ball2D, TAU, noise1, wobble } from '../core.js';
 import { plateY } from '../physics.js';
-import { makeCanvas, paperTexture, grain, vignette, ballShape } from '../fx.js';
+import { makeCanvas, freeCanvas, paperTexture, grain, vignette, ballShape } from '../fx.js';
 
 const P = {
   sky: [150, 214, 232], sun: '#f6c445', sunIn: '#f9dc7a', ray: '#f29e4c',
@@ -65,6 +65,7 @@ function hillLayer(color, baseY, amp, seed, blur, shadow) {
     const b = makeCanvas(LAYER_W, H), bg = b.getContext('2d');
     bg.filter = `blur(${blur}px)`;
     bg.drawImage(c, 0, 0);
+    freeCanvas(c);
     return b;
   }
   return c;
@@ -219,7 +220,7 @@ export default {
     sg.fillStyle = `rgb(${P.sky.join(',')})`;
     sg.fillRect(0, 0, W, H);
     sg.globalCompositeOperation = 'multiply';
-    sg.drawImage(paperTexture(W, H, 22, [255, 255, 255], { fibers: 1500, blotch: 0.1, dark: 0.12 }), 0, 0);
+    { const pt = paperTexture(W, H, 22, [255, 255, 255], { fibers: 1500, blotch: 0.1, dark: 0.12 }); sg.drawImage(pt, 0, 0); freeCanvas(pt); }
     sg.globalCompositeOperation = 'source-over';
     const lg = sg.createLinearGradient(0, 0, 0, H);
     lg.addColorStop(0, 'rgba(90,170,215,0.35)'); lg.addColorStop(0.55, 'rgba(255,255,255,0)'); lg.addColorStop(0.85, 'rgba(255,226,180,0.75)'); lg.addColorStop(1, 'rgba(255,214,160,0.9)');
@@ -266,6 +267,7 @@ export default {
     const fb = makeCanvas(LAYER_W, 420), fbg = fb.getContext('2d');
     fbg.filter = 'blur(7px)';
     fbg.drawImage(fg, 0, 0);
+    freeCanvas(fg);
     fg = fb;
   },
   // Speed-adaptive motion blur: enough sub-frames that copies of the ball stay within ~5 px.

@@ -1,7 +1,7 @@
 // Frame compositor: picks the world for a time, renders it (with optional motion-blur
 // accumulation), then applies global post. Exposed as window.BT for the renderer and player.
 import { W, H, T, WORLDS, worldAt, clamp, ease, syncTimeline, camFrame, physics, FLOOR } from './core.js';
-import { makeCanvas, loadFonts } from './fx.js';
+import { makeCanvas, loadFonts, initPost } from './fx.js';
 import pencil from './worlds/pencil.js';
 import cel from './worlds/cel.js';
 import paper from './worlds/paper.js';
@@ -24,7 +24,8 @@ async function init(canvas, { fontBase = 'fonts/' } = {}) {
   sctx = scratch.getContext('2d');
   await loadFonts(fontBase);
   syncTimeline();
-  wipeA = makeCanvas(); wipeB = makeCanvas();
+  wipeA = scratch; wipeB = makeCanvas();
+  initPost();
   for (const w of Object.values(worlds)) if (w.init) await w.init();
 }
 

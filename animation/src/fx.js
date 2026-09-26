@@ -1,6 +1,9 @@
 // Shared drawing helpers and post effects.
 import { W, H, rng, clamp } from './core.js';
 
+// Safari caps total canvas memory per page; release build-time canvases once they're baked.
+export function freeCanvas(c) { if (c) { c.width = 0; c.height = 0; } }
+
 export function makeCanvas(w = W, h = H) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -50,6 +53,7 @@ export function vignette(ctx, strength = 0.4, color = '0,0,0', inner = 0.45) {
 
 // Cheap bloom: isolate brights at quarter res, blur, screen back on.
 let bloomA = null, bloomB = null;
+export function initPost() { if (!bloomA) { bloomA = makeCanvas(W / 4, H / 4); bloomB = makeCanvas(W / 4, H / 4); } makeStreakCanvas(); if (!grainTiles) buildGrain(); }
 export function bloom(ctx, src, { strength = 0.8, radius = 18, cut = 1.6, streak = 0 } = {}) {
   if (!bloomA) { bloomA = makeCanvas(W / 4, H / 4); bloomB = makeCanvas(W / 4, H / 4); }
   const a = bloomA.getContext('2d'), b = bloomB.getContext('2d');

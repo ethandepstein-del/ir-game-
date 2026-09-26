@@ -9,7 +9,7 @@ let K = CAM_Z / PX;
 const PAL = ['#000000', '#1d2b53', '#7e2553', '#008751', '#ab5236', '#5f574f', '#c2c3c7', '#fff1e8',
   '#ff004d', '#ffa300', '#ffec27', '#00e436', '#29adff', '#83769c', '#ff77a8', '#ffccaa'];
 let HIT = 0, LAND = 0;
-let lo, lg, big, bg2;
+let lo, lg, bg2;
 
 const FONT = {
   0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001',
@@ -121,8 +121,7 @@ export default {
   async init() {
     lo = makeCanvas(LW, LH);
     lg = lo.getContext('2d');
-    big = makeCanvas(W, H);
-    bg2 = makeCanvas(W, H);
+    bg2 = makeCanvas(W / 4, H / 4);
   },
   shutter: () => ({ samples: 1, angle: 0 }),
   draw(g, t) {
@@ -242,20 +241,22 @@ export default {
     text(lg, '4-4', 198, 13, 7, 0);
 
     // Upscale with hard pixels
-    const bgc = big.getContext('2d');
-    bgc.imageSmoothingEnabled = false;
-    bgc.drawImage(lo, 0, 0, W, H);
-    g.drawImage(big, 0, 0);
-    // CRT: glow, scanlines, aperture mask, vignette
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.drawImage(lo, 0, 0, W, H);
+    g.restore();
+    // CRT glow: the low-res frame scaled up with smoothing is already a soft blur.
     const gg = bg2.getContext('2d');
-    gg.clearRect(0, 0, W, H);
-    gg.filter = 'blur(10px) brightness(1.1)';
-    gg.drawImage(lo, 0, 0, W, H);
-    gg.filter = 'none';
+    gg.imageSmoothingEnabled = true;
+    gg.clearRect(0, 0, W / 4, H / 4);
+    gg.drawImage(lo, 0, 0, W / 4, H / 4);
     g.save();
     g.globalCompositeOperation = 'screen';
     g.globalAlpha = 0.28;
-    g.drawImage(bg2, 0, 0);
+    g.imageSmoothingEnabled = true;
+    g.filter = 'blur(6px) brightness(1.1)';
+    g.drawImage(bg2, 0, 0, W, H);
+    g.filter = 'none';
     g.restore();
     g.fillStyle = 'rgba(0,0,0,0.22)';
     for (let y = PX - 2; y < H; y += PX) g.fillRect(0, y, W, 2);

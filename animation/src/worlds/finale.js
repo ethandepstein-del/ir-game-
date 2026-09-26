@@ -2,7 +2,7 @@
 // the word "Claude", slam into crisp type, a light sweep, and the ball drops in as the full stop,
 // flickering through every style it has been on each little bounce.
 import { W, H, T, clamp, lerp, invLerp, ease, rng, smooth, shake, TAU, wobble, noise1, contactSquash } from '../core.js';
-import { makeCanvas, bloom, vignette, grain } from '../fx.js';
+import { makeCanvas, freeCanvas, bloom, vignette, grain } from '../fx.js';
 import { tau, ball3D, camera3D, project, renderGL, hitTime } from './chrome.js';
 
 const BG = '#141413', IVORY = '#f0eee6', MUTED = '#a3a195', ACCENT = '#d97757', INK = '#1b1b2f';
@@ -36,7 +36,7 @@ function buildLayout() {
     const jx = x + Math.floor(rr() * 3), jy = y + Math.floor(rr() * 3);
     if (img[(jy * W + jx) * 4 + 3] > 128) pts.push([jx, jy]);
   }
-  textCanvas = makeCanvas();
+  freeCanvas(c);
   sweepCanvas = makeCanvas();
   return pts;
 }

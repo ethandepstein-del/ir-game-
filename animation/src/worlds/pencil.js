@@ -1,7 +1,7 @@
 // World 1: the pencil test. Animation paper, blue construction lines, a timing chart,
 // onion skins, and a real pencil that draws the ball and taps it into motion. On 24s, boiling on 12s.
 import { W, H, T, R, FLOOR, X0, Y0, CAM_Z, CAM_CY, applyCam, camFrame, physics, eventsOn, clamp, lerp, invLerp, ease, rng, noise1, shake, ball2D, TAU } from '../core.js';
-import { paperTexture, grain, vignette, makeCanvas } from '../fx.js';
+import { paperTexture, grain, vignette, makeCanvas, freeCanvas } from '../fx.js';
 
 const GRAPHITE = [52, 50, 48];
 const BLUE = [92, 150, 214];
@@ -316,6 +316,7 @@ export default {
   async init() {
     paper = paperTexture(W + 900, H + 160, 7, [246, 243, 234], { fibers: 3000, blotch: 0.06, dark: 0.08 });
     buildSheet();
+    freeCanvas(paper); paper = null;
   },
   // Speed-adaptive motion blur: enough sub-frames that copies of the ball stay within ~5 px.
   shutter: (t) => { const b = ball2D(t); return { samples: Math.min(6, Math.max(2, Math.ceil(Math.hypot(b.vx, b.vy) * 0.0048 / 5) + 1)), angle: 180 }; },
