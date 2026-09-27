@@ -101,16 +101,22 @@ export function tearPath(x0, y0, x1, y1, seed = 1, rough = 26, step = 34) {
 // draws a full frame) at progress u in [0, 1]. The cut point, where `b` owns the frame, is u = 0.5
 // for whips and u = 0 for reveals. `o` carries kind-specific options.
 export const TRANSITIONS = {
-  // whip pan: a accelerates out along dir, b decelerates in, streaks at the peak
+  // whip pan: one continuous pan from a to b laid side by side along dir, fastest at the cut,
+  // with streaks at the peak
   whip(P, u, a, b, o = {}) {
-    const dir = o.dir ?? 0, c = Math.cos(dir), s = Math.sin(dir), D = W * 1.15;
-    if (u < 0.5) {
-      const k = easeIn(u / 0.5);
-      P.save(); P.translate(-c * D * k, -s * D * k); a(); P.restore();
-    } else {
-      const k = 1 - easeOut((u - 0.5) / 0.5);
-      P.save(); P.translate(c * D * k, s * D * k); b(); P.restore();
-    }
+    const dir = o.dir ?? 0, c = Math.cos(dir), s = Math.sin(dir), D = W * 1.1;
+    const k = u < 0.5 ? 0.5 * easeIn(u / 0.5) : 0.5 + 0.5 * easeOut((u - 0.5) / 0.5);
+    const off = k * D;
+    // the seam between the two frames, in screen space
+    const sx = W / 2 + c * (D / 2 - off), sy = H / 2 + s * (D / 2 - off);
+    const half = (sign) => {
+      // the half-plane on the `sign` side of the seam line (perpendicular to dir)
+      const px = -s, py = c, L = 4000;
+      const ax = sx + px * L, ay = sy + py * L, bx = sx - px * L, by = sy - py * L;
+      return poly([[ax, ay], [bx, by], [bx + sign * c * L, by + sign * s * L], [ax + sign * c * L, ay + sign * s * L]]);
+    };
+    P.save(); P.clip(half(-1)); P.translate(-c * off, -s * off); a(); P.restore();
+    P.save(); P.clip(half(1)); P.translate(c * (D - off), s * (D - off)); b(); P.restore();
     speedLines(P, { dir, inks: o.inks ?? K.paper, k: Math.sin(u * Math.PI) ** 2, n: 44, width: 10, len: 900, seed: o.seed ?? 3 });
   },
   // torn paper: b is revealed through a tear sweeping across; a white paper edge rides the tear

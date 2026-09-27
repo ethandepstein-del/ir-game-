@@ -3,16 +3,38 @@ import { bedroom, bulb, moth } from '../lib/extras.mjs';
 import { typeBox } from '../lib/lyrics.mjs';
 import { girlBust } from '../lib/people.mjs';
 import { rect } from '../lib/shapes.mjs';
-import { backOut, clamp, hs, inv, lerp } from '../lib/util.mjs';
+import { backOut, clamp, easeInOut, hs, inv, lerp } from '../lib/util.mjs';
+import { spring } from '../lib/fx.mjs';
 import { H, K, mountains, stringLights, W } from '../lib/world.mjs';
 import { blinkOn, FLOODS, LY, withCam } from './common.mjs';
 import { shotBust } from './girl.mjs';
 import { T } from './songmap.mjs';
 import { CLOSE, stage } from './stage.mjs';
 
+// the camera snaps to each zine panel as it lands, then pulls back to the whole page
+const ZINE_AT = [[101.56, 590, 330], [107.39, 1510, 330], [113.21, 410, 840], [116.1, 1330, 840]];
 function shotZine(P, S) {
   const { t } = S;
-  P.fill(rect(-100, -100, W + 200, H + 200), [0.08, 0.04, 0]);
+  let n = 0;
+  while (n < ZINE_AT.length && ZINE_AT[n][0] <= t) n++;
+  const k = n ? spring(t - ZINE_AT[n - 1][0], { freq: 2.4, damp: 8 }) : 0;
+  const from = n > 1 ? ZINE_AT[n - 2].slice(1) : [W / 2, H / 2], to = n ? ZINE_AT[n - 1].slice(1) : [W / 2, H / 2];
+  const back = easeInOut(clamp((t - 117.59) / 0.8));
+  const zoom = lerp(1.32, 1, back);
+  const hw = W / 2 / zoom, hh = H / 2 / zoom;
+  const cx = lerp(clamp(lerp(from[0], to[0], k), hw, W - hw), W / 2, back);
+  const cy = lerp(clamp(lerp(from[1], to[1], k), hh, H - hh), H / 2, back);
+  P.save();
+  P.translate(W / 2, H / 2); P.scale(zoom); P.translate(-cx, -cy);
+  zinePage(P, S);
+  P.restore();
+}
+
+function zinePage(P, S) {
+  const { t } = S;
+  // the page lies on a dark desk under the lamp
+  P.fill(rect(-400, -400, W + 800, H + 800), [0.3, 0.95, 1]);
+  P.glow(W * 0.45, H * 0.35, 1100, [0, 0.5, 0.55], 'knock', 0.3);
   const dim = 1 - inv(116.8, T.brk, t);
   const panels = [
     [60, 50, 1060, 560, 101.56, 'v2_2', (P2) => bedroom(P2, t, { lamp: dim })],
@@ -53,10 +75,13 @@ function shotBreak(P, S) {
 }
 
 export const SHOTS = [
-  [T.verse2, T.v2b, shotBust, { lookY: -0.5 }],
-  [T.v2b, T.v2c, shotBust, { happy: true, s: 1.6, cy: 660 }],
-  [T.v2c, T.zine, shotBust, { lookY: 0, smile: 1, captionWords: () => LY.line('v2_1').words }],
-  [T.zine, T.brk, shotZine],
+  [T.verse2, 88.49, shotBust, { lookY: -0.5 }],
+  [88.49, T.v2b, shotBust, { lookY: -0.3, s: 1.35, cy: 640 }],
+  [T.v2b, 94.3, shotBust, { happy: true, s: 1.6, cy: 660 }],
+  [94.3, T.v2c, shotBust, { happy: true, s: 1.2, cy: 590 }],
+  [T.v2c, 98.66, shotBust, { lookY: 0, smile: 1, captionWords: () => LY.line('v2_1').words }],
+  [98.66, T.zine, shotBust, { lookY: 0.1, smile: 1, s: 1.4, cy: 650, captionWords: () => LY.line('v2_1').words }],
+  [T.zine, T.brk, shotZine, {}, { kind: 'tear', dur: 0.35, seed: 6 }],
   [T.brk, T.hook2, shotBreak],
 ];
 export const FLASHES = [];

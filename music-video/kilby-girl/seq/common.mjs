@@ -3,7 +3,7 @@
 import { photo } from '../lib/extras.mjs';
 import { handwrite, Lyrics } from '../lib/lyrics.mjs';
 import { circle, poly, rect } from '../lib/shapes.mjs';
-import { clamp, easeIn, easeOut, hash, lerp, TAU } from '../lib/util.mjs';
+import { backOut, clamp, easeIn, easeOut, hash, hs, lerp, TAU } from '../lib/util.mjs';
 import { perfFrom } from '../lib/perf.mjs';
 import { H, K, W } from '../lib/world.mjs';
 import { energyAt } from './songmap.mjs';
@@ -143,4 +143,73 @@ export function photoPile(P, S, hits, contents, layout, { zoomLast = null, capti
     draw();
     P.restore();
   } else draw();
+}
+
+// ------------------------------------------------------------------ punch-word slams
+// The words a motion designer would slam, as word-index groups per line id. A lyric file whose
+// words carry `emph` flags overrides this (consecutive flagged words form one group).
+const EMPH = {
+  v1_2: [[1]], h1_1: [[5]], h2_1: [[5]], h1_2: [[3, 4], [7, 8]], h2_2: [[3, 4], [7, 8]],
+  h1_5: [[8]], h2_5: [[8]], h1_6: [[3], [6]], h2_6: [[3], [6]],
+};
+
+let SLAMS = null, SLAMS_SRC = null;
+// every slam in the song: {t0, t1, text, seed}; t0 is the first word's onset
+export function slams() {
+  if (SLAMS && SLAMS_SRC === LY) return SLAMS;
+  const out = [];
+  LY.lines.forEach((line, li) => {
+    const words = line.words ?? [];
+    let groups = [];
+    if (words.some((w) => w.emph)) {
+      let cur = null;
+      words.forEach((w, i) => {
+        if (w.emph) (cur ??= (groups.push([]), groups[groups.length - 1])).push(i);
+        else cur = null;
+      });
+    } else {
+      const id = [...LY.byId].find(([, l]) => l === line)?.[0];
+      groups = EMPH[id] ?? [];
+    }
+    for (const g of groups) {
+      const ws = g.map((i) => words[i]).filter(Boolean);
+      if (!ws.length) continue;
+      const last = ws[ws.length - 1];
+      out.push({
+        t0: ws[0].t - 0.03,
+        t1: Math.max(ws[0].t + 0.45, (last.e ?? last.t + 0.3) + 0.2),
+        text: ws.map((w) => w.w.replace(/[^\p{L}\p{N}']/gu, '').toUpperCase()).join(' '),
+        seed: li * 7 + g[0],
+      });
+    }
+  });
+  SLAMS = out.sort((a, b) => a.t0 - b.t0);
+  SLAMS_SRC = LY;
+  return SLAMS;
+}
+
+// the active slam at t and its onset pulse (for a camera jolt), or null
+export function slamAt(t) {
+  for (const s of slams()) if (t >= s.t0 && t < s.t1 + 0.08) return s;
+  return null;
+}
+
+// draw the active slam: lands from 190% with overshoot, holds, then snaps away
+export function slamOverlay(P, S, measure) {
+  const s = slamAt(S.t);
+  if (!s) return;
+  const dt = S.t - s.t0;
+  const k = backOut(clamp(dt / 0.11), 2.4);
+  const out = clamp((S.t - s.t1) / 0.08);
+  const size = Math.min(340, 1560 / Math.max(1, measure(s.text, '100px Anton') / 100));
+  const scale = (1 + (1 - k) * 0.9) * (1 - out);
+  if (scale <= 0.01) return;
+  const rot = hs(s.seed, 3) * 0.07;
+  P.save();
+  P.translate(W / 2 + hs(s.seed, 1) * 120, H * 0.52 + hs(s.seed, 2) * 60);
+  P.scale(scale);
+  P.rotate(rot);
+  P.text(s.text, 16, size * 0.36 + 14, `${size}px Anton`, K.navy);
+  P.text(s.text, 0, size * 0.36, `${size}px Anton`, [1, 1, 0]);
+  P.restore();
 }

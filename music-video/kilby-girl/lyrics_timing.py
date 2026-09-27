@@ -177,7 +177,7 @@ def force_align(lp, toks):
     path = [0] * T
     for t in range(T - 1, -1, -1):
         path[t] = s
-        s -= bp[t, s]
+        s -= int(bp[t, s])
     first, last = [None] * len(toks), [None] * len(toks)
     for t, s in enumerate(path):
         if s % 2 == 1:

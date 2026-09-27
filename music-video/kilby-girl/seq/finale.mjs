@@ -6,7 +6,7 @@ import { H, W } from '../lib/world.mjs';
 import { FLOODS } from './common.mjs';
 import { shotBust } from './girl.mjs';
 import { T } from './songmap.mjs';
-import { CLOSE, shotCrowd, shotPit, shotStage, surfScene } from './stage.mjs';
+import { CLOSE, FRAME, shotCrowd, shotPit, shotStage, surfScene } from './stage.mjs';
 
 function shotSurf(P, S) {
   surfScene(P, S, inv(T.surf, T.pitEnd, S.t));
@@ -45,10 +45,17 @@ function shotMontage(P, S) {
   MONTAGE[((idx * 7) % MONTAGE.length + MONTAGE.length) % MONTAGE.length](P, S);
 }
 
+// the marquee finale: a new framing on every bar, with the marquee behind the band
+const FINALE_CAMS = ['wide', 'noah', 'low', 'brooks', 'kit', 'belle', 'duo'];
+function shotFinaleCut(P, S, o) {
+  const bar = Math.floor(S.barPos + 1e-3);
+  shotFinale(P, S, { ...o, cam: FRAME[FINALE_CAMS[((bar % FINALE_CAMS.length) + FINALE_CAMS.length) % FINALE_CAMS.length]] });
+}
+
 export const SHOTS = [
   [T.montage, T.finale, shotMontage],
-  [T.finale, T.surf, shotFinale, {}],
-  [T.surf, T.pitEnd, shotSurf],
-  [T.pitEnd, T.outro, (P, S) => shotPit(P, S, { speed: 1.6, confetti: 219 })],
+  [T.finale, T.surf, shotFinaleCut, {}, { kind: 'tear', dur: 0.3, seed: 8 }],
+  [T.surf, T.pitEnd, shotSurf, {}, { kind: 'whip', dur: 0.26, dir: 0 }],
+  [T.pitEnd, T.outro, (P, S) => shotPit(P, S, { speed: 1.6, confetti: 219 }), {}, { kind: 'slam', dur: 0.25 }],
 ];
 export const FLASHES = [];

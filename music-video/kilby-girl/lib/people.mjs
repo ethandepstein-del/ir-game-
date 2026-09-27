@@ -2,12 +2,13 @@
 import { blob, boil, capsule, circle, curve, ellipse, line, poly, rect, roundRect, star } from './shapes.mjs';
 import { clamp, hash, hs, lerp, TAU } from './util.mjs';
 import { K } from './world.mjs';
+import { hoop } from './charkit.mjs';
 
 const darker = (inks, k = 0.25) => inks.map((v, i) => (i === 2 ? clamp(v + k) : clamp(v + k * 0.4)));
 
 // ---------------------------------------------------------------- the girl, walking profile
 // feet at (x, y), facing right. phase: walk cycle (heel strike of the near leg at PI/2)
-export function girlSide(P, x, y, s, { phase = 0, walk = 1, bf = 0, hairLag = 0, armUp = 0, look = 0, blink = 0, face = 1, shadow = true } = {}) {
+export function girlSide(P, x, y, s, { phase = 0, walk = 1, bf = 0, hairLag = 0, armUp = 0, look = 0, blink = 0, face = 1, shadow = true, noseRing = true } = {}) {
   P.save();
   P.translate(x, y);
   P.scale(s * face, s);
@@ -91,6 +92,8 @@ export function girlSide(P, x, y, s, { phase = 0, walk = 1, bf = 0, hairLag = 0,
     P.stroke(line([[hx + 30, hy - 10], [hx + 37, hy - 15]]), K.navy, 3);
   }
   P.stroke(line([[hx + 38, hy + 26], [hx + 44, hy + 26]]), [0.3, 1, 0.3], 4);
+  // gold nose ring through the nostril
+  if (noseRing) hoop(P, hx + 47, hy + 15, 5.5, 3, { gap: 1.4, start: -1.2 });
   // bangs + crown over the face
   P.fill(curve(jit([[hx - 30, hy - 44], [hx + 6, hy - 62], [hx + 40, hy - 46], [hx + 48, hy - 20], [hx + 40, hy - 12], [hx + 20, hy - 16], [hx + 4, hy - 12], [hx - 10, hy + 6], [hx - 26, hy - 2]]), true, 0.5), K.hair);
   // hair clip
@@ -99,7 +102,7 @@ export function girlSide(P, x, y, s, { phase = 0, walk = 1, bf = 0, hairLag = 0,
 }
 
 // ---------------------------------------------------------------- the girl, close-up (front)
-export function girlBust(P, cx, cy, s, { t = 0, bf = 0, blink = 0, lookX = 0, lookY = 0, smile = 0.5, sway = 0, camera = 0, happy = 0, mouth = 0, glowRim = 0 } = {}) {
+export function girlBust(P, cx, cy, s, { t = 0, bf = 0, blink = 0, lookX = 0, lookY = 0, smile = 0.5, sway = 0, camera = 0, happy = 0, mouth = 0, glowRim = 0, noseRing = true } = {}) {
   P.save();
   P.translate(cx, cy);
   P.scale(s);
@@ -152,6 +155,8 @@ export function girlBust(P, cx, cy, s, { t = 0, bf = 0, blink = 0, lookX = 0, lo
   }
   // nose
   P.stroke(curve([[4, 26], [12, 52], [0, 60]], false), [0.2, 0.55, 0.15], 5);
+  P.stroke(curve([[-14, 58], [-8, 62], [0, 60]], false), [0.2, 0.55, 0.15], 4);
+  if (noseRing) hoop(P, 12, 62, 7.5, 4, { gap: 1.5, start: -1.6 });
   // mouth
   if (mouth > 0.05) {
     P.fill(ellipse(0, 94, 22, 8 + mouth * 16), [0.3, 1, 0.8]);

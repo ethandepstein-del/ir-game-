@@ -6,6 +6,10 @@ import { clamp, hash, lerp } from '../lib/util.mjs';
 import { fence, H, house, K, moon, mountains, pole, sandwichBoard, skyNight, stars, streetlight, stringLights, tree, W } from '../lib/world.mjs';
 import { blinkOn, LY, withCam } from './common.mjs';
 import { shotBust } from './girl.mjs';
+import { carBeams, carSide } from './car.mjs';
+import { pump } from '../lib/fx.mjs';
+import { circle, ellipse } from '../lib/shapes.mjs';
+import { easeOut, easeIn } from '../lib/util.mjs';
 import { T } from './songmap.mjs';
 
 const WALK_V = 330;
@@ -22,9 +26,9 @@ function wirePoint(wx, xo) {
   return [x, y, Math.atan(dy)];
 }
 
-export function walkWorld(P, S, { night = false, walkerX = 760, walk = 1, scrollT = null, girl = true, lamps = true, wireWords = null, chalk = null } = {}) {
+export function walkWorld(P, S, { night = false, walkerX = 760, walk = 1, scrollT = null, xo: xoIn = null, girl = true, lamps = true, wireWords = null, chalk = null, girlOpts = {} } = {}) {
   const { t, bp, bf } = S;
-  const xo = scrollT != null ? WALK_V * scrollT : xoAt(t);
+  const xo = xoIn ?? (scrollT != null ? WALK_V * scrollT : xoAt(t));
   if (night) skyNight(P); else P.linear(rect(-400, -400, W + 800, H + 800), 0, 0, 0, 760, [[0, [0, 0.5, 1]], [0.55, [0.08, 0.62, 0.72]], [1, [0.7, 0.85, 0.2]]]);
   stars(P, t, { n: night ? 90 : 40, yMax: 520, seed: 9, twinkle: 0.4 });
   moon(P, 1450, 170, 46);
@@ -71,7 +75,7 @@ export function walkWorld(P, S, { night = false, walkerX = 760, walk = 1, scroll
   if (lamps) for (let i = Math.floor((xo - 900) / 1700); i * 1700 - xo < W + 900; i++) streetlight(P, i * 1700 - xo + 850, 940, 420, night ? 1 : 0.7, t);
   if (girl) {
     const phase = Math.PI / 2 + (Math.PI / 2) * bp;
-    girlSide(P, walkerX, 950, 1.08, { phase, walk, bf, hairLag: Math.sin(phase * 2) * walk, blink: blinkOn(S, 3) });
+    girlSide(P, walkerX, 950, 1.08, { phase, walk, bf, hairLag: Math.sin(phase * 2) * walk, blink: blinkOn(S, 3), ...girlOpts });
   }
 }
 
@@ -90,7 +94,7 @@ function shotWalk(P, S, o) {
 }
 
 // rain that starts on the word "raining"
-function rain(P, S, line2) {
+function rain(P, S, line2, slant = 12) {
   if (!line2.words.length) return;
   const t0 = line2.words[1]?.t ?? line2.start;
   const k = clamp((S.t - t0) / 0.6);
@@ -100,7 +104,7 @@ function rain(P, S, line2) {
     const speed = 1500 + hash(i, 2) * 500;
     const x = (hash(i, 1) * (W + 400) - 200 + (S.t * speed * 0.18)) % (W + 400) - 100;
     const y = ((hash(i, 3) * (H + 300)) + S.t * speed) % (H + 300) - 150;
-    P.stroke(line([[x, y], [x - 12, y + 60]]), K.paper, 3);
+    P.stroke(line([[x, y], [x - slant, y + 60]]), K.paper, 3);
   }
 }
 
@@ -135,11 +139,66 @@ function shotFence(P, S, o) {
   else fenceWorld(P, S);
 }
 
+// ------------------------------------------------------------------ the ride
+// two heads behind the glass (car units): her pink bob by the near window, his curls driving
+function riders(P, g, her = true) {
+  const [nx] = g.seatNear, [fx] = g.seatFar;
+  P.fill(circle(fx - 60, -196, 30), [0.3, 0.55, 0.7]);
+  for (let i = 0; i < 6; i++) P.fill(circle(fx - 84 + i * 10, -222 + (i % 2) * 6, 11), [0.35, 0.7, 0.8]);
+  if (!her) return;
+  P.fill(ellipse(nx + 30, -198, 34, 34), [0, 1, 0]);
+  P.fill(ellipse(nx + 44, -186, 18, 22), [0.2, 0.07, 0]);
+}
+const noahAlone = (P, g) => riders(P, g, false);
+
+const PULL = [19.77, 20.8];  // the car rolls in and stops on "ride"
+const DOOR = 21.2;           // the passenger door swings open on the downbeat
+function shotPickup(P, S) {
+  const { t, bp } = S;
+  const s = 0.82;
+  const u = clamp((t - PULL[0]) / (PULL[1] - PULL[0]));
+  const x = lerp(-700, 1180, easeOut(u));
+  const stopped = t - PULL[1];
+  const pitch = stopped > 0 ? Math.sin(Math.min(stopped, 0.35) / 0.35 * Math.PI) * 0.03 * Math.exp(-stopped * 4) : 0;
+  // frame the curb: push in as the car arrives
+  const z = lerp(1.2, 1.36, easeOut(u));
+  withCam(P, 1240, 780, z, () => {
+    walkWorld(P, S, { night: true, xo: 3000, walkerX: 1530, walk: 0, girlOpts: { look: 1 } });
+    carBeams(P, x, 1075, s, { dir: 1, k: 1, len: 1500 });
+    carSide(P, x, 1075, s, {
+      dir: 1, roll: x, pitch, bf: S.bf, lights: 1, wet: 0.8, brake: stopped > 0 ? 1 : 0,
+      door: easeOut(clamp((t - DOOR) / 0.3)), inside: noahAlone,
+    });
+  });
+  rain(P, S, LY.line('v1_2'));
+  stampWords(P, LY.line('v1_2').words, t, 640, 230, 1040, 104, { inks: K.paper, hotInks: [1, 0, 0], shadow: [0, 0.8, 0.8] });
+}
+
+// the drive: streetlights pass the car every two beats, the blinker clicks through the last bar
+const DRIVE = [22.65, T.fence];
+function shotDrive(P, S) {
+  const { t, bp } = S;
+  const s = 0.82;
+  const xo = 3000 + 1700 / 2 * (bp - S.clock.beatPos(DRIVE[0]));
+  const z = 1.55 + 0.03 * S.kick;
+  P.save();
+  P.translate(W / 2, H / 2); P.scale(z); P.translate(-900, -900);
+  walkWorld(P, S, { night: true, xo, girl: false });
+  const lamp = ((xo + 850) % 1700) / 1700; // 0 when a streetlight is over the car
+  const sweep = { x: lerp(500, -500, lamp), k: Math.exp(-Math.pow((lamp - 0.5) * 4, 2)) };
+  const blink = t > 27.02 ? (pump(bp, 1.5) > 0.5 ? 1 : 0) : 0;
+  carSide(P, 900, 1075, s, { dir: 1, roll: xo, bounce: pump(bp, 4) * 5, bf: S.bf, lights: 1, wet: 0.6, blink, sweep, inside: riders });
+  P.restore();
+  rain(P, S, LY.line('v1_2'), 60);
+  stampWords(P, LY.line('v1_3').words, t, 960, 240, 1500, 104, { inks: K.paper, hotInks: [1, 0, 0], shadow: [0, 0.8, 0.8] });
+}
+
 export const SHOTS = [
   [T.titleEnd, T.walkClose, shotWalk, {}],
-  [T.walkClose, T.walkNight, shotWalk, { close: true }],
-  [T.walkNight, T.fence, shotWalk, { night: true }],
-  [T.fence, T.fenceClose, shotFence, {}],
+  [T.walkClose, PULL[0], shotWalk, { close: true }],
+  [PULL[0], DRIVE[0], shotPickup, {}, { kind: 'whip', dur: 0.24, dir: 0 }],
+  [DRIVE[0], DRIVE[1], shotDrive, {}, { kind: 'slam', dur: 0.2 }],
+  [T.fence, T.fenceClose, shotFence, {}, { kind: 'tear', dur: 0.3, seed: 4 }],
   [T.fenceClose, T.bust, shotFence, { close: true }],
   [T.bust, T.stops, shotBust, { camera: [T.bust + 0.6, T.stops - 0.3], lookY: 0, s: 1.15, cy: 560, captionWords: () => LY.line('h1_1').words.filter((w) => w.t < T.stops - 0.1) }],
 ];

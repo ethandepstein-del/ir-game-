@@ -250,8 +250,8 @@ def main():
     stats('master', z, sr, meter)
 
     rng = np.random.default_rng(7)
-    sf.write(out + '_24bit.wav', tpdf(z, 24, rng), sr, subtype='PCM_24')
-    sf.write(out + '_16bit.wav', tpdf(z, 16, rng), sr, subtype='PCM_16')
+    sf.write(args.out + '_24bit.wav', tpdf(z, 24, rng), sr, subtype='PCM_24')
+    sf.write(args.out + '_16bit.wav', tpdf(z, 16, rng), sr, subtype='PCM_16')
 
 
 if __name__ == '__main__':

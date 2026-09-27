@@ -4,11 +4,11 @@
 // A shot entry is [start, end, shot(P, S, opts), opts?, transitionIn?]. transitionIn is
 // { kind: 'whip'|'tear'|'iris'|'slam'|'wipe', dur, pre?, ...kind options } and blends from the
 // previous shot; `pre` is how much of `dur` happens before the cut (whips default to half).
-import { TRANSITIONS } from '../lib/fx.mjs';
+import { hit, shakeAt, TRANSITIONS } from '../lib/fx.mjs';
 import { rect } from '../lib/shapes.mjs';
 import { clamp, hs, inv } from '../lib/util.mjs';
 import { H, K, W } from '../lib/world.mjs';
-import { loadSong, makeS } from './common.mjs';
+import { loadSong, makeS, slamAt, slamOverlay } from './common.mjs';
 import { SECTIONS, T } from './songmap.mjs';
 // Sequences load independently: while the team works in parallel, a sequence that fails to
 // import renders as an error card instead of taking every other sequence down with it.
@@ -91,7 +91,11 @@ export function drawFrame(P, clock, t, scale = 1) {
   // camera punch on every downbeat in the loud sections
   const punchOn = !NO_PUNCH.some(([a, b]) => t >= a && t < b);
   const punch = 1 + (punchOn ? 0.022 * S.E * clock.pulse('downbeats', t, 0.22) : 0);
-  P.translate(W / 2, H / 2);
+  // a jolt when a punch word slams in
+  const sl = slamAt(t);
+  const [jx, jy, jr] = sl ? shakeAt(t, 16 * hit(t - sl.t0, 0.12), 5) : [0, 0, 0];
+  P.translate(W / 2 + jx, H / 2 + jy);
+  P.rotate(jr);
   P.scale(punch);
   P.translate(-W / 2, -H / 2);
   const tr = activeTransition(t, i);
@@ -99,6 +103,7 @@ export function drawFrame(P, clock, t, scale = 1) {
     const [u, spec, from, to] = tr;
     TRANSITIONS[spec.kind](P, clamp(u), () => drawShot(P, t, from), () => drawShot(P, t, to), spec);
   } else drawShot(P, t, i);
+  slamOverlay(P, S, (str, font) => P.measure(str, font));
   const fade = Math.max(1 - clamp(t / 0.8), inv(T.end - 2.2, T.end - 0.2, t), flashAt(t));
   if (fade > 0) P.alpha(fade).fill(rect(-200, -200, W + 400, H + 400), K.paper).alpha(1);
   P.restore();
