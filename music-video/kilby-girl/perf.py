@@ -320,13 +320,16 @@ def detect_drums(E):
     sn_idx = np.array([s[0] for s in snares], int)
     toms = [t for t in dedupe(toms, 0.07) if not len(sn_idx) or np.min(np.abs(sn_idx - t[0])) > 0.04 * EFR]
 
-    # ---- cymbals: the 6 kHz+ band; loudness and decay tell hat from crash
+    # ---- cymbals: the 6 kHz+ band; loudness and decay (on a 15 ms smoothed envelope) type them
+    import scipy.ndimage as nd
+    Hs = nd.uniform_filter1d(E['H'], int(0.015 * EFR))
     cym = []
     hs = band_onsets(E['H'], 6, ref['H'] - 30, min_gap=0.05)
     for n, i in enumerate(hs):
         k, P, ip = onset_time(E['H'], i, fwd=0.03)
         nxt = hs[n + 1] if n + 1 < len(hs) else None
-        cym.append([k, P, decay_rate(E['H'], ip, nxt), lv('Sc', i, 0.03)])
+        j = min(ip + int(0.01 * EFR), len(Hs) - 1)
+        cym.append([k, P, decay_rate(Hs, j, nxt), lv('Sc', i, 0.03)])
     cym = dedupe(cym, 0.045)
     return {'ref': ref, 'kicks': kicks, 'snares': snares, 'toms': toms, 'cym': cym}
 

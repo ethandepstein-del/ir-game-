@@ -88,15 +88,20 @@ def widen(x, sr, side_db=1.5, f0=300):
     return np.stack([m + s, m - s], axis=1)
 
 
-def glue(x, sr, thresh_db, ratio=1.5, knee=6.0):
+def glue_gr(x, sr, thresh_db, ratio=1.5, knee=6.0):
+    """Glue compressor gain reduction in dB, per sample."""
     sc = ss.sosfilt(ss.butter(2, 150, 'highpass', fs=sr, output='sos'), x, axis=0)
     p = np.mean(sc ** 2, axis=1)
     ms = env_follow(p, coef(30, sr), coef(250, sr))
     lvl = 10 * np.log10(np.maximum(ms, 1e-12))
     over = lvl - thresh_db
-    gr = np.where(over <= -knee / 2, 0.0,
-                  np.where(over >= knee / 2, over * (1 - 1 / ratio),
-                           (1 - 1 / ratio) * (over + knee / 2) ** 2 / (2 * knee)))
+    return np.where(over <= -knee / 2, 0.0,
+                    np.where(over >= knee / 2, over * (1 - 1 / ratio),
+                             (1 - 1 / ratio) * (over + knee / 2) ** 2 / (2 * knee)))
+
+
+def glue(x, sr, thresh_db, ratio=1.5, knee=6.0):
+    gr = glue_gr(x, sr, thresh_db, ratio, knee)
     print(f'  glue: max GR {gr.max():.1f} dB, mean GR (loud parts) {gr[gr > 0.1].mean():.1f} dB')
     return x * (10 ** (-gr / 20))[:, None]
 
@@ -152,6 +157,30 @@ def limit(x, sr, ceiling_db=-1.0, look_ms=1.5):
     print(f'  limiter: max GR {gr.max():.1f} dB, GR>1dB {100 * np.mean(gr > 1):.1f}% of the time, '
           f'mean GR while active {gr[gr > 0.05].mean():.2f} dB')
     return x * g[:, None]
+
+
+def ramp(n, sr, t0, t1):
+    """0 before t0, raised-cosine 0 -> 1 from t0 to t1, 1 after (per sample)."""
+    u = np.clip((np.arange(n) / sr - t0) / (t1 - t0), 0.0, 1.0)
+    return 0.5 - 0.5 * np.cos(np.pi * u)
+
+
+def outro_master(y0, sr, gain_db, clip_db, a, drive_db=3.5, shelf_db=-1.5, glue_keep=0.0):
+    """Same chain from the glue on, with the outro moves automated by a (0 = v3 master, 1 = outro).
+
+    Once the vocal stops, the stabs are the hottest peaks in the song relative to their loudness,
+    so the fixed drive made the clipper and limiter work hardest exactly where nothing masks them.
+    In the outro: the glue fades out (it filled the stop-time gaps and swelled the ring-out),
+    the 3 kHz shelf comes down (the mix is already brightest here), and the drive into the
+    clipper/limiter drops so both sit nearly idle. With a == 0 every step is the v3 chain.
+    """
+    gr = glue_gr(y0, sr, thresh_db=-16.0) * (1 - a * (1 - glue_keep))
+    y = y0 * (10 ** (-gr / 20))[:, None]
+    b, c = biquad('highshelf', 3000, sr, shelf_db, 0.55)
+    y = y + a[:, None] * (ss.lfilter(b, c, y, axis=0) - y)
+    y = y * (10 ** ((gain_db - a * drive_db) / 20))[:, None]
+    print('  outro pass:')
+    return limit(soft_clip(y, clip_db), sr)
 
 
 def tpdf(x, bits, rng):
