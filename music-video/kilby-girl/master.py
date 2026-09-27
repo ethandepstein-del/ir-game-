@@ -10,9 +10,16 @@ Chain (all 64-bit float, 44.1 kHz):
   7. Look-ahead true-peak limiter to a -1.0 dBTP ceiling at the loudness target (-11.5 LUFS default)
   8. TPDF dither to 24-bit and 16-bit
 
-Usage: python3 master.py in.wav out_prefix [target_lufs] [clip_db]
+Usage: python3 master.py in.wav out_prefix [target_lufs] [clip_db] [--outro SEC ...]
+
+Without --outro this is the v3 master, sample for sample. --outro SEC (v4: 223.5) crossfades,
+over --outro-ramp seconds, into an outro treatment for the stabs and ring-out after the vocal:
+the glue fades out, the 3 kHz shelf drops by 1.5 dB and the drive into the clipper/limiter by
+3.5 dB, so the stabs stay unclipped and the ring-out decays as mixed. The makeup gain is still
+solved on the plain chain, so the body before SEC is untouched and the integrated loudness
+reads a little under the target (the outro is ~2.3 LU quieter than in v3).
 """
-import sys
+import argparse
 import numpy as np
 import numba
 import pyloudnorm as pyln
@@ -201,18 +208,27 @@ def stats(label, x, sr, meter):
 
 
 def main():
-    src, out = sys.argv[1], sys.argv[2]
-    target = float(sys.argv[3]) if len(sys.argv) > 3 else -11.5
-    clip_db = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0
-    x, sr = sf.read(src, always_2d=True, dtype='float64')
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('src'); ap.add_argument('out')
+    ap.add_argument('target', nargs='?', type=float, default=-11.5)
+    ap.add_argument('clip_db', nargs='?', type=float, default=0.0)
+    ap.add_argument('--outro', type=float, metavar='SEC',
+                    help='start of the outro treatment (Kilby Girl MIX 1 rev 1: 223.5); off by default')
+    ap.add_argument('--outro-ramp', type=float, default=1.95, metavar='SEC', help='crossfade length (1.95)')
+    ap.add_argument('--outro-drive', type=float, default=3.5, metavar='DB', help='less drive into clip/limit (3.5)')
+    ap.add_argument('--outro-shelf', type=float, default=-1.5, metavar='DB', help='change to the 3 kHz shelf (-1.5)')
+    ap.add_argument('--outro-glue', type=float, default=0.0, metavar='K', help='glue kept, 0..1 (0)')
+    args = ap.parse_args()
+    target, clip_db = args.target, args.clip_db
+    x, sr = sf.read(args.src, always_2d=True, dtype='float64')
     meter = pyln.Meter(sr)
     stats('mix   ', x, sr, meter)
 
-    y = tonal_eq(x, sr)
-    y = deess(y, sr)
-    y = widen(y, sr)
+    y0 = tonal_eq(x, sr)
+    y0 = deess(y0, sr)
+    y0 = widen(y0, sr)
     # threshold sits just under the chorus level so only the loud sections get ~1 dB of glue
-    y = glue(y, sr, thresh_db=-16.0)
+    y = glue(y0, sr, thresh_db=-16.0)
 
     # find the pre-limiter gain that lands the target after limiting (limiting costs a little loudness)
     gain_db = target - meter.integrated_loudness(y)
@@ -223,6 +239,14 @@ def main():
             break
         gain_db += err
     print(f'  makeup into limiter: {gain_db:+.2f} dB')
+    if args.outro is not None:
+        # the makeup gain stays the body's, so everything before the outro is the v3 master
+        a = ramp(len(z), sr, args.outro, args.outro + args.outro_ramp)
+        z2 = outro_master(y0, sr, gain_db, clip_db, a, args.outro_drive, args.outro_shelf, args.outro_glue)
+        n0 = int(np.argmax(a > 0))
+        z = np.concatenate([z[:n0], z2[n0:]])  # a == 0 before n0, so the splice is sample-exact
+        print(f'  outro from {args.outro:.2f} s: drive -{args.outro_drive} dB, 3 kHz shelf '
+              f'{args.outro_shelf:+} dB, glue x{args.outro_glue} over {args.outro_ramp} s')
     stats('master', z, sr, meter)
 
     rng = np.random.default_rng(7)
