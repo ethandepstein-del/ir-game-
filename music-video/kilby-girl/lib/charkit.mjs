@@ -157,7 +157,8 @@ export function mouth(P, x, y, w, v = {}, o = {}) {
   const smile = clamp(v.smile ?? 0.2, -1, 1), teeth = v.teeth ?? 0.8;
   const lineInk = o.line || INK.line, lw = o.lw ?? w * 0.2;
   const hw = w * (1 + wide * 0.32 - round * 0.45 + Math.max(0, smile) * 0.18);
-  const h = open * w * 1.35 * (1 + round * 0.15) + (v.grin ?? 0) * w * 0.55;
+  const grin = clamp(v.grin ?? 0);
+  const h = open * w * 1.35 * (1 + round * 0.15) + grin * w * 0.8;
   const cy = y - Math.max(0, smile) * w * 0.12;
   if (h < w * 0.12) {
     const c = smile * w * 0.3;
@@ -188,7 +189,9 @@ export function mouth(P, x, y, w, v = {}, o = {}) {
   P.fill(shape, INK.mouth);
   P.save();
   P.clip(shape);
-  if (teeth > 0) P.fill(roundRect(x - hw * 0.8, top - w * 0.3, hw * 1.6, w * 0.3 + Math.min(h * 0.32, w * 0.42) * teeth, w * 0.12), INK.teeth);
+  const th = lerp(Math.min(h * 0.32, w * 0.42), h * 0.62, grin) * teeth;
+  if (teeth > 0) P.fill(roundRect(x - hw * 0.84, top - w * 0.3, hw * 1.68, w * 0.3 + th, w * 0.14), INK.teeth);
+  if (teeth > 0 && grin > 0.2) P.stroke(line([[x, top], [x, top + th * 0.8]]), [0.02, 0.08, 0.1], Math.max(1, w * 0.06));
   if ((v.tongue ?? 1) > 0 && h > w * 0.4) P.fill(ellipse(x, bot + h * 0.05, hw * 0.62, h * 0.38), INK.tongue);
   P.restore();
   P.stroke(shape, o.edge || lineInk, lw * 0.5);

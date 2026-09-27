@@ -18,7 +18,7 @@ const SKIN_SHADE = [0.34, 0.2, 0.04];
 export const BAND = {
   noah: {
     name: 'noah',
-    hair: { style: 'curly', ink: [0.5, 0.9, 0.85], shade: [0.7, 1, 1], hi: [0.32, 0.6, 0.45] },
+    hair: { style: 'curly', ink: [0.62, 0.9, 0.7], shade: [0.8, 1, 0.95], hi: [0.45, 0.62, 0.38] },
     skin: [0.26, 0.11, 0], skinShade: [0.14, 0.13, 0.05],
     face: { w: 55, cheek: 57, jaw: 49, jawY: 38, chinW: 25, chinY: 63, top: -62, eyeX: 20, eyeY: 2, eyeR: 4.4, browY: -15, browLen: 24, browT: 8.5, browArch: 0.05, noseY: 25, noseW: 12, mouthY: 42, mouthW: 18, earY: 6, earH: 15, stubble: 1, sideburns: 1 },
     build: { sh: 88, waist: 76, hip: 70, neck: 64, arm: 1.12, armW: 1.3, height: 1 },
@@ -28,7 +28,7 @@ export const BAND = {
   },
   ethan: {
     name: 'ethan',
-    hair: { style: 'swept', ink: [0.45, 0.88, 0.9], shade: [0.62, 1, 1], hi: [0.28, 0.55, 0.5] },
+    hair: { style: 'swept', ink: [0.6, 0.88, 0.74], shade: [0.78, 1, 0.95], hi: [0.42, 0.6, 0.42] },
     skin: [0.2, 0.08, 0], skinShade: [0.13, 0.12, 0.05],
     face: { w: 45, cheek: 44, jaw: 37, jawY: 40, chinW: 15, chinY: 64, top: -60, eyeX: 17, eyeY: 2, eyeR: 4, browY: -15, browLen: 19, browT: 6, browArch: 0.2, noseY: 24, noseW: 8, mouthY: 42, mouthW: 16, earY: 6, earH: 14, stubble: 0.35, sideburns: 0.5 },
     glasses: true,
@@ -36,7 +36,7 @@ export const BAND = {
     top: { kind: 'openShirt', ink: [0.03, 0.26, 0.4], inner: [0.17, 0.2, 0.3], long: true },
     pants: [0.42, 0.26, 0.12], shoes: [0.02, 0.03, 0.1],
     instrument: 'acoustic', strap: [0.9, 0.95, 0.15], guitarAngle: -0.3,
-    expr: 'smile',
+    expr: { grin: 0.7, smile: 0.3 },
   },
   belle: {
     name: 'belle',
@@ -51,7 +51,7 @@ export const BAND = {
   },
   brooks: {
     name: 'brooks',
-    hair: { style: 'wavy', ink: [0.78, 0.8, 0.26], shade: [0.85, 1, 0.45], hi: [0.55, 0.45, 0.08] },
+    hair: { style: 'wavy', ink: [0.72, 0.78, 0.36], shade: [0.85, 0.98, 0.55], hi: [0.6, 0.45, 0.12] },
     skin: [0.2, 0.08, 0], skinShade: [0.13, 0.12, 0.05],
     face: { w: 45, cheek: 45, jaw: 39, jawY: 44, chinW: 17, chinY: 68, top: -62, eyeX: 17, eyeY: 1, eyeR: 4.1, browY: -16, browLen: 19, browT: 5.6, browArch: 0.12, noseY: 27, noseW: 9, noseLen: 1.2, mouthY: 46, mouthW: 17, earY: 5, earH: 15, stubble: 0.25, sideburns: 0.4 },
     build: { sh: 66, waist: 54, hip: 54, neck: 42, arm: 1.05, armW: 0.96, height: 1.05 },
@@ -134,19 +134,21 @@ function hairBack(P, spec, g) {
   const T = g.turn * -4;
   if (st === 'curly') {
     // a tight mop that hugs the skull; the silhouette is a ring of curl bumps, not a helmet
-    P.fill(curve(j([[-58 + T, 10], [-66 + T, -18], [-64 + T, -48], [-50 + T, -74], [-26 + T, -90], [2 + T, -95], [28 + T, -90], [50 + T, -76], [64 + T, -50], [67 + T, -20], [60 + T, 10], [40, -30], [-40, -30]]), true, 0.45), h.ink);
+    P.fill(curve(j([[-58 + T, 10], [-65 + T, -18], [-63 + T, -46], [-50 + T, -68], [-26 + T, -82], [2 + T, -86], [28 + T, -82], [50 + T, -70], [63 + T, -48], [66 + T, -20], [60 + T, 10], [40, -30], [-40, -30]]), true, 0.45), h.ink);
     const ring = [];
     for (let i = 0; i < 15; i++) {
       const a = Math.PI * (0.93 + (i / 14) * 1.14);
       const rr = 1 + hs(3, i) * 0.05;
-      ring.push([Math.cos(a) * 62 * rr + T, -38 + Math.sin(a) * 55 * rr, i % 3 === 1 ? 0.8 : 1]);
+      ring.push([Math.cos(a) * 61 * rr + T, -36 + Math.sin(a) * 47 * rr, i % 3 === 1 ? 0.8 : 1]);
     }
     ring.push([-62 + T, 2, 0.85], [63 + T, 2, 0.85], [-58 + T, 12, 0.6], [59 + T, 12, 0.6]);
     curlBumps(P, ring, h.ink, 12.5, 11, g.bf, g);
   } else if (st === 'swept') {
     P.fill(curve(j([[-47 + T, 4], [-51 + T, -26], [-48 + T, -54], [-36 + T, -78], [-14 + T, -96], [10 + T, -103], [32 + T, -98], [48 + T, -82], [54 + T, -56], [52 + T, -26], [47 + T, 4], [30, -20], [-30, -20]]), true, 0.45), h.ink);
   } else if (st === 'wavy') {
-    P.fill(curve(j([[-47 + T, 2], [-52 + T, -28], [-48 + T, -58], [-32 + T, -82], [-6 + T, -95], [22 + T, -96], [44 + T, -84], [55 + T, -60], [56 + T, -30], [50 + T, 2], [30, -20], [-30, -20]]), true, 0.45), h.ink);
+    P.fill(curve(j([[-47 + T, 2], [-53 + T, -28], [-52 + T, -54], [-40 + T, -74], [-18 + T, -86], [6 + T, -88], [28 + T, -86], [46 + T, -76], [56 + T, -54], [56 + T, -28], [50 + T, 2], [30, -20], [-30, -20]]), true, 0.45), h.ink);
+    // loose waves break the top of the silhouette
+    curlBumps(P, [[-36 + T, -76, 1], [-12 + T, -88, 1.1], [14 + T, -90, 1], [36 + T, -82, 0.95], [52 + T, -64, 0.8], [-50 + T, -58, 0.8]], h.ink, 12, 31, g.bf, g);
   } else if (st === 'long') {
     const sw = g.dx * 1.6, lift = g.dy;
     P.fill(curve(j([[-50 + T, -30], [-46 + T, -66], [-24 + T, -86], [2 + T, -90], [26 + T, -86], [47 + T, -66], [51 + T, -30], [57, 40], [62 + sw * 0.5, 118], [68 + sw, 182 + lift], [34 + sw, 196 + lift], [-30 + sw, 196 + lift], [-66 + sw, 182 + lift], [-60 + sw * 0.5, 118], [-57, 40]]), true, 0.45), h.ink);
@@ -169,7 +171,7 @@ function hairFront(P, spec, g) {
     [[-32, -80, 3.6], [-12, -88, 4], [-46, -66, 3.4], [12, -86, 4.2]].forEach(([x, y, a]) => P.stroke(arc(x + T + g.dx * 0.5, y + g.dy * 0.5, 4.5, a, a + 2.2), h.hi, 2.4));
   } else if (st === 'swept') {
     // swept up and back off the forehead; the hairline shows
-    P.fill(curve(j([[-47 + T, -28], [-44 + T, -50], [-30 + T, -60 + fdy], [-10 + T, -57 + fdy], [12 + T, -62 + fdy], [34 + T, -58 + fdy], [46 + T, -48], [48 + T, -28], [53 + T, -60], [44 + T, -88], [22 + T, -104], [-2 + T, -107], [-24 + T, -99], [-40 + T, -82], [-49 + T, -58]]), true, 0.4), h.ink);
+    P.fill(curve(j([[-47 + T, -28], [-44 + T, -50], [-30 + T, -60 + fdy], [-10 + T, -57 + fdy], [12 + T, -62 + fdy], [34 + T, -58 + fdy], [46 + T, -48], [48 + T, -28], [55 + T, -58], [52 + T, -80], [34 + T, -98], [8 + T, -106], [-18 + T, -100], [-36 + T, -86], [-49 + T, -60]]), true, 0.4), h.ink);
     for (const [x0, dx] of [[-28, 10], [-10, 12], [8, 14], [26, 12], [-38, 6]]) {
       P.stroke(curve([[x0 + T, -60 + fdy], [x0 + dx * 0.6 + T, -82], [x0 + dx * 1.6 + T, -98 + g.dy * 0.4]], false), h.shade, 2.6);
     }
@@ -177,7 +179,7 @@ function hairFront(P, spec, g) {
   } else if (st === 'wavy') {
     // short auburn waves pushed across the forehead
     const d = g.dx * 0.7, e = g.dy * 0.6;
-    P.fill(curve(j([[-49 + T, -30], [-42 + T, -46 + fdy], [-30 + T, -50 + fdy], [-19 + T + d, -41 + fdy + e], [-6 + T, -51 + fdy], [8 + T, -53 + fdy], [20 + T + d, -45 + fdy + e], [33 + T, -55 + fdy], [45 + T, -52], [51 + T, -32], [56 + T, -62], [42 + T, -88], [16 + T, -100], [-12 + T, -98], [-36 + T, -86], [-51 + T, -60]]), true, 0.45), h.ink);
+    P.fill(curve(j([[-49 + T, -30], [-42 + T, -46 + fdy], [-30 + T, -50 + fdy], [-19 + T + d, -41 + fdy + e], [-6 + T, -51 + fdy], [8 + T, -53 + fdy], [20 + T + d, -45 + fdy + e], [33 + T, -55 + fdy], [45 + T, -52], [51 + T, -32], [56 + T, -56], [44 + T, -80], [18 + T, -90], [-12 + T, -90], [-36 + T, -80], [-51 + T, -58]]), true, 0.45), h.ink);
     for (const [x, y, s] of [[-30, -70, 1], [-4, -78, -1], [22, -76, 1], [-40, -56, -1], [38, -64, -1]]) {
       P.stroke(curve([[x - 12 + T, y + 6], [x - 4 + T, y - 3 * s], [x + 4 + T, y + 3 * s], [x + 12 + T, y - 6]], false), h.shade, 2.6);
     }
@@ -334,8 +336,8 @@ function torso(P, spec, sk, bf) {
   if (t.print === 'text') {
     // Noah's black tee: white band + BARR
     const px = cx + 2, py = ny + 70;
-    P.fill(rect(px - 42, py - 30, 84, 6), K.paper);
-    P.text('BARR', px, py + 4, '30px Anton', K.paper, { spacing: 3 });
+    P.fill(rect(px - 34, py - 26, 68, 5), K.paper);
+    P.text('BARR', px, py + 2, '25px Anton', K.paper, { spacing: 2 });
   } else if (t.print === 'portrait') {
     // Brooks' vintage portrait print: a crooner in a suit, grey halftone on black, a red sun behind
     const px = cx - 4, py = ny + 92;
@@ -362,11 +364,11 @@ function torso(P, spec, sk, bf) {
     const flap = sk.flap || 0;
     for (const sd of [-1, 1]) {
       const S = sd < 0 ? L : R;
-      const hemIn = [cx + sd * (b.waist * 0.32) + flap * (sd < 0 ? 10 : 14), hy + 6 - Math.abs(flap) * 4];
+      const hemIn = [cx + sd * (b.waist * 0.5) + flap * (sd < 0 ? 10 : 14), hy + 6 - Math.abs(flap) * 4];
       const hemOut = [cx * 0.3 + sd * (b.hip + 8) + flap * 4, hy + 8];
       const front = j([
         [S[0] + sd * 5, S[1] - 1], [lerp(S[0], nx, 0.6), ny + 2], [nx + sd * (nw + 2), ny + 4],
-        [nx + sd * (nw * 0.7 + 4), ny + 40], [lerp(nx + sd * nw * 0.7, hemIn[0], 0.5) + flap * 3, lerp(ny + 40, hemIn[1], 0.5)], hemIn, hemOut,
+        [nx + sd * (nw * 0.9 + 6), ny + 40], [lerp(nx + sd * nw * 0.9, hemIn[0], 0.5) + flap * 3, lerp(ny + 40, hemIn[1], 0.5)], hemIn, hemOut,
         [cx + sd * (b.waist + 5), wy], [S[0] + sd * 1, S[1] + 60],
       ]);
       P.fill(curve(front, true, 0.3), t.ink);
@@ -588,9 +590,10 @@ export function player(P, spec, x, floor, s, pose = {}) {
     P.restore();
   }
   // legs: two-bone IK from hips to planted feet; knees push out as the hips drop
-  const stance = (b.female ? 44 : 52) + b.hip * 0.3;
+  const stance = b.hip * 0.5 + (b.female ? 10 : 16);
   const feetY = -8 - k.lift * 0.55;
-  const thigh = 118 * Hs, shin = 116 * Hs;
+  const restL = Math.hypot(stance - b.hip * 0.5, -236 * Hs + 6 + 8);
+  const thigh = restL * 0.5 + 0.8, shin = restL * 0.5 + 0.8;
   const legW = b.female ? 40 : 46;
   for (const sd of [-1, 1]) {
     const hp = [sd * b.hip * 0.5 + lx * 0.2, hipY + 6];
@@ -625,7 +628,7 @@ export function player(P, spec, x, floor, s, pose = {}) {
   const nw = b.neck;
   P.fill(capsule(neck[0], neck[1] + 6, hx, hy + 36, nw, nw * 0.92), skinOf(spec));
   P.fill(ellipse(hx, hy + 52, nw * 0.5, 12), spec.skinShade || [0.14, 0.13, 0.04], 'lighter');
-  head(P, spec, hx, hy, Hs, {
+  head(P, spec, hx, hy, Hs * 1.08, {
     ...pose, bf, pitch: num(pose.pitch) + pitchBang, tilt: num(pose.tilt, lean2tilt(k)),
     hair: { dx: hairDX, dy: hairDY }, skipBack: spec.hair.style === 'long', mouth: pose.mouth, viseme: pose.viseme,
   });
@@ -634,7 +637,7 @@ export function player(P, spec, x, floor, s, pose = {}) {
   let strumHand = [L[0] + 10, hipY - 50], fretH = [R[0] + 40, shY + 90];
   if (kind) {
     const rot = (spec.guitarAngle ?? -0.34) + k.lean * 0.04 + bodyDY * 0.002;
-    const bx = -18 + lx * 0.5, by = hipY - 42 + bodyDY * 0.6 + (kind === 'bass' ? -34 : 0);
+    const bx = -18 + lx * 0.5, by = hipY - 42 + bodyDY * 0.6 + (kind === 'bass' ? -12 : 0);
     const I = INST[kind];
     const d = [Math.cos(rot), Math.sin(rot)], n = [-d[1], d[0]];
     // strap over the (screen-right) shoulder

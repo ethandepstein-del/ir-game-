@@ -404,6 +404,208 @@ def detect_fills(drums, beats):
 # ====================================================================================== analyze
 
 
+# ====================================================================================== vocal
+
+# (open, wide, round) for a syllable's vowel spelling, checked in order
+VOWEL_SHAPES = [
+    (r'(igh|i[^aeiouy]e$|ie$|y$(?<=^[^aeiou]y))', (0.9, 0.5, 0.0)),   # "night", "like", "my": ah-ee
+    (r'(oo|ou(?!gh)|ew|ue|ui)', (0.45, 0.0, 1.0)),                     # "you", "blue": oo
+    (r'(ow|ou)', (0.8, 0.1, 0.6)),                                      # "how", "out": ah-oo
+    (r'(oy|oi)', (0.7, 0.2, 0.6)),
+    (r'(or|oa|oe|o[^aeiouy]e$|o$)', (0.75, 0.05, 0.75)),                # "go", "home", "more": oh
+    (r'(er|ir|ur|ear|our)', (0.5, 0.2, 0.45)),                          # "girl", "her": r-colored
+    (r'(ee|ea|ie|ey|ei|y$)', (0.45, 1.0, 0.0)),                         # "see", "baby": ee
+    (r'(ay|ai|a[^aeiouy]e$)', (0.7, 0.8, 0.0)),                         # "day", "late": ay
+    (r'(au|aw|al)', (0.95, 0.1, 0.45)),                                  # "saw", "all"
+    (r'(ar|a)', (1.0, 0.35, 0.0)),                                       # "car", "that": ah
+    (r'o', (0.8, 0.1, 0.5)),                                             # "not"
+    (r'u', (0.75, 0.25, 0.1)),                                           # "but"
+    (r'e', (0.65, 0.65, 0.0)),                                           # "bed"
+    (r'i', (0.5, 0.8, 0.0)),                                             # "it"
+]
+
+
+def syllable_shapes(word):
+    """rough per-syllable (open, wide, round) targets from a word's spelling"""
+    w = re.sub(r'[^a-z]', '', word.lower())
+    if not w:
+        return []
+    groups = [m for m in re.finditer(r'[aeiouy]+r?', w)]
+    if len(groups) > 1 and w.endswith('e') and not w.endswith(('le', 'ee')) and groups[-1].group() == 'e':
+        groups = groups[:-1]                      # silent final e
+    if not groups:
+        return [(0.5, 0.3, 0.1)]
+    out = []
+    for g in groups:
+        ctx = w[g.start():g.end() + 3] if len(groups) > 1 else w[g.start():]
+        shape = next((sh for pat, sh in VOWEL_SHAPES if re.match(pat, ctx) or re.search(pat, g.group())), (0.6, 0.3, 0.2))
+        if len(groups) == 1:
+            shape = next((sh for pat, sh in VOWEL_SHAPES if re.search(pat, w[g.start():])), shape)
+        out.append(shape)
+    return out
+
+
+def load_words(lyrics):
+    """[(t, e, word)] from a lyrics dict ({lines: [{words: [{w, t, e}]}]}) or a list of lines"""
+    lines = lyrics.get('lines', []) if isinstance(lyrics, dict) else (lyrics or [])
+    out = []
+    for ln in lines:
+        for w in ln.get('words', []):
+            t = w.get('t', w.get('start'))
+            e = w.get('e', w.get('end'))
+            txt = w.get('w', w.get('word', w.get('text', '')))
+            if t is None:
+                continue
+            out.append((float(t), float(e) if e is not None else float(t) + 0.25, str(txt)))
+    out.sort()
+    # a word never runs into the next one
+    return [(t, min(e, out[k + 1][0]) if k + 1 < len(out) else e, w) for k, (t, e, w) in enumerate(out)]
+
+
+def smooth1(x, tau, fps=FPS):
+    """forward-backward one-pole smoothing (zero phase), time constant tau seconds"""
+    import scipy.signal as ss
+    a = np.exp(-1 / (tau * fps))
+    return ss.filtfilt([1 - a], [1, -a], x)
+
+
+def vocal_visemes(voc, words, n):
+    """voc: mono vocal stem. Returns env/open/wide/round arrays of length n at FPS."""
+    import scipy.signal as ss
+    hop = SR // FPS
+    win = 2048
+    pad = np.pad(voc, (win // 2, win // 2 + hop * n))
+    idx = np.arange(win)[None, :] + hop * np.arange(n)[:, None]
+    fr = pad[idx] * np.hanning(win)
+    spec = np.abs(np.fft.rfft(fr, axis=1)) ** 2
+    freqs = np.fft.rfftfreq(win, 1 / SR)
+    band = lambda lo, hi: spec[:, (freqs >= lo) & (freqs < hi)].sum(1) + 1e-12
+    db = 10 * np.log10(band(80, 8000))
+    top = np.percentile(db, 99.5)
+    env = np.clip((db - (top - 30)) / 30, 0, 1)
+    env = np.maximum(smooth1(env, 0.02), 0)
+    # brightness of the vowel: F2 region (1.7-3.2 kHz) against the low formant region (350-1100 Hz)
+    bright = 10 * np.log10(band(1700, 3200)) - 10 * np.log10(band(350, 1100))
+    voiced = env > 0.35
+    mu, sd = (bright[voiced].mean(), bright[voiced].std() + 1e-6) if voiced.any() else (0, 1)
+    z = smooth1(np.clip((bright - mu) / sd, -3, 3), 0.04)
+    ac_wide, ac_round = 1 / (1 + np.exp(-1.6 * z)), 1 / (1 + np.exp(1.6 * z))
+
+    t = np.arange(n) / FPS
+    gate = np.zeros(n)
+    lex = np.zeros((n, 3))
+    has = np.zeros(n, bool)
+    for (t0, t1, w) in words:
+        shapes = syllable_shapes(w)
+        if not shapes:
+            continue
+        i0, i1 = int(np.floor(t0 * FPS)), int(np.ceil(t1 * FPS))
+        i0, i1 = max(0, i0), min(n, max(i1, i0 + 2))
+        span = np.linspace(0, 1, i1 - i0, endpoint=False)
+        k = np.minimum((span * len(shapes)).astype(int), len(shapes) - 1)
+        lex[i0:i1] = np.array(shapes)[k]
+        has[i0:i1] = True
+        g = np.ones(i1 - i0)
+        lw = re.sub(r'[^a-z]', '', w.lower())
+        if lw[:1] in ('m', 'b', 'p'):                 # lips closed at the start of the word
+            g[:max(1, int(0.045 * FPS))] = 0.05
+        if lw[-1:] in ('m', 'b', 'p'):
+            g[-max(1, int(0.05 * FPS)):] = 0.1
+        gate[i0:i1] = np.maximum(gate[i0:i1], g)
+        # brief closure between back-to-back words
+        if i0 > 0 and gate[i0 - 1] > 0.5:
+            gate[i0 - 1] = min(gate[i0 - 1], 0.35)
+    if not words:
+        gate[:], has[:] = 1, True
+        lex[:] = (0.8, 0.35, 0.2)
+    gate = np.clip(smooth1(gate, 0.018), 0, 1)
+    # singing the lyrics do not cover (ad-libs, held notes past a word) still opens the mouth a little
+    loose = np.clip((env - 0.45) / 0.55, 0, 1) * 0.6 * (1 - gate)
+    open_ = np.clip(env * (0.35 + 0.65 * lex[:, 0]) * gate * 1.25 + loose, 0, 1)
+    wide = np.where(has, 0.65 * lex[:, 1] + 0.35 * ac_wide, 0.5 * ac_wide)
+    rnd = np.where(has, 0.65 * lex[:, 2] + 0.35 * ac_round, 0.5 * ac_round)
+    act = np.clip(smooth1(np.maximum(gate, loose / 0.6) * (env > 0.08), 0.03), 0, 1)
+    wide = np.clip(smooth1(wide, 0.03) * act, 0, 1)
+    rnd = np.clip(smooth1(rnd, 0.03) * act, 0, 1)
+    return env, open_, wide, rnd
+
+
+# ====================================================================================== energy, sections
+
+# song map (matches the README and scenes.mjs)
+SECTIONS = [[0.0, 'intro'], [12.48, 'verse1'], [38.66, 'hook1'], [61.59, 'break'], [85.58, 'verse2'],
+            [118.67, 'lightsout'], [123.03, 'hook2'], [147.39, 'breakdown'], [169.56, 'build'],
+            [183.59, 'final'], [225.52, 'outro'], [238.31, 'ringout']]
+
+
+def energy_curve(y, n):
+    """0..1 smoothed loudness intensity at FPS (momentary-loudness-like 400 ms window)"""
+    hop = SR // FPS
+    p = np.pad(y.astype(np.float64) ** 2, (0, hop * n + SR))
+    c = np.cumsum(p)
+    w = int(0.4 * SR)
+    centers = np.arange(n) * hop
+    a, b = np.clip(centers - w // 2, 0, len(c) - 1), np.clip(centers + w // 2, 0, len(c) - 1)
+    ms = (c[b] - c[a]) / w
+    db = 10 * np.log10(ms + 1e-10)
+    lo, hi = np.percentile(db, 3), np.percentile(db, 99.5)
+    return np.clip(smooth1(np.clip((db - lo) / (hi - lo), 0, 1), 0.15), 0, 1)
+
+
+# ====================================================================================== main
+
+
+def rnd_list(a, nd=3):
+    return [round(float(v), nd) for v in a]
+
+
+def cmd_analyze(argv):
+    ap = argparse.ArgumentParser(prog='perf.py analyze')
+    ap.add_argument('--master', required=True)
+    ap.add_argument('--stems', required=True, help='folder with drums.wav, bass.wav, other.wav')
+    ap.add_argument('--vocals', required=True)
+    ap.add_argument('--features', required=True, help='features.json (beats, downbeats, lyrics)')
+    ap.add_argument('--lyrics', help='lyrics.json with word timings (used when present)')
+    ap.add_argument('--out', required=True)
+    a = ap.parse_args(argv)
+    feat = json.load(open(a.features))
+    beats = np.array(feat['beats'])
+    master = load_mono(a.master)
+    dur = len(master) / SR
+    n = int(np.ceil(dur * FPS))
+    log = lambda *m: print(*m, file=sys.stderr)
+
+    log('drums ...')
+    E = drum_envelopes(load_mono(os.path.join(a.stems, 'drums.wav')))
+    drums = classify_drums(detect_drums(E), E)
+    fills = detect_fills(drums, beats)
+    log('  ' + ', '.join(f'{k} {len(v)}' for k, v in drums.items()) + f', fills {len(fills)}')
+
+    lyr = None
+    if a.lyrics and os.path.exists(a.lyrics):
+        lyr = json.load(open(a.lyrics))
+        log(f'lyrics: {a.lyrics}')
+    elif feat.get('lyrics'):
+        lyr = feat['lyrics']
+        log('lyrics: features.json')
+    words = load_words(lyr) if lyr else []
+    log(f'vocal ({len(words)} words) ...')
+    env, open_, wide, rnd = vocal_visemes(load_mono(a.vocals), words, n)
+
+    perf = {
+        'fps': FPS, 'duration': round(dur, 3),
+        'drums': drums, 'fills': fills,
+        'bass': {'notes': []},
+        'acoustic': {'strums': [], 'chords': []},
+        'electric': {'strums': [], 'notes': []},
+        'vocal': {'env': rnd_list(env), 'open': rnd_list(open_), 'wide': rnd_list(wide), 'round': rnd_list(rnd)},
+        'energy': rnd_list(energy_curve(master, n)),
+        'sections': SECTIONS,
+    }
+    json.dump(perf, open(a.out, 'w'), separators=(',', ':'))
+    log(f'wrote {a.out}')
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'stems':
         return cmd_stems(sys.argv[2:])
