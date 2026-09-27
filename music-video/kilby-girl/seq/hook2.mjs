@@ -15,7 +15,7 @@ const CUTS = [
   [125.92, ...pit('h2_2'), { kind: 'tear', dur: 0.3, seed: 3 }],
   [127.39, ...pit('h2_2', { speed: 1.6 })],
   [128.84, ...stage('noah', { lyric: wall('h2_3', 1010, 318, 700, 46) })],
-  [130.32, ...stage('low', { arms: 0.8, lyric: wall('h2_3', 960, 330, 1300, 84) })],
+  [130.32, ...stage('wide', { arms: 0.8, push: 0, lyric: wall('h2_3', 960, 240, 1800, 90) })],
   [131.77, (P, S) => shotCrowd(P, S, { arms: 0.8, phoneWords: LY.line('h2_4').words, confetti: 131 }), {}, { kind: 'whip', dur: 0.24, dir: 0 }],
   [133.21, ...stage('noah', { push: 0.12 })],
   [134.66, ...stage('brooks', { overlay: wall('h2_5', 420, 190, 640, 88) })],
