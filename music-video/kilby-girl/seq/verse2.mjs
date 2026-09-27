@@ -9,10 +9,39 @@ import { H, K, mountains, stringLights, W } from '../lib/world.mjs';
 import { blinkOn, FLOODS, LY, withCam } from './common.mjs';
 import { shotBust } from './girl.mjs';
 import { T } from './songmap.mjs';
-import { CLOSE, stage } from './stage.mjs';
+import { CLOSE, FRAME, shotStage, stage } from './stage.mjs';
+import { still } from './stills.mjs';
+import { circle, roundRect } from '../lib/shapes.mjs';
 
 // the camera snaps to each zine panel as it lands, then pulls back to the whole page
 const ZINE_AT = [[101.56, 590, 330], [107.39, 1510, 330], [113.21, 410, 840], [116.1, 1330, 840]];
+// her camera's screen: she flicks through the night's photos on the beat, and they're all of him
+const ROLL = [
+  still((P, S) => shotStage(P, S, { cam: FRAME.noah, push: 0 }), 46.3),
+  still((P, S) => shotStage(P, S, { cam: FRAME.kit, push: 0 }), 70.2),
+  still((P, S) => shotStage(P, S, { cam: FRAME.noah, push: 0 }), 81.2),
+];
+function shotRoll(P, S, o) {
+  const { t } = S;
+  P.fill(rect(-400, -400, W + 800, H + 800), [0.35, 0.95, 1]);
+  const x = 210, y = 90, w = 1500, h = 844;
+  P.fill(roundRect(x - 36, y - 36, w + 72, h + 72, 40), [0.25, 0.6, 0.7]);
+  // flick to the next photo on each downbeat
+  const i = (o.first ?? 0) + (t >= (o.flip ?? Infinity) ? 1 : 0);
+  const since = t - (t >= (o.flip ?? Infinity) ? o.flip : S.t0);
+  const slide = (1 - clamp(since / 0.12)) * 80;
+  P.save();
+  P.clip(rect(x, y, w, h));
+  P.translate(x + slide, y);
+  P.scale(w / W);
+  ROLL[i % ROLL.length](P);
+  P.restore();
+  P.text(`▶  ${12 + i} / 24`, x + 40, y + 60, '40px "Special Elite"', K.paper, { align: 'left' });
+  P.stroke(roundRect(x + w - 150, y + 30, 90, 40, 8), K.paper, 4);
+  P.fill(rect(x + w - 144, y + 36, 60, 28), K.paper);
+  P.fill(circle(x + w - 70, y + h - 60, 14 * (0.7 + 0.3 * S.kick)), [1, 1, 0]);
+}
+
 function shotZine(P, S) {
   const { t } = S;
   let n = 0;
@@ -76,9 +105,9 @@ function shotBreak(P, S) {
 
 export const SHOTS = [
   [T.verse2, 88.49, shotBust, { lookY: -0.5 }],
-  [88.49, T.v2b, shotBust, { lookY: -0.3, s: 1.35, cy: 640 }],
+  [88.49, T.v2b, shotRoll, { first: 0, flip: 89.94 }, { kind: 'slam', dur: 0.2 }],
   [T.v2b, 94.3, shotBust, { happy: true, s: 1.6, cy: 660 }],
-  [94.3, T.v2c, shotBust, { happy: true, s: 1.2, cy: 590 }],
+  [94.3, T.v2c, shotRoll, { first: 2 }, { kind: 'slam', dur: 0.2 }],
   [T.v2c, 98.66, shotBust, { lookY: 0, smile: 1, captionWords: () => LY.line('v2_1').words }],
   [98.66, T.zine, shotBust, { lookY: 0.1, smile: 1, s: 1.4, cy: 650, captionWords: () => LY.line('v2_1').words }],
   [T.zine, T.brk, shotZine, {}, { kind: 'tear', dur: 0.35, seed: 6 }],

@@ -7,7 +7,7 @@ import { fence, H, house, K, moon, mountains, pole, sandwichBoard, skyNight, sta
 import { blinkOn, LY, withCam } from './common.mjs';
 import { shotBust } from './girl.mjs';
 import { carBeams, carSide } from './car.mjs';
-import { pump } from '../lib/fx.mjs';
+import { hit, pump, spring } from '../lib/fx.mjs';
 import { circle, ellipse } from '../lib/shapes.mjs';
 import { easeOut, easeIn } from '../lib/util.mjs';
 import { T } from './songmap.mjs';
@@ -161,13 +161,14 @@ function shotPickup(P, S) {
   const stopped = t - PULL[1];
   const pitch = stopped > 0 ? Math.sin(Math.min(stopped, 0.35) / 0.35 * Math.PI) * 0.03 * Math.exp(-stopped * 4) : 0;
   // frame the curb: push in as the car arrives
-  const z = lerp(1.2, 1.36, easeOut(u));
+  // a jolt as the door swings open on the downbeat
+  const z = lerp(1.2, 1.36, easeOut(u)) + 0.07 * hit(t - DOOR, 0.16);
   withCam(P, 1240, 780, z, () => {
     walkWorld(P, S, { night: true, xo: 3000, walkerX: 1530, walk: 0, girlOpts: { look: 1 } });
     carBeams(P, x, 1075, s, { dir: 1, k: 1, len: 1500 });
     carSide(P, x, 1075, s, {
       dir: 1, roll: x, pitch, bf: S.bf, lights: 1, wet: 0.8, brake: stopped > 0 ? 1 : 0,
-      door: easeOut(clamp((t - DOOR) / 0.3)), inside: noahAlone,
+      door: clamp(spring(t - DOOR, { freq: 2.2, damp: 7 })), inside: noahAlone,
     });
   });
   rain(P, S, LY.line('v1_2'));

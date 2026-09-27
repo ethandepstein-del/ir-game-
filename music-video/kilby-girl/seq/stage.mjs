@@ -127,7 +127,7 @@ export function stage(P, S, o = {}) {
   amp(P, 250, 880, 250, 230);
   amp(P, 1680, 880, 250, 230);
   P.fill(rect(700, 700, 560, 180), K.navy);
-  drummer(P, BAND.noah, 1010, o.kitFloor ?? 772, o.kitScale ?? 0.8, bandPose(S, 'noah'));
+  drummer(P, BAND.noah, 1010, o.kitFloor ?? 790, o.kitScale ?? 0.9, bandPose(S, 'noah'));
   player(P, BAND.ethan, 440, 890, 0.95, { ...bandPose(S, 'ethan'), micAt: [58, -452] });
   // in Noah's close-up Belle's bass neck would cut across his face, so she steps out of frame
   if (o.solo !== 'noah') player(P, BAND.belle, 690, 895, 0.95, bandPose(S, 'belle'));
@@ -151,7 +151,7 @@ export function wallWords(words, cx, cy, maxW, size) {
 
 // close-up framings [x, y, zoom] on each member at the default stage layout
 export const CLOSE = {
-  noah: [1010, 455, 2.3],
+  noah: [1010, 440, 2.2],
   ethan: [440, 560, 2.15],
   belle: [690, 560, 2.15],
   brooks: [1450, 560, 2.15],

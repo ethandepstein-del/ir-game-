@@ -34,7 +34,7 @@ function flashAt(t) {
   let f = 0;
   for (const e of FLASHES) {
     const d = t - e;
-    if (d >= -1 / 120 && d < 0.6) f = Math.max(f, d < 1 / 15 ? 0.92 : 0.92 * Math.exp(-(d - 1 / 15) / 0.09));
+    if (d >= -1 / 120 && d < 0.4) f = Math.max(f, d < 1 / 30 ? 0.9 : 0.9 * Math.exp(-(d - 1 / 30) / 0.06));
   }
   return f;
 }
@@ -103,9 +103,10 @@ export function drawFrame(P, clock, t, scale = 1) {
     const [u, spec, from, to] = tr;
     TRANSITIONS[spec.kind](P, clamp(u), () => drawShot(P, t, from), () => drawShot(P, t, to), spec);
   } else drawShot(P, t, i);
-  slamOverlay(P, S, (str, font) => P.measure(str, font));
   const fade = Math.max(1 - clamp(t / 0.8), inv(T.end - 2.2, T.end - 0.2, t), flashAt(t));
   if (fade > 0) P.alpha(fade).fill(rect(-200, -200, W + 400, H + 400), K.paper).alpha(1);
+  // punch words land on top of the flash, so they hit solid on the beat
+  slamOverlay(P, S, (str, font) => P.measure(str, font));
   P.restore();
 }
 

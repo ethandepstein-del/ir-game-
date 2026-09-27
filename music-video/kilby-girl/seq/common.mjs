@@ -168,7 +168,7 @@ export function slams() {
       const last = ws[ws.length - 1];
       out.push({
         t0: ws[0].t - 0.03,
-        t1: Math.max(ws[0].t + 0.45, (last.e ?? last.t + 0.3) + 0.2),
+        t1: Math.min(ws[0].t + 0.9, Math.max(ws[0].t + 0.45, (last.e ?? last.t + 0.3) + 0.2)),
         text: ws.map((w) => w.w.replace(/[^\p{L}\p{N}']/gu, '').toUpperCase()).join(' '),
         seed: li * 7 + g[0],
       });
@@ -200,6 +200,11 @@ export function slamOverlay(P, S, measure) {
   P.translate(W / 2 + hs(s.seed, 1) * 120, H * 0.52 + hs(s.seed, 2) * 60);
   P.scale(scale);
   P.rotate(rot);
+  // a torn paper strip behind the word keeps it legible over anything
+  const tw = measure(s.text, `${size}px Anton`);
+  const sx = tw / 2 + size * 0.22, sy = size * 0.62;
+  P.fill(poly([[-sx + hs(s.seed, 4) * 12, -sy], [sx, -sy + hs(s.seed, 5) * 10], [sx + hs(s.seed, 6) * 12, sy], [-sx, sy + hs(s.seed, 7) * 10]]), K.navy);
+  P.fill(poly([[-sx - 10, -sy - 12], [sx - 6, -sy - 8 + hs(s.seed, 5) * 10], [sx - 12, sy - 14], [-sx - 4, sy - 10 + hs(s.seed, 7) * 10]]), K.paper);
   P.text(s.text, 16, size * 0.36 + 14, `${size}px Anton`, K.navy);
   P.text(s.text, 0, size * 0.36, `${size}px Anton`, [1, 1, 0]);
   P.restore();

@@ -143,8 +143,8 @@ export const TRANSITIONS = {
   slam(P, u, a, b, o = {}) {
     const k = backOut(clamp(u), 1.6);
     P.save(); P.translate(W / 2, H / 2); P.scale(lerp(1.12, 1, k)); P.translate(-W / 2, -H / 2); b(); P.restore();
-    const f = 1 - clamp(u * 3);
-    if (f > 0) P.alpha(f * 0.85).fill(rect(-200, -200, W + 400, H + 400), K.paper).alpha(1);
+    const f = 1 - clamp(u * 4);
+    if (f > 0) P.alpha(f * 0.6).fill(rect(-200, -200, W + 400, H + 400), K.paper).alpha(1);
   },
   // wipe: a hard-edged ink bar sweeps across, b behind it
   wipe(P, u, a, b, o = {}) {

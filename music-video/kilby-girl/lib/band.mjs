@@ -21,7 +21,7 @@ export const BAND = {
     hair: { style: 'curly', ink: [0.62, 0.9, 0.7], shade: [0.8, 1, 0.95], hi: [0.45, 0.62, 0.38] },
     skin: [0.26, 0.11, 0], skinShade: [0.14, 0.13, 0.05],
     face: { w: 55, cheek: 57, jaw: 49, jawY: 38, chinW: 25, chinY: 63, top: -62, eyeX: 20, eyeY: 2, eyeR: 4.4, browY: -15, browLen: 24, browT: 8.5, browArch: 0.05, noseY: 25, noseW: 12, mouthY: 42, mouthW: 18, earY: 6, earH: 15, stubble: 1, sideburns: 1 },
-    build: { sh: 88, waist: 76, hip: 70, neck: 64, arm: 1.12, armW: 1.3, height: 1 },
+    build: { sh: 98, waist: 86, hip: 76, neck: 72, arm: 1.12, armW: 1.42, height: 1 },
     top: { kind: 'openShirt', ink: [0.13, 0.12, 0.2], inner: [0.3, 1, 1], print: 'text', short: true },
     pants: [0.2, 0.55, 0.85], shoes: K.ink, chain: true, bracelet: true,
     expr: 'grin',

@@ -75,8 +75,8 @@ async function worker(jobs) {
 function sourceHash() {
   const h = crypto.createHash('sha1');
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const files = [...fs.readdirSync(here).filter((f) => f.endsWith('.mjs')).map((f) => path.join(here, f)),
-    ...fs.readdirSync(path.join(here, 'lib')).filter((f) => f.endsWith('.mjs')).map((f) => path.join(here, 'lib', f))].sort();
+  const files = ['.', 'lib', 'seq'].flatMap((d) => fs.readdirSync(path.join(here, d))
+    .filter((f) => f.endsWith('.mjs')).map((f) => path.join(here, d, f))).sort();
   for (const f of files) h.update(f).update(fs.readFileSync(f));
   h.update(fs.readFileSync(featPath));
   return h.digest('hex').slice(0, 16);
