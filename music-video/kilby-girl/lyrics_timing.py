@@ -56,6 +56,21 @@ def band_db(lo, hi):
 voice_db = band_db(100, 4000)   # vowels and voiced consonants
 hf_db = band_db(3500, 8000)     # fricatives and bursts
 level_db = band_db(80, 8000)
+fric = band_db(2500, 8000) - band_db(100, 1000)  # > 0 dB: hiss dominates the voicing
+
+
+def fricative_start(t, floor, max_back=0.3):
+    """if a word's onset follows a hiss (s, sh, f, ch ...), move it back to where the hiss starts"""
+    k = int((t + 0.03) * FPS)
+    lo = int(max(floor, t - max_back) * FPS)
+    loud = level_db[k - int(0.4 * FPS):k + int(0.4 * FPS)].max() - 35
+    # the hiss may be followed by a short nasal or glide before the vowel ("sm", "sn", "sw")
+    while k > max(lo, int((t - 0.1) * FPS)) and fric[k - 1] <= 0:
+        k -= 1
+    j = k
+    while j > lo and fric[j - 1] > 0 and level_db[j - 1] > loud:
+        j -= 1
+    return j / FPS if (k - j) / FPS >= 0.04 else t
 
 # superflux: positive log-mel change against a frequency-max-filtered frame 15 ms back
 LAG = 3
@@ -272,6 +287,9 @@ for g in groups:
     ctc_e = [pa + (w_last[i] + 1) * CTC_HOP for i in range(len(words))]
     scale = np.percentile(novelty[int(a * FPS):int(b * FPS)], 90) + 1e-9
     t = refine(ctc_t, pa, pb, scale)
+    for i, (_, _, w) in enumerate(words):
+        if re.match(r"(?i)(s|z|f|th|ch|sh|j|c[eiy])", w):
+            t[i] = max(fricative_start(t[i], t[i - 1] + 0.08 if i else pa), t[i - 1] + 0.05 if i else pa)
     for i, (li, wi, _) in enumerate(words):
         fix = g['lines'][li].get('fix', {})
         if str(wi) in fix:

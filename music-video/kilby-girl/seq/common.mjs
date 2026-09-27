@@ -146,8 +146,8 @@ export function photoPile(P, S, hits, contents, layout, { zoomLast = null, capti
 }
 
 // ------------------------------------------------------------------ punch-word slams
-// The words a motion designer would slam, as word-index groups per line id. A lyric file whose
-// words carry `emph` flags overrides this (consecutive flagged words form one group).
+// The words that slam full frame, as word-index groups per line id. Kept to the hooks' key words
+// (and the rain): a slam on every line would stop meaning anything.
 const EMPH = {
   v1_2: [[1]], h1_1: [[5]], h2_1: [[5]], h1_2: [[3, 4], [7, 8]], h2_2: [[3, 4], [7, 8]],
   h1_5: [[8]], h2_5: [[8]], h1_6: [[3], [6]], h2_6: [[3], [6]],
@@ -160,17 +160,8 @@ export function slams() {
   const out = [];
   LY.lines.forEach((line, li) => {
     const words = line.words ?? [];
-    let groups = [];
-    if (words.some((w) => w.emph)) {
-      let cur = null;
-      words.forEach((w, i) => {
-        if (w.emph) (cur ??= (groups.push([]), groups[groups.length - 1])).push(i);
-        else cur = null;
-      });
-    } else {
-      const id = [...LY.byId].find(([, l]) => l === line)?.[0];
-      groups = EMPH[id] ?? [];
-    }
+    const id = [...LY.byId].find(([, l]) => l === line)?.[0];
+    const groups = EMPH[id] ?? [];
     for (const g of groups) {
       const ws = g.map((i) => words[i]).filter(Boolean);
       if (!ws.length) continue;
