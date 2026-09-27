@@ -219,78 +219,116 @@ def drum_envelopes(y):
     return {k: band_env(y, lo, hi) for k, (lo, hi) in DB.items()}
 
 
-def band_onsets(e, height, floor_db, min_gap=0.04, back=0.02):
+def band_onsets(e, height, floor_db, min_gap=0.04, back=0.02, fwd=0.03):
+    """frames where a band's envelope jumps `height` dB above its recent minimum and gets loud"""
     import scipy.signal as ss
     r = rise(e, int(back * EFR))
     p, _ = ss.find_peaks(r, height=height, distance=int(min_gap * EFR))
-    lv = np.array([peak_after(e, i, int(0.03 * EFR))[0] for i in p])
+    lv = np.array([peak_after(e, i, int(fwd * EFR))[0] for i in p])
     return p[lv > floor_db] if len(p) else p
 
 
-def detect_drums(y, E=None, log=print):
-    """Drum hits from the drum stem: {kind: [(t, vel, extra), ...]} plus per-hit diagnostics."""
-    E = E if E is not None else drum_envelopes(y)
-    ref = {k: np.percentile(e, 99.5) for k, e in E.items()}
-    n30 = int(0.03 * EFR)
+def onset_time(e, i, fwd=0.03, back=0.035, frac=0.3):
+    """Precise onset near candidate frame i: take the peak in [i - 5 ms, i + fwd], the lowest point
+    in the `back` seconds before it, and return the first frame after that low point where the
+    envelope has made `frac` of its rise in dB. Works for sharp (hat) and slow (kick) attacks."""
+    a = max(0, i - int(0.005 * EFR))
+    ip = a + int(np.argmax(e[a:a + max(1, int(fwd * EFR))]))
+    lo = max(0, ip - int(back * EFR))
+    im = lo + int(np.argmin(e[lo:ip + 1]))
+    thr = e[im] + frac * (e[ip] - e[im])
+    return im + int(np.argmax(e[im:ip + 1] >= thr)), float(e[ip]), ip
 
-    def lvl(band, i, n=n30):
-        return peak_after(E[band], max(0, i - int(0.005 * EFR)), n)
 
+def dedupe(hits, gap):
+    """hits: lists [frame, level, ...] -> within `gap` s keep the loudest (at the earliest frame)"""
+    hits = sorted(hits, key=lambda h: h[0])
+    out = []
+    for h in hits:
+        if out and h[0] - out[-1][0] < gap * EFR:
+            if h[1] > out[-1][1]:
+                out[-1] = [out[-1][0]] + list(h[1:])
+            continue
+        out.append(list(h))
+    return out
+
+
+def decay_rate(e, ip, nxt, max_win=0.5):
+    """seconds for the envelope to fall 15 dB after its peak, extrapolated from the dB slope up to
+    the next hit in the same band, so a quickly re-struck cymbal still gets its own decay"""
+    end = min(len(e), ip + int(max_win * EFR), nxt if nxt is not None else len(e))
+    seg = e[ip:end]
+    if len(seg) < 8:
+        return 0.05
+    below = np.flatnonzero(seg < e[ip] - 15)
+    if len(below):
+        return below[0] / EFR
+    tt = np.arange(len(seg)) / EFR
+    slope = np.polyfit(tt, seg, 1)[0]            # dB/s (negative while decaying)
+    return float(np.clip(15 / max(-slope, 1e-3), len(seg) / EFR, 3.0))
+
+
+def detect_drums(E):
+    """Drum hits from the drum stem's band envelopes -> dict of lists of [frame, level, ...]."""
+    ref = {k: float(np.percentile(e, 99.5)) for k, e in E.items()}
     R = {k: rise(e, int(0.02 * EFR)) for k, e in E.items()}
+    LO = np.maximum(E['K'], E['L'])
+    BODY = np.maximum(E['L'], E['Sb'])
+
+    def lv(band, i, fwd):
+        a = max(0, i - int(0.005 * EFR))
+        return float(E[band][a:a + int(fwd * EFR)].max())
 
     def rise_at(band, i, win=0.015):
         return float(R[band][max(0, i - int(win * EFR)):i + int(win * EFR) + 1].max())
 
     # ---- kick: the 35-90 Hz band, which nothing else on the kit reaches
     kicks = []
-    for i in band_onsets(E['K'], 12, ref['K'] - 24, min_gap=0.07):
-        P, ip = lvl('K', i)
-        Lp, _ = lvl('L', i)
-        if Lp - P > 3:                       # more 90-160 Hz than 35-90 Hz: a floor tom, not a kick
+    for i in band_onsets(E['K'], 12, ref['K'] - 24, min_gap=0.07, fwd=0.06):
+        K, L = lv('K', i, 0.06), lv('L', i, 0.06)
+        if L - K > 6:                          # far more 90-160 Hz than 35-90 Hz: a floor tom
             continue
-        kicks.append((attack_start(E['K'], ip, 12), P))
-    kick_idx = np.array([k for k, _ in kicks], int)
+        k, _, _ = onset_time(LO, i, fwd=0.06, back=0.05)
+        kicks.append([k, K])
+    kicks = dedupe(kicks, 0.06)
+    kick_idx = np.array([k[0] for k in kicks], int)
 
-    def kick_near(i, win=0.03):
-        if not len(kick_idx):
-            return None
-        j = int(np.argmin(np.abs(kick_idx - i)))
-        return j if abs(kick_idx[j] - i) <= win * EFR else None
+    def kick_near(i, win=0.035):
+        return len(kick_idx) and np.min(np.abs(kick_idx - i)) <= win * EFR
 
-    # ---- snare and toms: 160-400 Hz body beyond what a simultaneous kick would leak
+    # ---- snare and toms: body (160-400 Hz) beyond what a simultaneous kick leaks, plus the crack
     snares, toms = [], []
-    body = np.union1d(band_onsets(E['Sb'], 8, ref['Sb'] - 26, min_gap=0.06), band_onsets(E['L'], 8, ref['L'] - 22, min_gap=0.06))
-    last = -10**9
-    for i in body:
-        if i - last < int(0.05 * EFR):
-            continue
-        Sb, ipb = lvl('Sb', i)
-        L, ipl = lvl('L', i)
-        K, _ = lvl('K', i)
-        Sc, ipc = lvl('Sc', i)
-        H, _ = lvl('H', i)
-        leak = K + KICK_SB_LEAK
-        kn = kick_near(i)
-        if max(Sb, L) - leak < 7:            # explained by the kick
-            continue
+    cands = np.union1d(band_onsets(E['Sb'], 8, ref['Sb'] - 24, min_gap=0.05),
+                       band_onsets(E['Sc'], 8, ref['Sc'] - 24, min_gap=0.05))
+    cands = np.union1d(cands, band_onsets(E['L'], 8, ref['L'] - 20, min_gap=0.05))
+    for i in cands:
+        Sb, L, K = lv('Sb', i, 0.04), lv('L', i, 0.05), lv('K', i, 0.06)
+        Sc, H = lv('Sc', i, 0.03), lv('H', i, 0.03)
+        excess = Sb - (K + KICK_SB_LEAK)
         crack = rise_at('Sc', i)
-        if Sc - Sb > -12 and crack > 5 and Sb > ref['Sb'] - 24:
-            snares.append((attack_start(E['Sc'], ipc, 10), Sb, Sc))
-            last = i
-        elif max(Sb, L) > max(ref['Sb'], ref['L']) - 20 and Sc - max(Sb, L) < -12 and kn is None:
-            dec = decay_time(E['L'] if L > Sb else E['Sb'], ipl if L > Sb else ipb, 12)
-            if dec > 0.08:
-                toms.append((attack_start(E['L'] if L > Sb else E['Sb'], ipl if L > Sb else ipb, 10), max(Sb, L), L - Sb))
-                last = i
+        if excess >= 10 and Sb > ref['Sb'] - 24 and Sc - Sb >= -10 and crack >= 6 and Sc - H >= -14:
+            k, _, _ = onset_time(E['Sc'], i, fwd=0.03)
+            snares.append([k, Sb, Sc])
+            continue
+        body = max(L, Sb)
+        if (not kick_near(i) and body > max(ref['L'], ref['Sb']) - 18 and Sc - body < -10
+                and max(rise_at('L', i), rise_at('Sb', i)) >= 10):
+            k, _, ip = onset_time(BODY, i, fwd=0.04)
+            if decay_rate(BODY, ip, None, 0.3) > 0.1:
+                toms.append([k, body, L - Sb])
+    snares = dedupe(snares, 0.06)
+    sn_idx = np.array([s[0] for s in snares], int)
+    toms = [t for t in dedupe(toms, 0.07) if not len(sn_idx) or np.min(np.abs(sn_idx - t[0])) > 0.04 * EFR]
 
-    # ---- cymbals: the 6 kHz+ band, typed by level and decay
+    # ---- cymbals: the 6 kHz+ band; loudness and decay tell hat from crash
     cym = []
-    for i in band_onsets(E['H'], 6, ref['H'] - 32, min_gap=0.05):
-        P, ip = lvl('H', i)
-        Sc, _ = lvl('Sc', i)
-        cym.append((attack_start(E['H'], ip, 10), P, decay_time(E['H'], ip, 15), Sc))
-
-    return {'E': E, 'ref': ref, 'kicks': kicks, 'snares': snares, 'toms': toms, 'cym': cym}
+    hs = band_onsets(E['H'], 6, ref['H'] - 30, min_gap=0.05)
+    for n, i in enumerate(hs):
+        k, P, ip = onset_time(E['H'], i, fwd=0.03)
+        nxt = hs[n + 1] if n + 1 < len(hs) else None
+        cym.append([k, P, decay_rate(E['H'], ip, nxt), lv('Sc', i, 0.03)])
+    cym = dedupe(cym, 0.045)
+    return {'ref': ref, 'kicks': kicks, 'snares': snares, 'toms': toms, 'cym': cym}
 
 
 # ====================================================================================== analyze
