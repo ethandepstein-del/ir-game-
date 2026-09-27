@@ -334,6 +334,73 @@ def detect_drums(E):
     return {'ref': ref, 'kicks': kicks, 'snares': snares, 'toms': toms, 'cym': cym}
 
 
+def classify_drums(D, E):
+    """detections -> perf drum lists with velocities, cymbal types, hat openness and tom pitch"""
+    import scipy.ndimage as nd
+    Hs = nd.uniform_filter1d(E['H'], int(0.015 * EFR))
+    T = lambda f: round(f / EFR, 4)
+
+    def vels(rows):
+        return vel_map([r[1] for r in rows], 30, 1.3) if rows else []
+
+    out = {k: [] for k in ('kick', 'snare', 'hat', 'tom', 'crash', 'ride')}
+    for r, v in zip(D['kicks'], vels(D['kicks'])):
+        out['kick'].append([T(r[0]), round(float(v), 2)])
+    for r, v in zip(D['snares'], vels(D['snares'])):
+        out['snare'].append([T(r[0]), round(float(v), 2)])
+    for r, v in zip(D['toms'], vels(D['toms'])):
+        out['tom'].append([T(r[0]), round(float(v), 2), round(float(np.clip(0.5 + r[2] / 12, 0, 1)), 2)])
+
+    c = np.array(D['cym'], float).reshape(-1, 4)
+    if len(c):
+        ci, cp, cd = c[:, 0].astype(int), c[:, 1], c[:, 2]
+        # drop blips inside a louder cymbal's wash
+        loud = np.array([cp[np.abs(ci - i) <= 0.4 * EFR].max() for i in ci])
+        keep = cp >= loud - 24
+        ci, cp, cd = ci[keep], cp[keep], cd[keep]
+        refc = np.percentile(cp, 98)
+        hit_idx = np.array(sorted([k[0] for k in D['kicks']] + [s_[0] for s_ in D['snares']]), int)
+        with_hit = np.array([len(hit_idx) and np.min(np.abs(hit_idx - i)) <= 0.03 * EFR for i in ci], bool)
+        long_ = cd >= 0.3
+        v = vel_map(cp, 30, 1.2, ref=refc)
+        for n, i in enumerate(ci):
+            prev = cp[(ci < i) & (ci >= i - 0.6 * EFR)]
+            nxt = cp[(ci > i) & (ci <= i + 0.6 * EFR)]
+            accent = (not len(prev) or cp[n] - prev.max() >= 3) and (not len(nxt) or cp[n] - nxt.max() >= 0)
+            sus = -15 * 0.25 / max(cd[n], 1e-3)          # dB left after 250 ms at the measured decay
+            if cp[n] >= refc - 10 and sus >= -20 and with_hit[n] and accent:
+                out['crash'].append([T(i), round(float(v[n]), 2)])
+                continue
+            near = long_[np.abs(ci - i) <= 1.0 * EFR]
+            if cd[n] >= 0.35 and cp[n] >= refc - 16 and near.sum() >= 4:
+                out['ride'].append([T(i), round(float(v[n]), 2)])
+                continue
+            out['hat'].append([T(i), round(float(v[n]), 2), round(float(np.clip((cd[n] - 0.08) / 0.3, 0, 1)), 2)])
+    return out
+
+
+def detect_fills(drums, beats):
+    """drum fills: runs of 2-beat windows holding >= 4 snare/tom hits (with a tom, or >= 5)"""
+    sn = np.array([h[0] for h in drums['snare']])
+    tm = np.array([h[0] for h in drums['tom']])
+    allh = np.sort(np.r_[sn, tm])
+    wins = []
+    for i in range(0, len(beats) - 2):
+        a, b = beats[i] - 0.03, beats[i + 2] - 0.03
+        n_all = np.sum((allh >= a) & (allh < b))
+        n_tom = np.sum((tm >= a) & (tm < b))
+        if n_all >= 5 or (n_all >= 4 and n_tom >= 1) or n_tom >= 3:
+            h = allh[(allh >= a) & (allh < b)]
+            wins.append([float(h[0]), float(h[-1])])
+    fills = []
+    for w in wins:
+        if fills and w[0] <= fills[-1][1] + 0.05:
+            fills[-1][1] = max(fills[-1][1], w[1])
+        else:
+            fills.append(list(w))
+    return [[round(a, 3), round(b + 0.08, 3)] for a, b in fills if b - a >= 0.25]
+
+
 # ====================================================================================== analyze
 
 
