@@ -1,0 +1,37 @@
+{
+  "name": "tossup",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Tossup: a polling aggregator, forecast model, scenario lab and election-night HQ for the 2026 midterms.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:single": "tsc -b && vite build --mode single",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "data": "node scripts/build-data.mjs",
+    "geo": "node scripts/build-geo.mjs",
+    "hex": "node scripts/build-hex.mjs"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/d3-geo": "^3.1.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/topojson-client": "^3.1.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "d3-geo": "^3.1.1",
+    "playwright-core": "^1.63.0",
+    "topojson-client": "^3.1.0",
+    "typescript": "~5.9.0",
+    "us-atlas": "^3.0.1",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.1"
+  }
+}
