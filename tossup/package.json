@@ -13,7 +13,8 @@
     "typecheck": "tsc -b",
     "data": "node scripts/build-data.mjs",
     "geo": "node scripts/build-geo.mjs",
-    "hex": "node scripts/build-hex.mjs"
+    "hex": "node scripts/build-hex.mjs",
+    "build:artifact": "npm run build:single && node scripts/make-artifact.mjs"
   },
   "dependencies": {
     "react": "^19.3.0",

@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useRoute } from '../router';
-import { usePrefs } from '../state/prefs';
+import { useIsDark, usePrefs } from '../state/prefs';
 import { Coin } from './components/Coin';
+import { Palette } from './components/Palette';
 import { useToast } from './components/bits';
 import { daysUntil } from './format';
 import { ELECTION_DAY, AS_OF } from '../engine/model';
@@ -32,11 +33,27 @@ export function Shell({ children }: { children: ReactNode }) {
   const route = useRoute();
   const key = route[0] === 'race' || route[0] === 'state' ? (route[1]?.split('-')[0] ?? '') : (route[0] ?? '');
   const active = route[0] === 'race' ? (route[1]?.startsWith('senate') ? 'senate' : route[1]?.startsWith('gov') ? 'governors' : 'house') : route[0] === 'state' ? '' : key;
-  const { theme, setTheme, nerd, setNerd } = usePrefs();
+  const { setTheme, nerd, setNerd } = usePrefs();
   const [spin, setSpin] = useState(0);
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setSearching((v) => !v);
+      } else if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setSearching(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const toast = useToast();
   const d = daysUntil(ELECTION_DAY, AS_OF);
-  const dark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  const dark = useIsDark();
 
   return (
     <>
@@ -64,6 +81,9 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className="countdown" title="Election Day is Tuesday, November 3, 2026">
               {d} days to go
             </span>
+            <button className="icon-btn" aria-label="Search races, states and pages (press /)" title="Search (press /)" onClick={() => setSearching(true)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="10.5" cy="10.5" r="6.2" /><path d="m15.2 15.2 5 5" /></svg>
+            </button>
             <label className="switch" title="Show the wonky details everywhere">
               <input type="checkbox" checked={nerd} onChange={(e) => setNerd(e.target.checked)} />
               Nerd mode
@@ -78,6 +98,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+      <Palette open={searching} onClose={() => setSearching(false)} />
       <main className="page">{children}</main>
       <footer className="footer">
         <div className="footer-inner">
@@ -85,7 +106,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <b style={{ color: 'var(--ink-2)' }}>Tossup</b> is a polling aggregator and forecast for the November 3, 2026 US midterms. Data is current as of September 29, 2026 and covers {ALL_POLL_COUNT} polls, each linked to its source. Verify anything you plan to act on at the source.
           </div>
           <div>
-            Polls and ratings were collected from public reporting; the forecast, averages and maps are computed here. Not affiliated with any pollster, forecaster or news outlet. <Link to="methods">How it works, what's estimated, and what's missing</Link>.
+            Polls and ratings were collected from public reporting; the forecast, averages and maps are computed here. Not affiliated with any pollster, forecaster or news outlet. Tip: press / to search. <Link to="methods">How it works, what's estimated, and what's missing</Link>.
           </div>
         </div>
       </footer>

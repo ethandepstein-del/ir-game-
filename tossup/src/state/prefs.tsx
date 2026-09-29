@@ -11,6 +11,37 @@ interface Prefs {
 
 const Ctx = createContext<Prefs | null>(null);
 
+/** A theme the embedding page set on <html> before we started, if any. */
+const HOST_THEME: string | null = (() => {
+  try {
+    return document.documentElement.getAttribute('data-theme');
+  } catch {
+    return null;
+  }
+})();
+
+/** Whether the page is showing its dark palette right now, whoever chose it. */
+export function useIsDark(): boolean {
+  const read = () => {
+    const attr = document.documentElement.getAttribute('data-theme');
+    return attr === 'dark' || (attr !== 'light' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  };
+  const [dark, setDark] = useState(read);
+  useEffect(() => {
+    const update = () => setDark(read());
+    const mo = new MutationObserver(update);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    mq?.addEventListener?.('change', update);
+    update();
+    return () => {
+      mo.disconnect();
+      mq?.removeEventListener?.('change', update);
+    };
+  }, []);
+  return dark;
+}
+
 function read<T>(key: string, fallback: T): T {
   try {
     const v = localStorage.getItem(key);
@@ -33,8 +64,14 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const el = document.documentElement;
-    if (theme === 'system') el.removeAttribute('data-theme');
-    else el.setAttribute('data-theme', theme);
+    if (theme !== 'system') {
+      el.setAttribute('data-theme', theme);
+    } else if (HOST_THEME) {
+      // A host page (for example a published artifact) may have chosen a theme for us; go back to it.
+      el.setAttribute('data-theme', HOST_THEME);
+    } else {
+      el.removeAttribute('data-theme');
+    }
   }, [theme]);
 
   const setTheme = useCallback((t: ThemePref) => {
