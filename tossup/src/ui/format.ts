@@ -79,7 +79,7 @@ export function plainOdds(p: number): string {
   const flipped = p > 0.5;
   const q = flipped ? 1 - p : p;
   if (q > 0.46) return 'about a coin flip';
-  if (q > 0.4) return flipped ? 'a bit better than a coin flip' : 'a bit worse than a coin flip';
+  if (q > 0.37) return flipped ? 'a bit better than a coin flip' : 'a bit worse than a coin flip';
   let best = ANALOGIES[0];
   let bd = Infinity;
   for (const a of ANALOGIES) {

@@ -83,10 +83,12 @@ export function TrendChart({ series, dots = [], refs = [], partisan = false, col
   const xTicks = useMemo(() => {
     const out: number[] = [];
     const span = geo.d1 - geo.d0;
-    const step = span > 200 ? 30.4 : span > 100 ? 14 : span > 45 ? 7 : 3;
+    // Pick the tightest tick spacing whose labels still fit (about 48px each) at this width.
+    const maxLabels = Math.max(2, Math.floor((w - M.l - M.r) / 48));
+    const step = [1, 2, 3, 7, 14, 30.4, 45.6, 60.8, 91.2, 182.5].find((s) => span / s + 1 <= maxLabels) ?? 182.5;
     for (let d = geo.d0; d <= geo.d1; d += step) out.push(Math.round(d));
     return out;
-  }, [geo]);
+  }, [geo, w]);
 
   const nearest = (px: number) => {
     const day = Math.round(geo.d0 + ((px - M.l) / (w - M.r - M.l)) * (geo.d1 + 1 - geo.d0));
