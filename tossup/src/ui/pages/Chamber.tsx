@@ -91,7 +91,7 @@ function SenateHemicycle({ rows }: { rows: Row[] }) {
 
 export function Chamber({ office }: { office: Office }) {
   const rows = useRows(office);
-  const { result, running, config, setConfig } = useForecast();
+  const { result, running, config, setConfig, env } = useForecast();
   const { nerd } = usePrefs();
   const [mode, setMode] = useState<Mode>('forecast');
   const [style, setStyle] = useState<'geo' | 'tile'>('geo');
@@ -190,6 +190,8 @@ export function Chamber({ office }: { office: Office }) {
   let tableRows = rows;
   if (office === 'house' && !showSafe) tableRows = rows.filter((r) => r.cons.rating !== 'safe-d' && r.cons.rating !== 'safe-r' && (r.pD === undefined || (r.pD > 0.02 && r.pD < 0.98)));
   if (filter !== 'all') tableRows = tableRows.filter((r) => r.meta.holder === filter);
+  // The House table is long, so lead with the closest races; the others read best as a left-to-right spectrum.
+  if (office === 'house') tableRows = [...tableRows].sort((x, y) => Math.abs((x.pD ?? 0.5) - 0.5) - Math.abs((y.pD ?? 0.5) - 0.5));
   const flipsD = rows.filter((r) => r.flips === 'D').length;
   const flipsR = rows.filter((r) => r.flips === 'R').length;
 
@@ -375,7 +377,7 @@ export function Chamber({ office }: { office: Office }) {
           rows={tableRows}
           cols={cols}
           rowKey={(r) => r.meta.id}
-          initialSort="pd"
+          initialSort={office === 'house' ? undefined : 'pd'}
           initialDesc={false}
           showNerd={nerd}
           limit={office === 'house' ? 40 : undefined}
@@ -389,6 +391,8 @@ export function Chamber({ office }: { office: Office }) {
           <b>About this data.</b> Ratings for {rows.filter((r) => r.cons.source === 'cited').length} House seats are cited to Cook (Sept 25) or Sabato (Sept 29). Another {rows.filter((r) => r.cons.source === 'estimated').length} carry our own stated estimate (dashed pills), and the remaining {rows.filter((r) => r.cons.source === 'default').length} default to Safe for the party that holds them. Nominees are named only where reporting named them. District polling is scarce, so House forecasts lean on ratings and the national mood. The <a href="#/methods" onClick={(e) => { e.preventDefault(); navigate('methods'); }}>Methods page</a> says exactly what's missing.
         </div>
       )}
+
+      {office === 'house' && <BattlegroundCheck rows={rows} national={env.generic} />}
 
       <Under title="How other forecasters see it">
         <div className="tbl-wrap">
@@ -407,6 +411,40 @@ export function Chamber({ office }: { office: Office }) {
           </table>
         </div>
       </Under>
+    </div>
+  );
+}
+
+/** A district-level cross-check: Cook's Battleground District Project poll against our competitive seats. */
+function BattlegroundCheck({ rows, national }: { rows: Row[]; national: number }) {
+  const comp = rows.filter((r) => Math.abs(RATING_MARGIN[r.cons.rating]) <= 6 && r.margin !== undefined && Number.isFinite(r.margin));
+  if (comp.length === 0) return null;
+  const avg = comp.reduce((a, r) => a + (r.margin as number), 0) / comp.length;
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <h3>A district-level reality check</h3>
+          <div className="sub">The best district polling we found, next to what the model says about the same kind of seat</div>
+        </div>
+      </div>
+      <div className="grid g2" style={{ gap: 18 }}>
+        <div>
+          <div className="label">Cook Battleground District Project, Sept 8-11</div>
+          <div className="kpi">D+2</div>
+          <p className="muted" style={{ fontSize: 14, margin: '4px 0 0' }}>
+            1,052 likely voters across the 37 districts Cook rates competitive: 49% Democratic, 47% Republican on the generic ballot. Those districts voted for Trump by about 5 points in 2024, so this is a swing of roughly 7 points toward Democrats.{' '}
+            <a href="https://www.cookpolitical.com/analysis/survey-research/battleground-district-project/new-battleground-district-poll-shows" target="_blank" rel="noreferrer noopener">Cook's write-up</a>
+          </p>
+        </div>
+        <div>
+          <div className="label">Tossup, average of {comp.length} seats rated Toss-up, Tilt or Lean</div>
+          <div className={`kpi ${avg > 0 ? 'dem' : 'rep'}`}>{lead(avg)}</div>
+          <p className="muted" style={{ fontSize: 14, margin: '4px 0 0' }}>
+            Not quite the same measure: theirs is a generic ballot with no candidates named, ours is a forecast margin that includes incumbency and candidate quality. Both show the battleground moving less than the country as a whole, where the generic-ballot average is {lead(national)}.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

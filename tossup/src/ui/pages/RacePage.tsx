@@ -117,6 +117,7 @@ export function RacePage({ id }: { id: string }) {
           </div>
           <h1>{meta.title}</h1>
           {meta.note && <p className="lede">{meta.note}</p>}
+          {meta.leanNote && <p className="faint" style={{ margin: '4px 0 0', fontSize: 13.5 }}>District context: {meta.leanNote}.</p>}
         </div>
         <div className="row">
           <RatingPill rating={cons.rating} est={cons.source !== 'cited'} />
@@ -250,6 +251,13 @@ export function RacePage({ id }: { id: string }) {
                     <tr><td>Expert-implied margin today</td><td className="r num">{lead(fb.ratingImplied ?? 0)}</td></tr>
                     <tr><td>Neutral lean (that margin minus the mood the ratings assume)</td><td className="r num">{lead(fb.lean)}</td></tr>
                     <tr><td>Today's national mood, scaled by elasticity {fb.elasticity.toFixed(2)}</td><td className="r num">{lead(fb.envTerm)}</td></tr>
+                    {fb.districtEstimate !== undefined && fb.fromRatings !== undefined && (
+                      <>
+                        <tr><td>From the ratings alone</td><td className="r num">{lead(fb.fromRatings)}</td></tr>
+                        <tr><td>From the district's 2024 presidential result, moved by 70% of the national swing, plus incumbency</td><td className="r num">{lead(fb.districtEstimate)}</td></tr>
+                        <tr><td className="faint">The two are averaged</td><td className="r num faint">50 / 50</td></tr>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>

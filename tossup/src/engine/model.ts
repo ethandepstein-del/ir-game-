@@ -14,7 +14,7 @@ import { GOVERNOR_RACES, SENATE_RACES } from '../data/races';
 import { HOUSE_SEATS } from '../data/house';
 import { fitMidterms } from '../data/history';
 import { RATING_MARGIN, consensus } from '../data/ratings';
-import { STATE_BY_CODE, stateLean } from '../data/states';
+import { NAT_PRES_2024, STATE_BY_CODE, stateLean } from '../data/states';
 import type { ApprovalPoll, Poll, RaceMeta, RegionId } from '../data/types';
 import { aggregateApproval, aggregateGeneric, raceAverage, type RaceAverage } from './aggregate';
 import { clamp } from './stats';
@@ -151,6 +151,18 @@ const LATE_MOVE = 2.0;
  */
 export const RATINGS_MOOD = 5.0;
 
+/**
+ * Battleground districts swing about 70% as much as the country (Cook's Battleground District Project
+ * poll found a 7-point swing in seats Trump carried, against roughly 10 points nationally).
+ */
+const BATTLEGROUND_SWING = 0.7;
+
+/** Estimate from a district's 2024 presidential margin, for the few House seats where we have it. */
+export function districtEstimate(r: RaceMeta, M: number): number | null {
+  if (r.office !== 'house' || r.lean === undefined) return null;
+  return r.lean + BATTLEGROUND_SWING * (M - NAT_PRES_2024) + incumbencyFor(r);
+}
+
 const elasticity = (lean: number) => clamp(1 - 0.012 * Math.abs(lean), 0.72, 1.05);
 
 /** Named, documented adjustments to fundamentals (points D). */
@@ -162,6 +174,7 @@ export const ADJ: Record<string, { adj: number; note: string }> = {
   'senate-oh': { adj: 2, note: 'Sherrod Brown has a long record of outrunning the top of the ticket in Ohio.' },
   'senate-tx': { adj: 1, note: 'Talarico has raised roughly $68 million to Paxton\'s under $10 million.' },
   'senate-sd': { adj: 5, note: 'A well-funded independent challenger; the Democrat withdrew.' },
+  'gov-vt': { adj: -54, note: 'Phil Scott, a Republican, has won Vermont by roughly 40 points or more in each of the last three elections, in a state Democrats carry easily.' },
   'senate-id': { adj: 4, note: 'An independent challenger consolidating opposition to a long-serving incumbent.' },
 };
 
@@ -207,6 +220,8 @@ export function buildRaceModels(config: ModelConfig): RaceModel[] {
       const e = elasticity(cons.margin);
       lean = cons.margin - RATINGS_MOOD * e;
       fundMean = lean + M * e;
+      const pres = districtEstimate(r, M);
+      if (pres !== null) fundMean = 0.5 * fundMean + 0.5 * pres;
     } else {
       lean = stateLean(r.state);
       const adj = ADJ[r.id]?.adj ?? r.adj ?? 0;
@@ -295,6 +310,10 @@ export interface FundBreakdown {
   total: number;
   elasticity: number;
   ratingImplied?: number;
+  /** House only: estimate from the district's 2024 presidential result, when we have it. */
+  districtEstimate?: number;
+  /** House only: fundamentals from the ratings alone, before averaging in the district estimate. */
+  fromRatings?: number;
 }
 
 /** Itemized fundamentals for a race at national mood M (for display; mirrors buildRaceModels). */
@@ -303,7 +322,9 @@ export function fundamentalsBreakdown(r: RaceMeta, M: number): FundBreakdown {
   if (r.office === 'house') {
     const e = elasticity(cons.margin);
     const lean = cons.margin - RATINGS_MOOD * e;
-    return { lean, envTerm: M * e, incumbency: 0, adj: 0, total: lean + M * e, elasticity: e, ratingImplied: cons.margin };
+    const pres = districtEstimate(r, M);
+    const fromRatings = lean + M * e;
+    return { lean, envTerm: M * e, incumbency: 0, adj: 0, total: pres === null ? fromRatings : 0.5 * fromRatings + 0.5 * pres, elasticity: e, ratingImplied: cons.margin, districtEstimate: pres ?? undefined, fromRatings };
   }
   const lean = stateLean(r.state);
   const e = elasticity(lean);

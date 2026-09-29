@@ -187,7 +187,7 @@ export function Methods() {
           </li>
           <li>
             <h4>3 · Build each race's expected margin</h4>
-            <p>For every seat we blend up to three ingredients, each weighted by how precise it is: the <b>race polls</b> (if any), the <b>fundamentals</b> (the state or district's partisan lean, plus the national mood, plus a bonus for incumbents), and the <b>expert ratings</b>. Races with lots of polls lean on the polls. Races with none lean on fundamentals and ratings. You can turn any ingredient up or down on the <Link to="/forecast">Forecast</Link> page.</p>
+            <p>For every seat we blend up to three ingredients, each weighted by how precise it is: the <b>race polls</b> (if any), the <b>fundamentals</b> (for Senate and governor races: the state's partisan lean, the national mood and a bonus for incumbents; for the House, where we lack district-level presidential results for most seats, the lean the ratings imply, moved to today's mood), and the <b>expert ratings</b>. Races with lots of polls lean on the polls. Races with none lean on fundamentals and ratings. You can turn any ingredient up or down on the <Link to="/forecast">Forecast</Link> page.</p>
             <Under title="Numbers">
               <ul className="bullets">
                 <li>State lean is 75% of the 2024 presidential result and 25% of 2020, measured relative to the nation.</li>
@@ -226,7 +226,7 @@ export function Methods() {
             <thead><tr><th>Race</th><th className="r">Adjustment (points)</th><th>Why</th></tr></thead>
             <tbody>
               {Object.entries(ADJ).map(([id, a]) => (
-                <tr key={id}><td>{id.replace('senate-', '').toUpperCase()} Senate</td><td className="r num"><b className={a.adj > 0 ? 'dem' : 'rep'}>{a.adj > 0 ? 'D+' : 'R+'}{Math.abs(a.adj)}</b></td><td>{a.note}</td></tr>
+                <tr key={id}><td>{id.replace(/^(senate|gov)-/, '').toUpperCase()} {id.startsWith('gov-') ? 'Governor' : 'Senate'}</td><td className="r num"><b className={a.adj > 0 ? 'dem' : 'rep'}>{a.adj > 0 ? 'D+' : 'R+'}{Math.abs(a.adj)}</b></td><td>{a.note}</td></tr>
               ))}
             </tbody>
           </table>
@@ -270,7 +270,7 @@ export function Methods() {
       </Section>
 
       <div className="callout info">
-        <b>One last thing.</b> A forecast of 78% is not a promise. It is a claim about how often things like this happen: about like flipping two heads in a row, minus a little. Toss-ups are toss-ups. The point of Tossup is to let you see how uncertain we really are, and what would change our mind.
+        <b>One last thing.</b> A forecast of 75% is not a promise. It is a claim about how often things like this happen: the other side wins about as often as you'd flip two heads in a row. Toss-ups are toss-ups. The point of Tossup is to let you see how uncertain we really are, and what would change our mind.
       </div>
     </div>
   );
