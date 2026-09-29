@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { APPROVAL_PUBLISHED } from '../../data/benchmarks';
 import { MIDTERMS, fitMidterms } from '../../data/history';
 import { pollsterInfo } from '../../data/pollsters';
-import { dayNum, fmtDate, pollDay } from '../../engine/stats';
+import { fmtDate, pollDay } from '../../engine/stats';
 import { useAgg } from '../../state/forecast';
 import { usePrefs } from '../../state/prefs';
 import { TrendChart } from '../charts/TrendChart';
@@ -112,7 +112,6 @@ export function Approval() {
         <div className="card-head"><h3>Every approval poll</h3></div>
         <SortTable rows={approvalPolls} cols={cols} rowKey={(p) => p.id} initialSort="d" initialDesc showNerd={nerd} />
       </div>
-      <span className="sr-only">{dayNum('2026-09-29')}</span>
     </div>
   );
 }

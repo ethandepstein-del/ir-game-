@@ -13,11 +13,16 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
+/** How long a worker may stay silent before we assume it never started (blocked by the host page). */
+const WORKER_SILENCE_MS = 6000;
+
 /** One shared worker with promise-based requests; falls back to the main thread if workers are unavailable. */
 class SimClient {
   private worker: Worker | null = null;
   private seq = 0;
-  private pending = new Map<number, Pending>();
+  /** Set once the worker has answered at least once; after that it is trusted and never timed out. */
+  private proven = false;
+  private pending = new Map<number, Pending & { config: ModelConfig; constraints?: Constraints; timer: ReturnType<typeof setTimeout> }>();
 
   constructor() {
     try {
@@ -25,35 +30,61 @@ class SimClient {
       this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
         const p = this.pending.get(e.data.id);
         if (!p) return;
+        this.proven = true;
+        clearTimeout(p.timer);
         this.pending.delete(e.data.id);
         if (e.data.result) p.resolve(e.data.result);
         else p.reject(new Error(e.data.error ?? 'simulation failed'));
       };
-      this.worker.onerror = () => {
-        this.worker = null;
-      };
+      this.worker.onerror = () => this.abandonWorker();
+      this.worker.onmessageerror = () => this.abandonWorker();
     } catch {
       this.worker = null;
     }
   }
 
-  run(config: ModelConfig, constraints?: Constraints): Promise<SimResult> {
-    const id = ++this.seq;
-    if (!this.worker) {
-      return new Promise((resolve, reject) =>
-        setTimeout(() => {
-          try {
-            const models = buildRaceModels(config);
-            resolve(simulate(models, config, config.envOverride ?? getEnvironment(config.extraPolls, config.extraApproval).blend, constraints));
-          } catch (e) {
-            reject(e as Error);
-          }
-        }, 0),
-      );
+  /** The worker is unusable: run everything waiting for it on the main thread from now on. */
+  private abandonWorker() {
+    try {
+      this.worker?.terminate();
+    } catch {
+      /* already gone */
     }
+    this.worker = null;
+    const waiting = [...this.pending.entries()];
+    this.pending.clear();
+    for (const [, p] of waiting) {
+      clearTimeout(p.timer);
+      this.runHere(p.config, p.constraints).then(p.resolve, p.reject);
+    }
+  }
+
+  private runHere(config: ModelConfig, constraints?: Constraints): Promise<SimResult> {
+    return new Promise((resolve, reject) =>
+      setTimeout(() => {
+        try {
+          const models = buildRaceModels(config);
+          resolve(simulate(models, config, config.envOverride ?? getEnvironment(config.extraPolls, config.extraApproval).blend, constraints));
+        } catch (e) {
+          reject(e as Error);
+        }
+      }, 0),
+    );
+  }
+
+  run(config: ModelConfig, constraints?: Constraints): Promise<SimResult> {
+    if (!this.worker) return this.runHere(config, constraints);
+    const id = ++this.seq;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker!.postMessage({ id, config, constraints } satisfies WorkerRequest);
+      const timer = setTimeout(() => {
+        if (!this.proven) this.abandonWorker();
+      }, WORKER_SILENCE_MS);
+      this.pending.set(id, { resolve, reject, config, constraints, timer });
+      try {
+        this.worker!.postMessage({ id, config, constraints } satisfies WorkerRequest);
+      } catch {
+        this.abandonWorker();
+      }
     });
   }
 }

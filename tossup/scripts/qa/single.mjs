@@ -1,0 +1,26 @@
+// Load the single-file build straight from disk (no dev server) and confirm the worker, fonts and routes work.
+import { chromium } from 'playwright-core';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+const file = pathToFileURL(path.resolve('dist-single/index.html')).href;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+const page = await ctx.newPage();
+const errors = [];
+const reqs = [];
+page.on('pageerror', (e) => errors.push('PAGEERROR ' + e.message));
+page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE ' + m.text()); });
+page.on('request', (r) => { const u = r.url(); if (!u.startsWith('file:') && !u.startsWith('data:') && !u.startsWith('blob:')) reqs.push(u); });
+await page.goto(file + '#/');
+await page.waitForTimeout(4000);
+const txt = await page.locator('body').innerText();
+console.log('has 78%:', /78%/.test(txt), '| has D+8.7:', /D\+8\.7/.test(txt));
+await page.locator('a', { hasText: 'Methods' }).count();
+await page.goto(file + '#/methods');
+await page.waitForTimeout(1500);
+await page.getByRole('button', { name: 'The model' }).click();
+await page.waitForTimeout(800);
+console.log('after chip click, hash =', await page.evaluate(() => location.hash), '| still on methods:', /How Tossup works/.test(await page.locator('body').innerText()));
+console.log('external requests:', reqs.length ? reqs : 'none');
+console.log(errors.join('\n') || 'no errors');
+await browser.close();

@@ -488,3 +488,118 @@ code {
     min-width: 120px;
   }
 }
+
+/* ---------------------------------------------------------------- methods page */
+.meth h2 {
+  margin: 2px 0 10px;
+  font-size: 26px;
+  text-wrap: balance;
+}
+.meth > p,
+.meth li > p {
+  max-width: 68ch;
+  line-height: 1.6;
+}
+.meth h4 {
+  font-size: 17px;
+  margin: 0 0 4px;
+}
+ul.bullets {
+  margin: 6px 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  max-width: 74ch;
+  line-height: 1.55;
+}
+ol.steps {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 18px;
+  counter-reset: none;
+}
+ol.steps > li {
+  padding-left: 16px;
+  border-left: 3px solid var(--brand);
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+ol.steps > li > p {
+  max-width: 68ch;
+  line-height: 1.6;
+  margin: 0;
+}
+.meth .tbl-wrap,
+.meth table.tbl {
+  max-width: 100%;
+}
+.meth section,
+section.meth {
+  scroll-margin-top: 80px;
+}
+
+@media (max-width: 520px) {
+  .countdown-big {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .countdown-big > div {
+    min-width: 0;
+    flex: 1;
+    padding: 8px 4px 6px;
+  }
+  .countdown-big b {
+    font-size: 30px;
+  }
+  .countdown-big span {
+    font-size: 10px;
+    letter-spacing: 0.05em;
+  }
+}
+
+/* compact scoreboard that stays in view on phones, where the full needle is far below the map */
+.mini-needle {
+  display: none;
+}
+@media (max-width: 899px) {
+  .mini-needle {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    position: sticky;
+    top: 104px;
+    z-index: 20;
+    padding: 8px 14px;
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+  }
+  .mini-needle .mn-clock {
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .mini-needle .mn-item {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+  .mini-needle i {
+    font-style: normal;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    font-weight: 700;
+  }
+  .mini-needle b {
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+  }
+}

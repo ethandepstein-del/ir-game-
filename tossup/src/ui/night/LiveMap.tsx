@@ -401,6 +401,20 @@ export function LiveMap() {
         )}
       </div>
 
+      <div className="mini-needle" aria-label="Democratic odds of control right now">
+        <span className="mn-clock">{clock}</span>
+        {([['House', 'house'], ['Senate', 'senate'], ['Gov', 'governor']] as const).map(([l, k]) => {
+          const dec = decidedNow(k);
+          const p = shown?.[k].pControl ?? null;
+          return (
+            <span key={k} className="mn-item">
+              <i>{l}</i>
+              <b className={dec === 'D' || (dec === null && p !== null && p >= 0.5) ? 'dem' : 'rep'}>{p === null ? '…' : dec === 'D' ? '100%' : dec === 'R' ? '0%' : prob(p)}</b>
+            </span>
+          );
+        })}
+      </div>
+
       <div className="grid g-main-side" style={{ alignItems: 'start' }}>
         <div className="stack">
           <div className="card">

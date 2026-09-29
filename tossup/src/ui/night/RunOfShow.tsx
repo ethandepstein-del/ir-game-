@@ -45,7 +45,7 @@ export function RunOfShow({ onPractice }: { onPractice: () => void }) {
       seatsSoFar += sts.reduce((a, s) => a + s.house, 0);
       senSoFar += sts.filter((s) => senateStates.has(s.code)).length;
       const codes = new Set(sts.map((s) => s.code));
-      const key = rows.filter((r) => codes.has(r.meta.state) && r.meta.office !== 'governor').slice(0, 3);
+      const key = rows.filter((r) => codes.has(r.meta.state) && r.meta.office !== 'governor' && r.pD > 0.04 && r.pD < 0.96).slice(0, 3);
       return { k, sts, seatsSoFar, senSoFar, key };
     });
   }, [rows]);

@@ -48,7 +48,7 @@ function latestPolls(n: number): (Poll & { where: string; to?: string })[] {
 }
 
 export function Home() {
-  const { result, running, config } = useForecast();
+  const { result, running } = useForecast();
   const days = daysUntil(ELECTION_DAY, AS_OF);
   const lev = useMemo(() => (result ? leverage(result).filter((l) => l.office !== 'governor').slice(0, 10) : []), [result]);
   const polls = useMemo(() => latestPolls(9), []);
@@ -267,7 +267,6 @@ export function Home() {
           </p>
         </div>
       </section>
-      <span className="sr-only">{config.flavor}</span>
     </div>
   );
 }

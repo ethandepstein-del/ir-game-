@@ -1,0 +1,11 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
+const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+let workers = 0;
+page.on('worker', () => workers++);
+page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+await page.goto('http://127.0.0.1:5301/#/');
+await page.waitForTimeout(3500);
+const t = await page.locator('.hero').first().innerText();
+console.log('workers started:', workers, '| forecast shown:', /78%|Crunching/.test(t) ? (/Crunching/.test(t) ? 'STILL CRUNCHING' : 'yes') : 'no');
+await browser.close();

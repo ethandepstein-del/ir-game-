@@ -244,8 +244,8 @@ textarea {
   position: sticky;
   top: env(safe-area-inset-top, 0px);
   z-index: 40;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
 }
 .topbar-inner {
@@ -492,6 +492,10 @@ textarea {
   .nav {
     order: 3;
     flex-basis: 100%;
+    /* fade the right edge so it reads as scrollable */
+    -webkit-mask-image: linear-gradient(to right, #000 88%, transparent);
+    mask-image: linear-gradient(to right, #000 88%, transparent);
+    padding-right: 24px;
   }
 }
 
@@ -961,4 +965,12 @@ details.under > .under-body {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+button.chip {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+button.chip:hover {
+  background: var(--line-2);
 }

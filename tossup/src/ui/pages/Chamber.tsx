@@ -10,7 +10,7 @@ import { Ring, SeatHistogram, Snake, Hemicycle, type SeatDot } from '../charts/B
 import { PartyBar, RatingPill, Under } from '../components/bits';
 import { Matchup, RaceCard, RatingsStrip } from '../components/raceparts';
 import { SortTable, type Col } from '../components/SortTable';
-import { RATING_VAR, lead, plainOdds, prob, probFill, probBucket } from '../format';
+import { RATING_VAR, lead, plainOdds, prob, probFill } from '../format';
 import { HexMap, StateMap, TileMap } from '../maps/maps';
 import { useRows, type Row } from '../useRows';
 import { usePrefs } from '../../state/prefs';
@@ -31,7 +31,7 @@ const COPY: Record<Office, { title: string; lede: string; what: string }> = {
   },
   house: {
     title: 'House',
-    lede: 'All 435 seats are up on maps that changed in ten states this year. Republicans hold 220 seats to Democrats\' 215, so Democrats need a net gain of three for the 218 they need.',
+    lede: 'All 435 seats are up on maps that changed in several states this year. Republicans hold 220 seats to Democrats\' 215, so Democrats need a net gain of three for the 218 they need.',
     what: 'seats',
   },
 };
@@ -235,7 +235,7 @@ export function Chamber({ office }: { office: Office }) {
               <div className="faint" style={{ fontSize: 13.5 }}>
                 {office === 'senate' && `Democrats hold ${SENATE_NOT_UP.D} seats not up and need ${needed - SENATE_NOT_UP.D} of the 35 races. A 50-50 tie${ch ? ` (${prob(ch.pTie, 1)})` : ''} leaves Republicans in charge.`}
                 {office === 'governor' && `Democrats hold ${GOVERNORS_NOT_UP.D} governorships not up and need ${needed - GOVERNORS_NOT_UP.D} of the 36 races${ch ? `; a 25-25 tie is ${prob(ch.pTie, 1)}` : ''}.`}
-                {office === 'house' && `Democrats hold ${HOUSE_HOLDERS.D} seats now; ${needed} makes a majority. A change of party in ${flipsD} seats and ${flipsR} the other way is the modal outcome.`}
+                {office === 'house' && `Democrats hold ${HOUSE_HOLDERS.D} seats now; ${needed} makes a majority. Seat by seat, the favorite changes the party in ${flipsD} seats toward Democrats and ${flipsR} toward Republicans.`}
               </div>
               {office === 'senate' && (
                 <label className="switch" title="Dan Osborn (NE) and Todd Achilles (ID) are independents. Osborn has said he would not caucus with either party.">
@@ -407,7 +407,6 @@ export function Chamber({ office }: { office: Office }) {
           </table>
         </div>
       </Under>
-      <span className="sr-only">{probBucket(0.5)}</span>
     </div>
   );
 }

@@ -154,7 +154,7 @@ export const RATINGS_MOOD = 5.0;
 const elasticity = (lean: number) => clamp(1 - 0.012 * Math.abs(lean), 0.72, 1.05);
 
 /** Named, documented adjustments to fundamentals (points D). */
-const ADJ: Record<string, { adj: number; note: string }> = {
+export const ADJ: Record<string, { adj: number; note: string }> = {
   'senate-me': { adj: -9, note: 'Susan Collins has run far ahead of the presidential margin in Maine.' },
   'senate-nh': { adj: -2.5, note: 'John Sununu is a former senator with a well-known name.' },
   'senate-ak': { adj: 8, note: 'Mary Peltola has won Alaska statewide and came within three points of a Trump +13 state in 2024.' },

@@ -81,7 +81,7 @@ export function Polls() {
     { key: 'dates', label: 'Field dates', sort: (a, b) => (a.end < b.end ? -1 : 1), render: (r) => <span className="faint">{fmtDate(r.start)}–{fmtDate(r.end)}{r.approx ? ' ~' : ''}</span> },
     { key: 'n', label: 'Sample', right: true, sort: (a, b) => (a.n ?? 0) - (b.n ?? 0), render: (r) => <span className="num">{r.n ? r.n.toLocaleString() : '—'} {r.pop?.toUpperCase() ?? ''}</span> },
     { key: 'res', label: 'Result', right: true, render: (r) => <span className="num">{r.result}</span> },
-    { key: 'm', label: 'Margin', right: true, sort: (a, b) => (a.margin ?? -99) - (b.margin ?? -99), render: (r) => (r.margin === null ? <span className="faint">—</span> : r.kind === 'approval' ? <b className={`num ${r.margin < 0 ? 'rep' : 'dem'}`}>{r.margin > 0 ? '+' : '−'}{Math.abs(r.margin)}</b> : <b className={`num ${r.margin > 0 ? 'dem' : 'rep'}`}>{lead(r.margin)}</b>) },
+    { key: 'm', label: 'Margin', right: true, sort: (a, b) => (a.margin ?? -99) - (b.margin ?? -99), render: (r) => (r.margin === null ? <span className="faint">—</span> : r.kind === 'approval' ? <b className={`num ${r.margin < 0 ? 'rep' : r.margin > 0 ? 'dem' : ''}`}>{r.margin > 0 ? '+' : r.margin < 0 ? '−' : ''}{Math.abs(r.margin)}</b> : <b className={`num ${r.margin > 0 ? 'dem' : r.margin < 0 ? 'rep' : ''}`}>{lead(r.margin)}</b>) },
     { key: 'g', label: 'Grade', nerd: true, render: (r) => <span className="chip">{r.tier}</span> },
     { key: 'x', label: '', render: (r) => (r.yours ? <button className="btn sm" onClick={() => removeUserPoll(r.id)}>Remove</button> : null) },
   ];
@@ -149,7 +149,6 @@ export function Polls() {
         </p>
       </div>
       {toast.node}
-      <span className="sr-only">{SENATE_RACES.length + GOVERNOR_RACES.length + HOUSE_SEATS.length + consensus(HOUSE_SEATS[0]).margin}</span>
     </div>
   );
 }
